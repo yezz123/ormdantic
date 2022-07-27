@@ -37,7 +37,7 @@ class MustUnionForeignKeyError(ConfigurationError):
     """Raised when a relation field doesn't allow for just foreign key."""
 
     def __init__(
-        self, table_a: str, table_b: str, field: str, model_b: Type, pk_type: Type
+        self, table_a: str, table_b: str, field: str, model_b: Type, pk_type: Type  # type: ignore
     ) -> None:
         super().__init__(
             f'Relation defined on "{table_a}.{field}" to "{table_b}" must be a union'
@@ -48,7 +48,7 @@ class MustUnionForeignKeyError(ConfigurationError):
 class TypeConversionError(ConfigurationError):
     """Raised when a Python type fails to convert to SQL."""
 
-    def __init__(self, type: Type) -> None:
+    def __init__(self, type: Type) -> None:  # type: ignore
         super().__init__(
             f"Type {type} is not supported by SQLAlchemy {sqlalchemy.__version__}."
         )
