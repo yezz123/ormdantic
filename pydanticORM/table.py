@@ -20,9 +20,9 @@ class Relation(BaseModel):
     """Describes a relationship from one table to another."""
 
     foreign_table: str
-    back_references: str | None = None
+    back_references: str | None = None  # type: ignore
     relation_type: RelationType
-    m2m_table: str | None = None
+    m2m_table: str | None = None  # type: ignore
 
 
 class PydanticTableMeta(GenericModel, Generic[ModelType]):
