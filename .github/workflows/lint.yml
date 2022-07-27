@@ -1,0 +1,38 @@
+name: Lint and Format
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10.0"]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v3
+        id: cache
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ runner.os }}-python-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml') }}-test
+      - name: Install Flit
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: pip install flit
+      - name: Install Dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: flit install --symlink
+      - name: Lint
+        run: pre-commit run --all-files --verbose --show-diff-on-failure
+      - name: check Static Analysis
+        run: make static
