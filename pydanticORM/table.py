@@ -37,3 +37,11 @@ class PydanticTableMeta(GenericModel, Generic[ModelType]):
     columns: list[str]
     relationships: dict[str, Relation]
     back_references: dict[str, str]
+
+
+class Result(GenericModel, Generic[ModelType]):
+    """Search result object."""
+
+    offset: int
+    limit: int
+    data: list[ModelType]
