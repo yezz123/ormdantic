@@ -9,11 +9,11 @@ from uuid import UUID
 import pydantic
 from pydantic import BaseModel
 from pydantic.generics import GenericModel
-from pypika import Field, Order, Query, Table  # type: ignore
-from pypika.queries import QueryBuilder  # type: ignore
-from sqlalchemy import text  # type: ignore
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession  # type: ignore
-from sqlalchemy.orm import sessionmaker  # type: ignore
+from pypika import Field, Order, Query, Table
+from pypika.queries import QueryBuilder
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 
 from pydanticORM.handler import TableName_From_Model
 from pydanticORM.table import PydanticTableMeta, Relation, RelationType, Result
@@ -27,7 +27,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         self,
         tablename: str,
         engine: AsyncEngine,
-        schema: dict[str, PydanticTableMeta],
+        schema: dict[str, PydanticTableMeta],  # type: ignore
     ) -> None:
 
         self._tablename = tablename
@@ -108,7 +108,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         except StopIteration:
             return None
 
-    async def _insert(
+    async def _insert(  # type: ignore
         self, model_instance: ModelType, tablename: str, upsert_relations
     ):
         table_data = self._schema[tablename]
@@ -154,8 +154,8 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             )
         return await self._insert(model_instance, tablename, upsert_relations)
 
-    async def _upsert_relations(
-        self, model_instance: ModelType, table_data: PydanticTableMeta
+    async def _upsert_relations(  # type: ignore
+        self, model_instance: ModelType, table_data: PydanticTableMeta  # type: ignore
     ):
         for column, relation in table_data.relationships.items():
             if relation.relation_type == RelationType.MANY_TO_MANY:
@@ -165,7 +165,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
                 await self._upsert(rel_model, tablename, True)
 
     async def _populate_many_relations(
-        self, table_data: PydanticTableMeta, model_instance: ModelType, depth: int
+        self, table_data: PydanticTableMeta, model_instance: ModelType, depth: int  # type: ignore
     ) -> ModelType:
         if depth <= 0:
             return model_instance
@@ -180,7 +180,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
                     self._populate_many_relations(
                         self._schema[relation.foreign_table], model, depth
                     )
-                    for model in models
+                    for model in models  # type: ignore
                 ]
             )
             model_instance.__setattr__(column, models)
@@ -196,7 +196,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return model_instance
 
     async def _find_many_relation(
-        self, table_data: PydanticTableMeta, pk: Any, relation: Relation, depth: int
+        self, table_data: PydanticTableMeta, pk: Any, relation: Relation, depth: int  # type: ignore
     ) -> list[ModelType] | None:  # type: ignore
         table = Table(table_data.name)
         foreign_table = Table(relation.foreign_table)
@@ -230,8 +230,8 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def _find_otm(
         self,
-        table_data: PydanticTableMeta,
-        foreign_table_data: PydanticTableMeta,
+        table_data: PydanticTableMeta,  # type: ignore
+        foreign_table_data: PydanticTableMeta,  # type: ignore
         relation: Relation,
         table: Table,
         foreign_table: Table,
@@ -258,15 +258,15 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def _find_mtm(
         self,
-        table_data: PydanticTableMeta,
-        foreign_table_data: PydanticTableMeta,
+        table_data: PydanticTableMeta,  # type: ignore
+        foreign_table_data: PydanticTableMeta,  # type: ignore
         relation: Relation,
         table: Table,
         foreign_table: Table,
         pk: Any,
         depth: int,
     ) -> Any:
-        mtm_table = Table(relation.mtm_table)
+        mtm_table = Table(relation.m2m_table)
         if relation.foreign_table == table_data.name:
             mtm_field_a = f"{table_data.name}_a"
             mtm_field_b = f"{relation.foreign_table}_b"
@@ -339,7 +339,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     def _build_joins(
         self,
         query: QueryBuilder,
-        table_data: PydanticTableMeta,
+        table_data: PydanticTableMeta,  # type: ignore
         depth: int,
         columns: list[Field],
         table_tree: str | None = None,  # type: ignore
@@ -397,8 +397,8 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
                 # This must be a column somewhere else in the tree.
                 continue
             groups = re.match(rf"{re.escape(table_tree)}//(\d+)//(.*)", column)
-            depth = int(groups[1])
-            column_name = groups[2]
+            depth = int(groups[1])  # type: ignore
+            column_name = groups[2]  # type: ignore
             if column_name in table_data.relationships:
                 if value is None:
                     # No further depth has been found.
@@ -448,7 +448,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         model_type: Type[ModelType],
         field_name: str,
         column: str,
-        row_mapping: dict,
+        row_mapping: dict,  # type: ignore
     ) -> Any:
         type_ = None
         for arg in get_args(model_type.__fields__[field_name].type_):
@@ -460,7 +460,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return row_mapping[column]
 
     @staticmethod
-    def _columns(table_data: PydanticTableMeta, depth: int) -> list[Field]:
+    def _columns(table_data: PydanticTableMeta, depth: int) -> list[Field]:  # type: ignore
         table = Table(table_data.name)
         return [
             table.field(c).as_(f"{table_data.name}//{depth}//{c}")
