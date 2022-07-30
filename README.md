@@ -17,8 +17,8 @@ Asynchronous ORM that uses pydantic models to represent database tables.
   - [x] SQL Functions:
     - [x] Find, Find Many, Find One.
     - [x] Insert, Update, Upsert, Delete.
-- [ ] Build the Wrapper
-- [ ] Build Functions to get `Columns` & `Relationships`.
+- [X] Build the Wrapper
+- [X] Build Functions to get `Columns` & `Relationships`.
 - [ ] Documentation for the whole ORM.
 - [ ] Add Tests Case to test different scenarios.
 - [ ] Refactor Code to make it more readable.
