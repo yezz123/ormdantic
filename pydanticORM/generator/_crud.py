@@ -309,12 +309,12 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table = Table(tablename)
         where = where or {}
         order_by = order_by or []
-        pydb_table = self._schema[tablename]
+        pydantic_table = self._schema[tablename]
         query, columns = self._build_joins(
             Query.from_(table),
-            pydb_table,
+            pydantic_table,
             depth,
-            self._columns(pydb_table, depth),
+            self._columns(pydantic_table, depth),
         )
         for field, value in where.items():
             query = query.where(table.field(field) == value)
