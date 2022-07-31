@@ -62,7 +62,7 @@ class PydanticSQLTableGenerator:
 
     def _get_columns(
         self, table_data: PydanticTableMeta  # type: ignore
-    ) -> tuple[Column[Any] | Column, ...]:  # type: ignore
+    ) -> tuple[Column[Any] | Column, ...]:
         columns = []
         for field_name, field in table_data.model.__fields__.items():
             kwargs = {
@@ -82,7 +82,7 @@ class PydanticSQLTableGenerator:
         field_name: str,
         field: ModelField,
         **kwargs,
-    ) -> Column | None:  # type: ignore
+    ) -> Column | None:
         outer_origin = get_origin(field.outer_type_)
         origin = get_origin(field.type_)
         if outer_origin and outer_origin == list:
@@ -126,7 +126,7 @@ class PydanticSQLTableGenerator:
         field_name: str,
         field: ModelField,
         **kwargs,
-    ) -> Column | None:  # type: ignore
+    ) -> Column | None:
         if back_reference := table_data.back_references.get(field_name):
             foreign_table = TableName_From_Model(field.type_, self._schema)
             if (

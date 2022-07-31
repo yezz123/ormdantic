@@ -3,8 +3,8 @@ from types import FunctionType
 from typing import Callable, ForwardRef, Type, get_args, get_origin
 
 from pydantic import BaseModel
-from sqlalchemy import MetaData  # type: ignore
-from sqlalchemy.ext.asyncio import AsyncEngine  # type: ignore
+from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pydanticORM.generator import CRUD, Table
 from pydanticORM.handler import (
@@ -24,9 +24,9 @@ class PydantiORM:
     def __init__(self, engine: AsyncEngine) -> None:
         """Register models as ORM models and create schemas"""
         self.metadata: MetaData | None = None
-        self._crud_generators: dict[Type, CRUD] = {}
-        self._schema: dict[str, PydanticTableMeta] = {}
-        self._model_to_metadata: dict[Type[BaseModel], PydanticTableMeta] = {}
+        self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
+        self._schema: dict[str, PydanticTableMeta] = {}  # type: ignore
+        self._model_to_metadata: dict[Type[BaseModel], PydanticTableMeta] = {}  # type: ignore
         self._engine = engine
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
@@ -44,7 +44,7 @@ class PydantiORM:
     ) -> Callable[[Type[ModelType]], Type[ModelType]]:
         def _wrapper(cls: Type[ModelType]) -> Type[ModelType]:
             tablename_ = tablename or snake_case(cls.__name__)
-            metadata: PydanticTableMeta = PydanticTableMeta(
+            metadata: PydanticTableMeta = PydanticTableMeta(  # type: ignore
                 name=tablename_,
                 model=cls,
                 pk=pk,
@@ -79,7 +79,7 @@ class PydantiORM:
         await Table(self._engine, self.metadata, self._schema).init()
 
     def get(
-        self, tablename: str, table_data: PydanticTableMeta
+        self, tablename: str, table_data: PydanticTableMeta  # type: ignore
     ) -> tuple[list[str], dict[str, Relation]]:
         columns = []
         relationships = {}
@@ -148,8 +148,8 @@ class PydantiORM:
             )
         return columns, relationships
 
-    def _get_related_table(self, field) -> PydanticTableMeta:
-        related_table: PydanticTableMeta | None = None
+    def _get_related_table(self, field) -> PydanticTableMeta:  # type: ignore
+        related_table: PydanticTableMeta | None = None  # type: ignore
         # Try to get foreign model from union.
         if args := get_args(field.type_):
             for arg in args:
@@ -161,4 +161,4 @@ class PydantiORM:
                     break
         # Try to get foreign table from type.
         related_table = related_table or self._model_to_metadata.get(field.type_)
-        return related_table
+        return related_table  # type: ignore
