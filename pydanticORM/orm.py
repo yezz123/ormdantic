@@ -1,5 +1,5 @@
 """Module providing a way to create ORM models and schemas"""
-from types import FunctionType
+import sys
 from typing import Callable, ForwardRef, Type, get_args, get_origin
 
 from pydantic import BaseModel
@@ -17,8 +17,13 @@ from pydanticORM.handler import (
 from pydanticORM.table import PydanticTableMeta, Relation, RelationType
 from pydanticORM.types import ModelType
 
+if sys.version_info == (3, 10):
+    from types import UnionType
+else:
+    UnionType = type(int | str)
 
-class PydantiORM:
+
+class PydanticORM:
     """Class to use pydantic models as ORM models."""
 
     def __init__(self, engine: AsyncEngine) -> None:
@@ -108,7 +113,7 @@ class PydantiORM:
                     related_table.model.__fields__[related_table.pk].type_ in args
                 )
                 origin = get_origin(field.type_)
-                if not args or origin != FunctionType or not correct_type:
+                if not args or origin != UnionType or not correct_type:
                     raise MustUnionForeignKeyError(
                         tablename,
                         related_table.name,
