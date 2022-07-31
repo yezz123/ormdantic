@@ -1,6 +1,6 @@
 """Module providing PydanticSQLTableGenerator."""
+import sys
 import uuid
-from types import FunctionType
 from typing import Any, get_args, get_origin
 
 from pydantic import BaseModel, ConstrainedStr
@@ -21,6 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pydanticORM.handler import TableName_From_Model, TypeConversionError
 from pydanticORM.table import PydanticTableMeta, RelationType
+
+if sys.version_info == (3, 10):
+    from types import UnionType
+else:
+    UnionType = type(int | str)
 
 
 class PydanticSQLTableGenerator:
@@ -90,7 +95,7 @@ class PydanticSQLTableGenerator:
                 table_data, field_name, field, **kwargs
             )
         if origin:
-            if origin != FunctionType:
+            if origin != UnionType:
                 raise TypeConversionError(field.type_)
             if (
                 column := self._get_column_from_type_args(
