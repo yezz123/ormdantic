@@ -5,6 +5,7 @@ import unittest
 from typing import Callable
 from uuid import UUID, uuid4
 
+from decouple import config
 from pydantic import BaseModel, Field
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -17,7 +18,9 @@ from pydanticORM.handler import (
     UndefinedBackReferenceError,
 )
 
-engine = create_async_engine("sqlite+aiosqlite:///db.sqlite3")
+URL = config("DATABASE_URL")
+
+engine = create_async_engine(URL)
 db_1 = PydanticORM(engine)
 db_2 = PydanticORM(engine)
 db_3 = PydanticORM(engine)
