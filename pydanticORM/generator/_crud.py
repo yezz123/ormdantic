@@ -2,7 +2,7 @@
 import asyncio
 import json
 import re
-from types import NoneType  # type: ignore
+from types import NoneType
 from typing import Any, Generic, Type, get_args
 from uuid import UUID
 
@@ -35,13 +35,13 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         self._schema = schema
         self._field_to_column: dict[Any, str] = {}
 
-    async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:  # type: ignore
+    async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
         return await self._find_one(self._tablename, pk, depth)
 
     async def find_many(
         self,
-        where: dict[str, Any] | None = None,  # type: ignore
-        order_by: list[str] | None = None,  # type: ignore
+        where: dict[str, Any] | None = None,
+        order_by: list[str] | None = None,
         order: Order = Order.asc,
         limit: int = 0,
         offset: int = 0,
@@ -83,7 +83,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def _find_one(
         self, tablename: str, pk: Any, depth: int = 0
-    ) -> ModelType | None:  # type: ignore
+    ) -> ModelType | None:
         table_data = self._schema[tablename]
         table = Table(tablename)
         query, columns = self._build_joins(
@@ -197,7 +197,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def _find_many_relation(
         self, table_data: PydanticTableMeta, pk: Any, relation: Relation, depth: int  # type: ignore
-    ) -> list[ModelType] | None:  # type: ignore
+    ) -> list[ModelType] | None:
         table = Table(table_data.name)
         foreign_table = Table(relation.foreign_table)
         foreign_table_data = self._schema[relation.foreign_table]
@@ -299,8 +299,8 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     def _get_find_many_query(
         self,
         tablename: str,
-        where: dict[str, Any] | None = None,  # type: ignore
-        order_by: list[str] | None = None,  # type: ignore
+        where: dict[str, Any] | None = None,
+        order_by: list[str] | None = None,
         order: Order = Order.asc,
         limit: int = 0,
         offset: int = 0,
@@ -342,7 +342,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table_data: PydanticTableMeta,  # type: ignore
         depth: int,
         columns: list[Field],
-        table_tree: str | None = None,  # type: ignore
+        table_tree: str | None = None,
     ) -> tuple[QueryBuilder, list[Field]]:
         if depth <= 0:
             return query, columns
@@ -383,9 +383,9 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     def _model_from_row_mapping(
         self,
         row_mapping: dict[str, Any],
-        model_type: Type[ModelType] | None = None,  # type: ignore
-        table_tree: str | None = None,  # type: ignore
-        tablename: str | None = None,  # type: ignore
+        model_type: Type[ModelType] | None = None,
+        table_tree: str | None = None,
+        tablename: str | None = None,
     ) -> ModelType:
         tablename = tablename or self._tablename
         model_type = model_type or self._schema[tablename].model

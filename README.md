@@ -17,15 +17,14 @@ Asynchronous ORM that uses pydantic models to represent database tables.
   - [x] SQL Functions:
     - [x] Find, Find Many, Find One.
     - [x] Insert, Update, Upsert, Delete.
-- [X] Build the Wrapper
-- [X] Build Functions to get `Columns` & `Relationships`.
+- [x] Build the Wrapper
+- [x] Build Functions to get `Columns` & `Relationships`.
 - [ ] Documentation for the whole ORM.
 - [ ] Add Tests Case to test different scenarios.
 - [ ] Refactor Code to make it more readable.
 - [ ] Release the Package.
-- [ ] Fully Support for Type Annotations. (the
+- [x] Fully Support for Type Annotations.
       [![Lint and Format](https://github.com/yezz123/PydanticORM/actions/workflows/lint.yml/badge.svg)](https://github.com/yezz123/PydanticORM/actions/workflows/lint.yml)
-      workflow) still fails.
 
 ## Development 🚧
 
