@@ -1,4 +1,3 @@
-"""PyDB tests for one-to-many relationships."""
 from __future__ import annotations
 
 import asyncio
