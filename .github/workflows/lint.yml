@@ -33,6 +33,6 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: flit install --symlink
       - name: Lint
-        run: pre-commit run --all-files --verbose --show-diff-on-failure
+        run: bash scripts/format.sh
       - name: check Static Analysis
-        run: make static
+        run: bash scripts/lint.sh
