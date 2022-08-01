@@ -1,5 +1,5 @@
 """Module providing a way to create ORM models and schemas"""
-import sys
+from types import UnionType
 from typing import Callable, ForwardRef, Type, get_args, get_origin
 
 from pydantic import BaseModel
@@ -16,11 +16,6 @@ from pydanticORM.handler import (
 )
 from pydanticORM.table import PydanticTableMeta, Relation, RelationType
 from pydanticORM.types import ModelType
-
-if sys.version_info == (3, 10):
-    from types import UnionType
-else:
-    UnionType = type(int | str)
 
 
 class PydanticORM:

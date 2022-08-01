@@ -2,7 +2,7 @@
 import asyncio
 import json
 import re
-import sys
+from types import NoneType
 from typing import Any, Generic, Type, get_args
 from uuid import UUID
 
@@ -18,11 +18,6 @@ from sqlalchemy.orm import sessionmaker
 from pydanticORM.handler import TableName_From_Model
 from pydanticORM.table import PydanticTableMeta, Relation, RelationType, Result
 from pydanticORM.types import ModelType
-
-if sys.version_info == (3, 10):
-    from types import NoneType
-else:
-    NoneType = type(None)
 
 
 class PydanticSQLCRUDGenerator(Generic[ModelType]):
