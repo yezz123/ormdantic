@@ -14,15 +14,13 @@ classifiers = [
     "Intended Audience :: Developers",
     "Framework :: AsyncIO",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Internet :: WWW/HTTP :: Session",
     "Typing :: Typed",
 ]
 description-file = "README.md"
-requires-python = ">=3.8"
+requires-python = "3.10"
 requires = [
     "typing-extensions >=3.7.4, <4.0.0",
     "pydantic >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0",
@@ -41,6 +39,5 @@ test = [
     "codecov==2.1.12",
     "pytest-cov==3.0.0",
     "aiosqlite==0.17.0",
-    "asyncpg",
     "python-decouple",
 ]
