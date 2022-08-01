@@ -40,5 +40,7 @@ test = [
     "pytest-asyncio == 0.18.3",
     "codecov==2.1.12",
     "pytest-cov==3.0.0",
-    "aiosqlite==0.17.0"
+    "aiosqlite==0.17.0",
+    "asyncpg",
+    "python-decouple",
 ]

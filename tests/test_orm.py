@@ -4,13 +4,16 @@ import asyncio
 import unittest
 from uuid import UUID, uuid4
 
+from decouple import config
 from pydantic import BaseModel, Field
 from pypika import Order
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from pydanticORM import PydanticORM
 
-engine = create_async_engine("sqlite+aiosqlite:///db.sqlite3")
+URL = config("DATABASE_URL")
+
+engine = create_async_engine(URL)
 database = PydanticORM(engine)
 
 

@@ -1,4 +1,4 @@
-name: Tests
+name: Test Suite
 
 on:
   push:
@@ -8,12 +8,12 @@ on:
     types: [opened, synchronize]
 
 jobs:
-  test:
+  sqlite:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
-        python-version: ["3.10.0"]
-      fail-fast: false
+        python-version: ["3.10"]
 
     steps:
       - uses: actions/checkout@v3
@@ -32,8 +32,10 @@ jobs:
       - name: Install Dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: flit install --symlink
-      - name: Test
+      - name: Test with pytest, Postgres
         run: bash scripts/test.sh
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
       - name: Upload coverage
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
