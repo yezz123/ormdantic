@@ -20,8 +20,8 @@ Asynchronous ORM that uses pydantic models to represent database tables.
 - [x] Build the Wrapper
 - [x] Build Functions to get `Columns` & `Relationships`.
 - [ ] Documentation for the whole ORM.
-- [ ] Add Tests Case to test different scenarios.
-- [ ] Refactor Code to make it more readable.
+- [x] Add Tests Case to test different scenarios.
+- [x] Refactor Code to make it more readable.
 - [ ] Release the Package.
 - [x] Fully Support for Type Annotations.
       [![Lint and Format](https://github.com/yezz123/PydanticORM/actions/workflows/lint.yml/badge.svg)](https://github.com/yezz123/PydanticORM/actions/workflows/lint.yml)
