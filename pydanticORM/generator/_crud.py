@@ -439,25 +439,15 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         ]:
             tablename = self._tablename_from_model_instance(value)
             return self._py_type_to_sql(value.__dict__[self._schema[tablename].pk])
-        if isinstance(value, BaseModel):
-            return value.json()
-        return value
+        return value.json() if isinstance(value, BaseModel) else value
 
-    def _sql_pk_to_py_pk_type(
-        self,
-        model_type: Type[ModelType],
-        field_name: str,
-        column: str,
-        row_mapping: dict,  # type: ignore
-    ) -> Any:
+    def _sql_pk_to_py_pk_type(self, model_type: Type[ModelType], field_name: str, column: str, row_mapping: dict) -> Any:  # type: ignore
         type_ = None
         for arg in get_args(model_type.__fields__[field_name].type_):
             if arg in self._schema.values() or arg is NoneType:
                 continue
             type_ = arg
-        if type_:
-            return type_(row_mapping[column])
-        return row_mapping[column]
+        return type_(row_mapping[column]) if type_ else row_mapping[column]
 
     @staticmethod
     def _columns(table_data: PydanticTableMeta, depth: int) -> list[Field]:  # type: ignore
