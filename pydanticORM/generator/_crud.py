@@ -8,7 +8,6 @@ from uuid import UUID
 
 import pydantic
 from pydantic import BaseModel
-from pydantic.generics import GenericModel
 from pypika import Field, Order, Query, Table
 from pypika.queries import QueryBuilder
 from sqlalchemy import text
@@ -21,7 +20,13 @@ from pydanticORM.types import ModelType
 
 
 class PydanticSQLCRUDGenerator(Generic[ModelType]):
-    """Provides Database CRUD methods for a model type."""
+    """Provides Database CRUD methods for a model type.
+
+    - `Tablename of the table in the database.
+    - `Engine` is the database engine.
+    - `Shema` is a dictionary of table names and their associated model classes.
+
+    """
 
     def __init__(
         self,
@@ -36,6 +41,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         self._field_to_column: dict[Any, str] = {}
 
     async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
+        """Find a model instance by primary key."""
         return await self._find_one(self._tablename, pk, depth)
 
     async def find_many(
@@ -47,6 +53,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         offset: int = 0,
         depth: int = 0,
     ) -> Result[ModelType]:
+        """Find many model instances."""
         query = self._get_find_many_query(
             self._tablename, where, order_by, order, limit, offset, depth
         )
@@ -60,19 +67,23 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def insert(
         self, model_instance: ModelType, upsert_relations: bool = True
     ) -> ModelType:
+        """Insert a model instance."""
         return await self._insert(model_instance, self._tablename, upsert_relations)
 
     async def update(
         self, model_instance: ModelType, upsert_relations: bool = True
     ) -> ModelType:
+        """Update a model instance."""
         return await self._update(model_instance, self._tablename, upsert_relations)
 
     async def upsert(
         self, model_instance: ModelType, upsert_relations: bool = True
     ) -> ModelType:
+        """Upsert a model instance."""
         return await self._upsert(model_instance, self._tablename, upsert_relations)
 
     async def delete(self, pk: Any) -> bool:
+        """Delete a model instance by primary key."""
         table = Table(self._tablename)
         await self._execute(
             Query.from_(table)
@@ -306,6 +317,9 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         offset: int = 0,
         depth: int = 0,
     ) -> QueryBuilder:
+        """
+        Get a query to find many models of a table.
+        """
         table = Table(tablename)
         where = where or {}
         order_by = order_by or []

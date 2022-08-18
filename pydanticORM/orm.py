@@ -19,7 +19,13 @@ from pydanticORM.types import ModelType
 
 
 class PydanticORM:
-    """Class to use pydantic models as ORM models."""
+    """Class to use pydantic models as ORM models.
+        - It will also generate CRUD operations for each model.
+        - It will also generate back references for each model.
+    - `metadata` is the metadata to use for the ORM.
+    - `schema` is the schema to use for the ORM.
+    - `engine` is the engine to use for the ORM.
+    """
 
     def __init__(self, engine: AsyncEngine) -> None:
         """Register models as ORM models and create schemas"""
