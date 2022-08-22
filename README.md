@@ -42,7 +42,7 @@ As **PydanticORM** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, i
 You can add PydanticORM in a few easy steps. First of all, install the dependency:
 
 ```shell
-$ pip install pydanticORM
+$ pip install pydantic_orm
 
 ---> 100%
 
@@ -53,13 +53,13 @@ Successfully installed PydanticORM
 
 ```shell
 # MySQL
-$ pip install pydanticORM[mysql]
+$ pip install pydantic_orm[mysql]
 
 # PostgreSQL
-$ pip install pydanticORM[postgres]
+$ pip install pydantic_orm[postgres]
 
 # SQLite
-$ pip install pydanticORM[sqlite]
+$ pip install pydantic_orm[sqlite]
 ```
 
 ## Example
@@ -76,7 +76,7 @@ PydanticORM uses SQLAlchemy under hood to run different queries, which is why we
 
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine as create_engine
-from pydanticORM import PydanticORM
+from pydantic_orm import PydanticORM
 
 engine = create_engine("sqlite+aiosqlite:///db.sqlite3")
 database = PydanticORM(engine)
