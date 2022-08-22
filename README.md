@@ -42,11 +42,24 @@ As **PydanticORM** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, i
 You can add PydanticORM in a few easy steps. First of all, install the dependency:
 
 ```shell
-$ pip install PydanticORM
+$ pip install pydanticORM
 
 ---> 100%
 
 Successfully installed PydanticORM
+```
+
+* Install The specific Asynchronous ORM library for your database.
+
+```shell
+# MySQL
+$ pip install pydanticORM[mysql]
+
+# PostgreSQL
+$ pip install pydanticORM[postgres]
+
+# SQLite
+$ pip install pydanticORM[sqlite]
 ```
 
 ## Example
@@ -68,6 +81,8 @@ from pydanticORM import PydanticORM
 engine = create_engine("sqlite+aiosqlite:///db.sqlite3")
 database = PydanticORM(engine)
 ```
+
+**Note**: You can use any asynchronous engine, check out the [documentation](https://docs.sqlalchemy.org/en/14/core/engines.html) for more information.
 
 ### Create a table
 
@@ -221,13 +236,13 @@ flit install --symlink
 You can run all the tests with:
 
 ```bash
-$ bash scripts/test.sh
+bash scripts/test.sh
 ```
 
 > Note: You can also generate a coverage report with:
 
 ```bash
-$ bash scripts/test_html.sh
+bash scripts/test_html.sh
 ```
 
 ### Format the code 🍂
@@ -235,13 +250,13 @@ $ bash scripts/test_html.sh
 Execute the following command to apply `pre-commit` formatting:
 
 ```bash
-$ bash scripts/format.sh
+bash scripts/format.sh
 ```
 
 Execute the following command to apply `mypy` type checking:
 
 ```bash
-$ bash scripts/lint.sh
+bash scripts/lint.sh
 ```
 
 ## License
