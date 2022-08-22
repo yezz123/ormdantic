@@ -104,7 +104,7 @@ class Flavor(BaseModel):
 
 Now after we create the table, we can initialize the database with the table and then run different queries.
 
-#### [`Init()`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/orm.py#L67)
+#### [`Init()`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/orm.py#L67)
 
 * Register models as ORM models and initialize the database.
 
@@ -115,7 +115,7 @@ async def main() -> None:
      await database.init()
 ```
 
-#### [`Insert()`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/generator/_crud.py#L59)
+#### [`Insert()`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L59)
 
 Now let's imagine we have another table called `Coffee` that has a foreign key to `Flavor`.
 
@@ -152,7 +152,7 @@ As we know, in SQL, we can search for data using different methods, ex. `WHERE`,
 
 In PydanticORM, we can search for data using the `database.find_one` or `database.find_many` methods.
 
-* [`Find_one`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/generator/_crud.py#L35) used to find a Model instance by Primary Key, its could also find with `depth` parameter.
+* [`Find_one`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L35) used to find a Model instance by Primary Key, its could also find with `depth` parameter.
 
 ```python
      # Find one
@@ -164,7 +164,7 @@ In PydanticORM, we can search for data using the `database.find_one` or `databas
      print(find_coffee.flavor.name)
 ```
 
-* [`Find_many`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/generator/_crud.py#L39) used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
+* [`Find_many`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L39) used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
 
 ```python
      # Find many
@@ -176,7 +176,7 @@ In PydanticORM, we can search for data using the `database.find_one` or `databas
      )
 ```
 
-#### [`Update`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/generator/_crud.py#L65) / [`Upsert`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/generator/_crud.py#L71) Queries
+#### [`Update`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L65) / [`Upsert`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L71) Queries
 
 ##### Update
 
@@ -198,7 +198,7 @@ The `Upsert` method is similar to the Synchronize method with one exception; the
      await database[Flavor].upsert(flavor)
 ```
 
-### [`Delete`](https://github.com/yezz123/PydanticORM/blob/b2265366ca2acdf3f3b64ff3f9165338728bcdc6/pydanticORM/generator/_crud.py#L77)
+### [`Delete`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L77)
 
 The `DELETE` statement is used to delete existing records in a table.
 
