@@ -3,4 +3,4 @@
 set -e
 set -x
 
-mypy --show-error-codes pydantic_orm tests
+mypy --show-error-codes ormdantic tests

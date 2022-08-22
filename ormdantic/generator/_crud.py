@@ -14,9 +14,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from pydantic_orm.handler import TableName_From_Model
-from pydantic_orm.table import PydanticTableMeta, Relation, RelationType, Result
-from pydantic_orm.types import ModelType
+from ormdantic.handler import TableName_From_Model
+from ormdantic.table import PydanticTableMeta, Relation, RelationType, Result
+from ormdantic.types import ModelType
 
 
 class PydanticSQLCRUDGenerator(Generic[ModelType]):

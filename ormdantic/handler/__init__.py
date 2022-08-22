@@ -1,12 +1,12 @@
-from pydantic_orm.handler.errors import (
+from ormdantic.handler.errors import (
     ConfigurationError,
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     TypeConversionError,
     UndefinedBackReferenceError,
 )
-from pydantic_orm.handler.helper import Get_M2M_TableName, TableName_From_Model
-from pydantic_orm.handler.snake import snake as snake_case
+from ormdantic.handler.helper import Get_M2M_TableName, TableName_From_Model
+from ormdantic.handler.snake import snake as snake_case
 
 __all__ = [
     "TableName_From_Model",

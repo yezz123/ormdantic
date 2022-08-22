@@ -8,12 +8,12 @@ from decouple import config
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from pydantic_orm import PydanticORM
+from ormdantic import Ormdantic
 
 URL = config("DATABASE_URL")
 
 engine = create_async_engine(URL)
-database = PydanticORM(engine)
+database = Ormdantic(engine)
 
 
 @database.table(pk="id", back_references={"many_a": "one_a", "many_b": "one_b"})
@@ -38,7 +38,7 @@ One.update_forward_refs()
 Many.update_forward_refs()
 
 
-class PydanticORMOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
+class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         """Setup clean sqlite database."""
 

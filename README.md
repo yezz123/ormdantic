@@ -5,20 +5,20 @@
 </p>
 
 <p align="center">
-<a href="https://github.com/yezz123/PydanticORM/actions/workflows/lint.yml" target="_blank">
-    <img src="https://github.com/yezz123/PydanticORM/actions/workflows/lint.yml/badge.svg" alt="lint">
+<a href="https://github.com/yezz123/ormdantic/actions/workflows/lint.yml" target="_blank">
+    <img src="https://github.com/yezz123/ormdantic/actions/workflows/lint.yml/badge.svg" alt="lint">
 </a>
-<a href="https://github.com/yezz123/PydanticORM/actions/workflows/test.yml" target="_blank">
-    <img src="https://github.com/yezz123/PydanticORM/actions/workflows/test.yml/badge.svg" alt="Test">
+<a href="https://github.com/yezz123/ormdantic/actions/workflows/test.yml" target="_blank">
+    <img src="https://github.com/yezz123/ormdantic/actions/workflows/test.yml/badge.svg" alt="Test">
 </a>
-<a href="https://codecov.io/gh/yezz123/PydanticORM" target="_blank">
-    <img src="https://img.shields.io/codecov/c/github/yezz123/PydanticORM?color=%2334D058" alt="Coverage">
+<a href="https://codecov.io/gh/yezz123/ormdantic" target="_blank">
+    <img src="https://img.shields.io/codecov/c/github/yezz123/ormdantic?color=%2334D058" alt="Coverage">
 </a>
 </p>
 
-PydanticORM is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
+Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
 
-**PydanticORM** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+**Ormdantic** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
 
 > What is [Pypika](https://github.com/kayak/pypika)?
 >
@@ -35,31 +35,31 @@ The key features are:
 
 A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
 
-As **PydanticORM** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, it requires them. They will be automatically installed when you install PydanticORM.
+As **Ormdantic** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, it requires them. They will be automatically installed when you install Ormdantic.
 
 ## Installation
 
-You can add PydanticORM in a few easy steps. First of all, install the dependency:
+You can add Ormdantic in a few easy steps. First of all, install the dependency:
 
 ```shell
-$ pip install pydantic_orm
+$ pip install ormdantic
 
 ---> 100%
 
-Successfully installed PydanticORM
+Successfully installed Ormdantic
 ```
 
 * Install The specific Asynchronous ORM library for your database.
 
 ```shell
 # MySQL
-$ pip install pydantic_orm[mysql]
+$ pip install ormdantic[mysql]
 
 # PostgreSQL
-$ pip install pydantic_orm[postgres]
+$ pip install ormdantic[postgres]
 
 # SQLite
-$ pip install pydantic_orm[sqlite]
+$ pip install ormdantic[sqlite]
 ```
 
 ## Example
@@ -68,18 +68,18 @@ To understand SQL, Sebastian the Creator of FastAPI and SQLModel created an amaz
 
 Check out the [documentation](https://sqlmodel.tiangolo.com/).
 
-But let's see how to use PydanticORM.
+But let's see how to use Ormdantic.
 
 ### Create SQLAlchemy engine
 
-PydanticORM uses SQLAlchemy under hood to run different queries, which is why we need to initialize by creating an asynchronous engine.
+Ormdantic uses SQLAlchemy under hood to run different queries, which is why we need to initialize by creating an asynchronous engine.
 
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine as create_engine
-from pydantic_orm import PydanticORM
+from ormdantic import Ormdantic
 
 engine = create_engine("sqlite+aiosqlite:///db.sqlite3")
-database = PydanticORM(engine)
+database = Ormdantic(engine)
 ```
 
 **Note**: You can use any asynchronous engine, check out the [documentation](https://docs.sqlalchemy.org/en/14/core/engines.html) for more information.
@@ -104,7 +104,7 @@ class Flavor(BaseModel):
 
 Now after we create the table, we can initialize the database with the table and then run different queries.
 
-#### [`Init()`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/orm.py#L67)
+#### [`Init()`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/orm.py#L67)
 
 * Register models as ORM models and initialize the database.
 
@@ -115,7 +115,7 @@ async def main() -> None:
      await database.init()
 ```
 
-#### [`Insert()`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L59)
+#### [`Insert()`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L59)
 
 Now let's imagine we have another table called `Coffee` that has a foreign key to `Flavor`.
 
@@ -150,9 +150,9 @@ await database[Coffee].insert(coffee)
 
 As we know, in SQL, we can search for data using different methods, ex. `WHERE`, `LIKE`, `IN`, `BETWEEN`, etc.
 
-In PydanticORM, we can search for data using the `database.find_one` or `database.find_many` methods.
+In Ormdantic, we can search for data using the `database.find_one` or `database.find_many` methods.
 
-* [`Find_one`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L35) used to find a Model instance by Primary Key, its could also find with `depth` parameter.
+* [`Find_one`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L35) used to find a Model instance by Primary Key, its could also find with `depth` parameter.
 
 ```python
      # Find one
@@ -164,7 +164,7 @@ In PydanticORM, we can search for data using the `database.find_one` or `databas
      print(find_coffee.flavor.name)
 ```
 
-* [`Find_many`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L39) used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
+* [`Find_many`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L39) used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
 
 ```python
      # Find many
@@ -176,7 +176,7 @@ In PydanticORM, we can search for data using the `database.find_one` or `databas
      )
 ```
 
-#### [`Update`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L65) / [`Upsert`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L71) Queries
+#### [`Update`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L65) / [`Upsert`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L71) Queries
 
 ##### Update
 
@@ -198,7 +198,7 @@ The `Upsert` method is similar to the Synchronize method with one exception; the
      await database[Flavor].upsert(flavor)
 ```
 
-### [`Delete`](https://github.com/yezz123/PydanticORM/blob/400ecfde754fc6613923779a6a545a0f00282752/pydantic_orm/generator/_crud.py#L77)
+### [`Delete`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L77)
 
 The `DELETE` statement is used to delete existing records in a table.
 

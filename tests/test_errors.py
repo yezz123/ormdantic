@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from pydantic_orm import PydanticORM
-from pydantic_orm.handler import (
+from ormdantic import Ormdantic
+from ormdantic.handler import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     TypeConversionError,
@@ -21,11 +21,11 @@ from pydantic_orm.handler import (
 URL = config("DATABASE_URL")
 
 engine = create_async_engine(URL)
-db_1 = PydanticORM(engine)
-db_2 = PydanticORM(engine)
-db_3 = PydanticORM(engine)
-db_4 = PydanticORM(engine)
-db_5 = PydanticORM(engine)
+db_1 = Ormdantic(engine)
+db_2 = Ormdantic(engine)
+db_3 = Ormdantic(engine)
+db_4 = Ormdantic(engine)
+db_5 = Ormdantic(engine)
 
 
 @db_1.table(pk="id")
@@ -95,7 +95,7 @@ MismatchedBackreferenceB.update_forward_refs()
 UndefinedBackreference.update_forward_refs()
 
 
-class PydanticORMErrorTesting(unittest.IsolatedAsyncioTestCase):
+class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         """Setup clean sqlite database."""
 
