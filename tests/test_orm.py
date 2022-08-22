@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from typing import Any
 from uuid import UUID, uuid4
 
 from decouple import config
@@ -51,6 +52,7 @@ class Coffee(BaseModel):
     place: dict  # type: ignore
     ice: list  # type: ignore
     size: Money
+    attributes: dict[str, Any] | None = None
 
 
 @database.table(pk="id")
