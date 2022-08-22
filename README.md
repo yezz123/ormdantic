@@ -11,8 +11,11 @@
 <a href="https://github.com/yezz123/ormdantic/actions/workflows/test.yml" target="_blank">
     <img src="https://github.com/yezz123/ormdantic/actions/workflows/test.yml/badge.svg" alt="Test">
 </a>
-<a href="https://codecov.io/gh/yezz123/ormdantic" target="_blank">
-    <img src="https://img.shields.io/codecov/c/github/yezz123/ormdantic?color=%2334D058" alt="Coverage">
+<a href="https://codecov.io/gh/yezz123/PydanticORM">
+    <img src="https://codecov.io/gh/yezz123/PydanticORM/branch/main/graph/badge.svg"/>
+</a>
+<a href="https://pypi.org/project/ormdantic" target="_blank">
+    <img src="https://img.shields.io/pypi/v/ormdantic?color=%2334D058&label=pypi%20package" alt="Package version">
 </a>
 </p>
 
