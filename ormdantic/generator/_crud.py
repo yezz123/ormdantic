@@ -161,7 +161,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             )
         return await self._insert(model_instance, tablename, upsert_relations)
 
-    async def _upsert_relations(  # type: ignore
+    async def _upsert_relations(
         self, model_instance: ModelType, table_data: PydanticTableMeta  # type: ignore
     ) -> None:
         for column, relation in table_data.relationships.items():
@@ -179,23 +179,23 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def _upsert_relation(
         self,
         model_instance: ModelType,
-        table_data: PydanticTableMeta,
+        table_data: PydanticTableMeta,  # type: ignore
         rel_model: ModelType,
         relation: Relation,
         rel_tablename: str,
     ) -> None:
         await self._upsert(rel_model, rel_tablename, True)
         rel_td = self._schema[rel_tablename]
-        mtm_table = Table(relation.m2m_data.name)
-        columns = relation.m2m_data.table_a_column, relation.m2m_data.table_b_column
+        mtm_table = Table(relation.m2m_data.name)  # type: ignore
+        columns = relation.m2m_data.table_a_column, relation.m2m_data.table_b_column  # type: ignore
         values = (model_instance.__dict__[table_data.pk], rel_model.__dict__[rel_td.pk])
         query = (
             Query.from_(mtm_table)
             .select(*columns)
             .where(
-                mtm_table.field(relation.m2m_data.table_a_column)
+                mtm_table.field(relation.m2m_data.table_a_column)  # type: ignore
                 == model_instance.__dict__[table_data.pk]
-                and mtm_table.field(relation.m2m_data.table_b_column)
+                and mtm_table.field(relation.m2m_data.table_b_column)  # type: ignore
                 == rel_model.__dict__[rel_td.pk]
             )
         )
@@ -309,7 +309,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         pk: Any,
         depth: int,
     ) -> Any:
-        mtm_table = Table(relation.m2m_data.name)
+        mtm_table = Table(relation.m2m_data.name)  # type: ignore
         if relation.foreign_table == table_data.name:
             mtm_field_a = f"{table_data.name}_a"  # pragma: no cover
             mtm_field_b = f"{relation.foreign_table}_b"  # pragma: no cover

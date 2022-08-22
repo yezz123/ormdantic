@@ -56,8 +56,8 @@ class PyDBManyRelationsTests(unittest.IsolatedAsyncioTestCase):
         async def _init() -> None:
             await db.init()
             async with engine.begin() as conn:
-                await conn.run_sync(db.metadata.drop_all)
-                await conn.run_sync(db.metadata.create_all)
+                await conn.run_sync(db.metadata.drop_all)  # type: ignore
+                await conn.run_sync(db.metadata.create_all)  # type: ignore
 
         asyncio.run(_init())
 
@@ -67,13 +67,13 @@ class PyDBManyRelationsTests(unittest.IsolatedAsyncioTestCase):
         await db[ManyToManyB].insert(many_b)
         find_b = await db[ManyToManyB].find_one(many_b.id, depth=1)
         source_b_dict = many_b.dict()
-        find_b_dict = find_b.dict()
+        find_b_dict = find_b.dict()  # type: ignore
         source_b_dict["many"].sort(key=lambda it: it["id"])
         find_b_dict["many"].sort(key=lambda it: it["id"])
         self.assertEqual(source_b_dict["id"], find_b_dict["id"])
         self.assertListEqual(source_b_dict["many"], find_b_dict["many"])
         find_a = await db[ManyToManyA].find_one(many_a[0].id, depth=2)
-        self.assertDictEqual(find_a.many[0].dict(), find_b.dict())
+        self.assertDictEqual(find_a.many[0].dict(), find_b.dict())  # type: ignore
 
     async def test_many_to_many_update(self) -> None:
         many_a = [ManyToManyA(value="coffee"), ManyToManyA(value="caramel")]
@@ -82,6 +82,6 @@ class PyDBManyRelationsTests(unittest.IsolatedAsyncioTestCase):
         many_b.many[0].value = "mocha"
         await db[ManyToManyB].update(many_b)
         find_b = await db[ManyToManyB].find_one(many_b.id, depth=1)
-        flavors = [it.value for it in find_b.many]
+        flavors = [it.value for it in find_b.many]  # type: ignore
         flavors.sort()
         self.assertListEqual(["caramel", "mocha"], flavors)

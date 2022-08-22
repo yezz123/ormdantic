@@ -131,7 +131,7 @@ class PydanticSQLTableGenerator:
             self._m2m[f"{foreign_table}.{field_name}"] = back_reference
             col_a, col_b = self._get_mtm_column_names(table_data.name, foreign_table)
             mtm_data = M2M(
-                name=table_data.relationships[field_name].m2m_data.name,
+                name=table_data.relationships[field_name].m2m_data.name,  # type: ignore
                 table_a=table_data.name,
                 table_b=foreign_table,
                 table_a_column=col_a,
@@ -141,7 +141,7 @@ class PydanticSQLTableGenerator:
             if self._m2m.get(f"{table_data.name}.{back_reference}") == field_name:
                 return  # type: ignore
             Table(
-                table_data.relationships[field_name].m2m_data.name,
+                table_data.relationships[field_name].m2m_data.name,  # type: ignore
                 self._metadata,
                 *self._get_m2m_columns(table_data.name, foreign_table, col_a, col_b),
             )

@@ -138,7 +138,7 @@ class Ormdantic:
                 relation_type = RelationType.MANY_TO_MANY
                 # Get mtm tablename or make one.
                 if rel := related_table.relationships.get(back_reference):
-                    mtm_tablename = rel.m2m_data.name
+                    mtm_tablename = rel.m2m_data.name  # type: ignore
                 else:
                     mtm_tablename = Get_M2M_TableName(
                         table_data.name, field_name, related_table.name, back_reference
