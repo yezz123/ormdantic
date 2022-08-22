@@ -1,5 +1,7 @@
 """Generate Python CRUD methods for a model."""
+
 import asyncio
+import contextlib
 import json
 import re
 from types import NoneType
@@ -113,7 +115,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def _insert(  # type: ignore
         self, model_instance: ModelType, tablename: str, upsert_relations
-    ):
+    ) -> ModelType:
         table_data = self._schema[tablename]
         table = Table(tablename)
         if upsert_relations:
@@ -153,19 +155,57 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             )
         ):
             return (
-                model if model == model_instance else await self.update(model_instance)
+                model
+                if model == model_instance
+                else await self._update(model_instance, tablename)
             )
         return await self._insert(model_instance, tablename, upsert_relations)
 
     async def _upsert_relations(  # type: ignore
         self, model_instance: ModelType, table_data: PydanticTableMeta  # type: ignore
-    ):
+    ) -> None:
         for column, relation in table_data.relationships.items():
             if relation.relation_type == RelationType.MANY_TO_MANY:
-                print(relation)
+                for rel_model in model_instance.__dict__.get(column) or []:
+                    rel_tablename = TableName_From_Model(type(rel_model), self._schema)
+                    await self._upsert(rel_model, rel_tablename, True)
+                    await self._upsert_relation(
+                        model_instance, table_data, rel_model, relation, rel_tablename
+                    )
             elif rel_model := model_instance.__dict__.get(column):
                 tablename = TableName_From_Model(type(rel_model), self._schema)
                 await self._upsert(rel_model, tablename, True)
+
+    async def _upsert_relation(
+        self,
+        model_instance: ModelType,
+        table_data: PydanticTableMeta,
+        rel_model: ModelType,
+        relation: Relation,
+        rel_tablename: str,
+    ) -> None:
+        await self._upsert(rel_model, rel_tablename, True)
+        rel_td = self._schema[rel_tablename]
+        mtm_table = Table(relation.m2m_data.name)
+        columns = relation.m2m_data.table_a_column, relation.m2m_data.table_b_column
+        values = (model_instance.__dict__[table_data.pk], rel_model.__dict__[rel_td.pk])
+        query = (
+            Query.from_(mtm_table)
+            .select(*columns)
+            .where(
+                mtm_table.field(relation.m2m_data.table_a_column)
+                == model_instance.__dict__[table_data.pk]
+                and mtm_table.field(relation.m2m_data.table_b_column)
+                == rel_model.__dict__[rel_td.pk]
+            )
+        )
+
+        res = await self._execute(query)
+        with contextlib.suppress(StopIteration):
+            next(res)
+            return
+        query = Query.into(mtm_table).columns(*columns).insert(*values)
+        await self._execute(query)
 
     async def _populate_many_relations(
         self, table_data: PydanticTableMeta, model_instance: ModelType, depth: int  # type: ignore
@@ -257,7 +297,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         ).where(
             foreign_table.field(foreign_table_data.pk).isin([it[0] for it in result])
         )
-        return await self._execute(many_query)
+        return await self._execute(many_query)  # pragma: no cover
 
     async def _find_mtm(
         self,
@@ -269,10 +309,10 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         pk: Any,
         depth: int,
     ) -> Any:
-        mtm_table = Table(relation.m2m_table)
+        mtm_table = Table(relation.m2m_data.name)
         if relation.foreign_table == table_data.name:
-            mtm_field_a = f"{table_data.name}_a"
-            mtm_field_b = f"{relation.foreign_table}_b"
+            mtm_field_a = f"{table_data.name}_a"  # pragma: no cover
+            mtm_field_b = f"{relation.foreign_table}_b"  # pragma: no cover
         else:
             mtm_field_a = table_data.name
             mtm_field_b = relation.foreign_table
@@ -451,7 +491,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         type_ = None
         for arg in get_args(model_type.__fields__[field_name].type_):
             if arg in self._schema.values() or arg is NoneType:
-                continue
+                continue  # pragma: no cover
             type_ = arg
         return type_(row_mapping[column]) if type_ else row_mapping[column]
 
