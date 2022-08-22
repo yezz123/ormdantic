@@ -29,6 +29,16 @@ requires = [
 ]
 
 [tool.flit.metadata.requires-extra]
+sqlite = [
+    "aiosqlite",
+]
+postgresql = [
+    "psycopg2-binary",
+    "asyncpg"
+]
+mysql = [
+    "aiomysql",
+]
 lint = [
     "pre-commit==2.19.0",
     "mypy==0.931",
@@ -38,6 +48,5 @@ test = [
     "pytest-asyncio == 0.18.3",
     "codecov==2.1.12",
     "pytest-cov==3.0.0",
-    "aiosqlite==0.17.0",
     "python-decouple",
 ]
