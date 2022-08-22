@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from pydanticORM import PydanticORM
-from pydanticORM.handler import (
+from pydantic_orm import PydanticORM
+from pydantic_orm.handler import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     TypeConversionError,

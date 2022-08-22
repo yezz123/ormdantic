@@ -8,7 +8,7 @@ from decouple import config
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from pydanticORM import PydanticORM
+from pydantic_orm import PydanticORM
 
 URL = config("DATABASE_URL")
 

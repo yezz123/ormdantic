@@ -6,16 +6,16 @@ from pydantic import BaseModel
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from pydanticORM.generator import CRUD, Table
-from pydanticORM.handler import (
+from pydantic_orm.generator import CRUD, Table
+from pydantic_orm.handler import (
     Get_M2M_TableName,
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     UndefinedBackReferenceError,
     snake_case,
 )
-from pydanticORM.table import PydanticTableMeta, Relation, RelationType
-from pydanticORM.types import ModelType
+from pydantic_orm.table import PydanticTableMeta, Relation, RelationType
+from pydantic_orm.types import ModelType
 
 
 class PydanticORM:
