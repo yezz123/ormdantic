@@ -1,4 +1,4 @@
-![Logo](.github/logo.png)
+![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/.github/logo.png)
 
 <p align="center">
     <em>Asynchronous ORM that uses pydantic models to represent database tables ✨</em>
