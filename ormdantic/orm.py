@@ -6,19 +6,19 @@ from pydantic import BaseModel
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from pydantic_orm.generator import CRUD, Table
-from pydantic_orm.handler import (
+from ormdantic.generator import CRUD, Table
+from ormdantic.handler import (
     Get_M2M_TableName,
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     UndefinedBackReferenceError,
     snake_case,
 )
-from pydantic_orm.table import PydanticTableMeta, Relation, RelationType
-from pydantic_orm.types import ModelType
+from ormdantic.table import PydanticTableMeta, Relation, RelationType
+from ormdantic.types import ModelType
 
 
-class PydanticORM:
+class Ormdantic:
     """
     It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum,
     but while getting the best developer experience possible.

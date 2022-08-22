@@ -9,12 +9,12 @@ from pydantic import BaseModel, Field
 from pypika import Order
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from pydantic_orm import PydanticORM
+from ormdantic import Ormdantic
 
 URL = config("DATABASE_URL")
 
 engine = create_async_engine(URL)
-database = PydanticORM(engine)
+database = Ormdantic(engine)
 
 
 class Money(BaseModel):
@@ -63,7 +63,7 @@ class Table(BaseModel):
 Flavor.update_forward_refs()
 
 
-class PydanticORMTesting(unittest.IsolatedAsyncioTestCase):
+class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         """Setup clean sqlite database."""
 

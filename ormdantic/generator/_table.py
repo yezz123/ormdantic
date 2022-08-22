@@ -19,8 +19,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from pydantic_orm.handler import TableName_From_Model, TypeConversionError
-from pydantic_orm.table import PydanticTableMeta, RelationType
+from ormdantic.handler import TableName_From_Model, TypeConversionError
+from ormdantic.table import PydanticTableMeta, RelationType
 
 
 class PydanticSQLTableGenerator:

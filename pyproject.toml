@@ -3,11 +3,11 @@ requires = ["flit"]
 build-backend = "flit.buildapi"
 
 [tool.flit.metadata]
-module = "pydantic_orm"
-dist-name = "pydantic_orm"
+module = "ormdantic"
+dist-name = "ormdantic"
 author = "Yasser Tahiri"
 author-email = "hello@yezz.me"
-home-page = "https://github.com/yezz123/PydanticORM"
+home-page = "https://github.com/yezz123/ormdantic"
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
