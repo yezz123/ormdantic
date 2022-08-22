@@ -6,4 +6,4 @@ set -x
 echo "ENV=${ENV}"
 
 export PYTHONPATH=.
-pytest --cov=pydanticORM --cov=tests
+pytest --cov=pydantic_orm --cov=tests

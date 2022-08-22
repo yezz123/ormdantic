@@ -3,8 +3,8 @@ requires = ["flit"]
 build-backend = "flit.buildapi"
 
 [tool.flit.metadata]
-module = "pydanticORM"
-dist-name = "pydanticORM"
+module = "pydantic_orm"
+dist-name = "pydantic_orm"
 author = "Yasser Tahiri"
 author-email = "hello@yezz.me"
 home-page = "https://github.com/yezz123/PydanticORM"

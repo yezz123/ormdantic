@@ -1,5 +1,5 @@
 """Provides ModelType TypeVar used throughout lib."""
 
-from pydanticORM.types.base import ModelType
+from pydantic_orm.types.base import ModelType
 
 __all__ = ["ModelType"]

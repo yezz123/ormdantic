@@ -2,6 +2,6 @@
 
 __version__ = "1.0.0"
 
-from pydanticORM.orm import PydanticORM
+from pydantic_orm.orm import PydanticORM
 
 __all__ = ["PydanticORM"]

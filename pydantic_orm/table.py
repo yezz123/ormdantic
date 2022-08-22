@@ -5,7 +5,7 @@ from typing import Generic, Type
 from pydantic import BaseModel
 from pydantic.generics import GenericModel
 
-from pydanticORM.types import ModelType
+from pydantic_orm.types import ModelType
 
 
 class RelationType(Enum):

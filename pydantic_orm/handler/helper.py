@@ -1,7 +1,7 @@
 """Utility functions used throughout the project."""
 from typing import Any, Type
 
-from pydanticORM.types import ModelType
+from pydantic_orm.types import ModelType
 
 
 def TableName_From_Model(model: Type[ModelType], schema: dict[str, Any]) -> str:
