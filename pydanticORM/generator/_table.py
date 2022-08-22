@@ -24,14 +24,6 @@ from pydanticORM.table import PydanticTableMeta, RelationType
 
 
 class PydanticSQLTableGenerator:
-    """PydanticSQLTableGenerator Class used to generate SQLAlchemy tables, based on the
-    Pydantic models and take:
-
-        `engine`: AsyncEngine
-        `metadata`: MetaData
-        `schema`: `dict[str, PydanticTableMeta]`
-    """
-
     def __init__(
         self,
         engine: AsyncEngine,

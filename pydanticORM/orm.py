@@ -19,7 +19,10 @@ from pydanticORM.types import ModelType
 
 
 class PydanticORM:
-    """Class to use pydantic models as ORM models."""
+    """
+    It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum,
+    but while getting the best developer experience possible.
+    """
 
     def __init__(self, engine: AsyncEngine) -> None:
         """Register models as ORM models and create schemas"""
