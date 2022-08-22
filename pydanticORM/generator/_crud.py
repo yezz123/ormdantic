@@ -20,14 +20,6 @@ from pydanticORM.types import ModelType
 
 
 class PydanticSQLCRUDGenerator(Generic[ModelType]):
-    """Provides Database CRUD methods for a model type.
-
-    - `Tablename of the table in the database.
-    - `Engine` is the database engine.
-    - `Shema` is a dictionary of table names and their associated model classes.
-
-    """
-
     def __init__(
         self,
         tablename: str,

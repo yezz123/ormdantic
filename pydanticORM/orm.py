@@ -19,12 +19,9 @@ from pydanticORM.types import ModelType
 
 
 class PydanticORM:
-    """Class to use pydantic models as ORM models.
-        - It will also generate CRUD operations for each model.
-        - It will also generate back references for each model.
-    - `metadata` is the metadata to use for the ORM.
-    - `schema` is the schema to use for the ORM.
-    - `engine` is the engine to use for the ORM.
+    """
+    It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum,
+    but while getting the best developer experience possible.
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
