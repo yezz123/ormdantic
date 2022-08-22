@@ -15,6 +15,16 @@ class RelationType(Enum):
     MANY_TO_MANY = auto()
 
 
+class M2M(BaseModel):
+    """Stores information about M2M relationships."""
+
+    name: str | None = None
+    table_a: str | None = None
+    table_b: str | None = None
+    table_a_column: str | None = None
+    table_b_column: str | None = None
+
+
 class Relation(BaseModel):
     # https://stackoverflow.com/a/59920780/12927850
     """Describes a relationship from one table to another."""
@@ -22,7 +32,7 @@ class Relation(BaseModel):
     foreign_table: str
     back_references: str | None = None
     relation_type: RelationType
-    m2m_table: str | None = None
+    m2m_data: M2M | None = None
 
 
 class PydanticTableMeta(GenericModel, Generic[ModelType]):

@@ -14,7 +14,7 @@ from ormdantic.handler import (
     UndefinedBackReferenceError,
     snake_case,
 )
-from ormdantic.table import PydanticTableMeta, Relation, RelationType
+from ormdantic.table import M2M, PydanticTableMeta, Relation, RelationType
 from ormdantic.types import ModelType
 
 
@@ -138,7 +138,7 @@ class Ormdantic:
                 relation_type = RelationType.MANY_TO_MANY
                 # Get mtm tablename or make one.
                 if rel := related_table.relationships.get(back_reference):
-                    mtm_tablename = rel.m2m_table
+                    mtm_tablename = rel.m2m_data.name  # type: ignore
                 else:
                     mtm_tablename = Get_M2M_TableName(
                         table_data.name, field_name, related_table.name, back_reference
@@ -147,7 +147,7 @@ class Ormdantic:
                 foreign_table=related_table.name,
                 relation_type=relation_type,
                 back_references=back_reference,
-                mtm_table=mtm_tablename,
+                m2m_data=M2M(name=mtm_tablename),
             )
         return columns, relationships
 
