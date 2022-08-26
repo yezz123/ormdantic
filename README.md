@@ -109,7 +109,7 @@ class Flavor(BaseModel):
 
 Now after we create the table, we can initialize the database with the table and then run different queries.
 
-#### [`Init()`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/orm.py#L67)
+#### Init()
 
 * Register models as ORM models and initialize the database.
 
@@ -120,7 +120,7 @@ async def main() -> None:
      await database.init()
 ```
 
-#### [`Insert()`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L59)
+#### Insert
 
 Now let's imagine we have another table called `Coffee` that has a foreign key to `Flavor`.
 
@@ -157,7 +157,7 @@ As we know, in SQL, we can search for data using different methods, ex. `WHERE`,
 
 In Ormdantic, we can search for data using the `database.find_one` or `database.find_many` methods.
 
-* [`Find_one`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L35) used to find a Model instance by Primary Key, its could also find with `depth` parameter.
+* `Find_one`  used to find a Model instance by Primary Key, its could also find with `depth` parameter.
 
 ```python
      # Find one
@@ -169,7 +169,7 @@ In Ormdantic, we can search for data using the `database.find_one` or `database.
      print(find_coffee.flavor.name)
 ```
 
-* [`Find_many`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L39) used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
+* `Find_many` used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
 
 ```python
      # Find many
@@ -181,7 +181,7 @@ In Ormdantic, we can search for data using the `database.find_one` or `database.
      )
 ```
 
-#### [`Update`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L65) / [`Upsert`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L71) Queries
+#### Update / Upsert Queries
 
 ##### Update
 
@@ -203,7 +203,7 @@ The `Upsert` method is similar to the Synchronize method with one exception; the
      await database[Flavor].upsert(flavor)
 ```
 
-### [`Delete`](https://github.com/yezz123/ormdantic/blob/400ecfde754fc6613923779a6a545a0f00282752/ormdantic/generator/_crud.py#L77)
+### Delete
 
 The `DELETE` statement is used to delete existing records in a table.
 
