@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 from decouple import config
 from pydantic import BaseModel, Field
 from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from ormdantic import Ormdantic
 from ormdantic.handler import (
@@ -20,12 +19,12 @@ from ormdantic.handler import (
 
 URL = config("DATABASE_URL")
 
-engine = create_async_engine(URL)
-db_1 = Ormdantic(engine)
-db_2 = Ormdantic(engine)
-db_3 = Ormdantic(engine)
-db_4 = Ormdantic(engine)
-db_5 = Ormdantic(engine)
+connection = URL
+db_1 = Ormdantic(connection)
+db_2 = Ormdantic(connection)
+db_3 = Ormdantic(connection)
+db_4 = Ormdantic(connection)
+db_5 = Ormdantic(connection)
 
 
 @db_1.table(pk="id")
@@ -99,12 +98,16 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         """Setup clean sqlite database."""
 
-        async def _init() -> None:
+        async def _init(db: Ormdantic) -> None:
             metadata = MetaData()
-            async with engine.begin() as conn:
+            async with db._engine.begin() as conn:
                 await conn.run_sync(metadata.drop_all)
 
-        asyncio.run(_init())
+        asyncio.run(_init(db_1))
+        asyncio.run(_init(db_2))
+        asyncio.run(_init(db_3))
+        asyncio.run(_init(db_4))
+        asyncio.run(_init(db_5))
 
     async def test_undefined_back_reference(self) -> None:
         correct_error = False

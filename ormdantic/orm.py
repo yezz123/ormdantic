@@ -4,7 +4,7 @@ from typing import Callable, ForwardRef, Type, get_args, get_origin
 
 from pydantic import BaseModel
 from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ormdantic.generator import CRUD, Table
 from ormdantic.handler import (
@@ -24,13 +24,13 @@ class Ormdantic:
     but while getting the best developer experience possible.
     """
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, connection: str) -> None:
         """Register models as ORM models and create schemas"""
-        self.metadata: MetaData | None = None
+        self._metadata: MetaData | None = None
         self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
-        self._schema: dict[str, PydanticTableMeta] = {}  # type: ignore
+        self._engine = create_async_engine(connection)
         self._model_to_metadata: dict[Type[BaseModel], PydanticTableMeta] = {}  # type: ignore
-        self._engine = engine
+        self._schema: dict[str, PydanticTableMeta] = {}  # type: ignore
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
         return self._crud_generators[item]
@@ -71,7 +71,7 @@ class Ormdantic:
             table_data.columns = cols
             table_data.relationships = rels
         # Now that relation information is populated generate tables.
-        self.metadata = MetaData()
+        self._metadata = MetaData()
         for tablename, table_data in self._schema.items():
             # noinspection PyTypeChecker
             self._crud_generators[table_data.model] = CRUD(
@@ -79,7 +79,9 @@ class Ormdantic:
                 self._engine,
                 self._schema,
             )
-        await Table(self._engine, self.metadata, self._schema).init()
+        await Table(self._engine, self._metadata, self._schema).init()
+        async with self._engine.begin() as conn:
+            await conn.run_sync(self._metadata.drop_all)
 
     def get(
         self, tablename: str, table_data: PydanticTableMeta  # type: ignore
