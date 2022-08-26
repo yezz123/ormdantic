@@ -8,14 +8,13 @@ from uuid import UUID, uuid4
 from decouple import config
 from pydantic import BaseModel, Field
 from pypika import Order
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from ormdantic import Ormdantic
 
 URL = config("DATABASE_URL")
 
-engine = create_async_engine(URL)
-database = Ormdantic(engine)
+connection = URL
+database = Ormdantic(connection)
 
 
 class Money(BaseModel):
@@ -70,10 +69,10 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         """Setup clean sqlite database."""
 
         async def _init() -> None:
-            await database.init()
-            async with engine.begin() as conn:
-                await conn.run_sync(database.metadata.drop_all)  # type: ignore
-                await conn.run_sync(database.metadata.create_all)  # type: ignore
+            async with database._engine.begin() as conn:
+                await database.init()
+                await conn.run_sync(database._metadata.drop_all)  # type: ignore
+                await conn.run_sync(database._metadata.create_all)  # type: ignore
 
         asyncio.run(_init())
 

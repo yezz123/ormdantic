@@ -12,8 +12,8 @@ from ormdantic import Ormdantic
 
 URL = config("DATABASE_URL")
 
-engine = create_async_engine(URL)
-database = Ormdantic(engine)
+connection = URL
+database = Ormdantic(connection)
 
 
 @database.table(pk="id", back_references={"many_a": "one_a", "many_b": "one_b"})
@@ -43,10 +43,10 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         """Setup clean sqlite database."""
 
         async def _init() -> None:
-            await database.init()
-            async with engine.begin() as conn:
-                await conn.run_sync(database.metadata.drop_all)  # type: ignore
-                await conn.run_sync(database.metadata.create_all)  # type: ignore
+            async with database._engine.begin() as conn:
+                await database.init()
+                await conn.run_sync(database._metadata.drop_all)  # type: ignore
+                await conn.run_sync(database._metadata.create_all)  # type: ignore
 
         asyncio.run(_init())
 
