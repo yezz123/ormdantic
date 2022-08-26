@@ -77,12 +77,14 @@ But let's see how to use Ormdantic.
 
 Ormdantic uses SQLAlchemy under hood to run different queries, which is why we need to initialize by creating an asynchronous engine.
 
+> **Note**: You will use the `connection` parameter to pass the connection to the engine directly.
+
 ```python
-from sqlalchemy.ext.asyncio import create_async_engine as create_engine
 from ormdantic import Ormdantic
 
-engine = create_engine("sqlite+aiosqlite:///db.sqlite3")
-database = Ormdantic(engine)
+connection = "sqlite+aiosqlite:///db.sqlite3"
+
+database = Ormdantic(connection)
 ```
 
 **Note**: You can use any asynchronous engine, check out the [documentation](https://docs.sqlalchemy.org/en/14/core/engines.html) for more information.
