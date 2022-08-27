@@ -17,25 +17,25 @@
   `ormdantic` takes a connection string as a constructor parameter instead and creates sessions internally where needed. It is "async by default" one might say.
 
 - The aforementioned difference leads to another difference:
-  
+
   In `sqlmodel`, you typically interact with both a Session object and a SQLModel object, e.g.:
 
-    ```python
-        ...
-        hero = Hero()   # Hero inherits from SQLModel
-        session.add(hero)
-        await session.commit()
-        ...
-    ```
+```python
+  ...
+  hero = Hero()   # Hero inherits from SQLModel
+  session.add(hero)
+  await session.commit()
+  ...
+```
 
   In `ormdantic`, you just interact with the database abstraction:
 
-    ```python
-        ...
-        hero = Hero()   # Hero inherits from pydantic BaseModel and is decorated as database table
-        await database["Hero"].insert(hero)
-        ...
-    ```
+```python
+  ...
+  hero = Hero()   # Hero inherits from pydantic BaseModel and is decorated as database table
+  await database["Hero"].insert(hero)
+  ...
+```
 
     Some people find the latter to be a bit more elegant/intuitive, but that's of course subjective.
 
