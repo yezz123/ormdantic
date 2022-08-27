@@ -50,3 +50,17 @@ test = [
     "pytest-cov==3.0.0",
     "python-decouple",
 ]
+docs = [
+    "mkdocs >=1.1.2,<2.0.0",
+    "mkdocs-material >=8.1.4,<9.0.0",
+    "mdx-include >=1.4.1,<2.0.0",
+    "mkdocs-markdownextradata-plugin >=0.1.7,<0.3.0",
+    "mkdocs-mermaid2-plugin==0.5.2",
+    "markdown-include==0.6.0",
+    "pymdown-extensions==9.1",
+    "jinja2==3.0.3"
+]
+
+[tool.flit.metadata.urls]
+Documentation = "https://ormdantic.yezz.me/"
+Source = "https://github.com/yezz123/ormdantic"
