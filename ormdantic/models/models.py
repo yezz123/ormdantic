@@ -1,6 +1,7 @@
 from enum import Enum
+from typing import Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ormdantic.types import ModelType
 
@@ -33,13 +34,13 @@ class Relationship(BaseModel):
 class OrmTable(BaseModel):
     """Table metadata."""
 
+    model: Type[ModelType]
     tablename: str
     pk: str
     indexed: list[str]
     unique: list[str]
     unique_constraints: list[list[str]]
     columns: list[str]
-    model: ModelType
     relationships: dict[str, Relationship]
     back_references: dict[str, str]
 
@@ -47,5 +48,5 @@ class OrmTable(BaseModel):
 class Map(BaseModel):
     """Map tablename to table data and model to table data."""
 
-    name_to_data: dict[str, OrmTable]
-    model_to_data: dict[ModelType, OrmTable]
+    name_to_data: dict[str, OrmTable] = Field(default_factory=lambda: {})
+    model_to_data: dict[ModelType, OrmTable] = Field(default_factory=lambda: {})
