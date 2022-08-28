@@ -3,10 +3,11 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from pypika import Query, Table
+from pypika import PostgreSQLQuery, Query, Table
+from pypika.dialects import PostgreSQLQueryBuilder
 
-from ormdantic.handler.helper import Model_Instance
-from ormdantic.models.models import Map
+from ormdantic.handler import Model_Instance
+from ormdantic.models import Map
 from ormdantic.types import ModelType
 
 
@@ -19,12 +20,14 @@ class OrmQuery:
         table_map: Map,
         depth: int = 1,
         processed_models: list[ModelType] | None = None,
+        query: Query | PostgreSQLQuery | None = None,
     ) -> None:
         self._depth = depth
         self._model = model
-        self._query = Query
+        # PostgreSQLQuery works for SQLite and PostgreSQL.
+        self._query = query or PostgreSQLQuery
         self._table_map = table_map
-        self._processed_models = processed_models
+        self._processed_models = processed_models or []
 
     def get_insert_queries(self) -> list[Query]:
         """Get queries to insert model tree."""
@@ -52,28 +55,40 @@ class OrmQuery:
     def _get_inserts_or_upserts(self, is_upsert: bool) -> list[Query]:
         if self._model in self._processed_models:
             return []
-        table_data = self._table_map.model_to_data[self._model]
-        values = [
-            self._py_type_to_sql(self._model.__dict__[c]) for c in table_data.columns
-        ]
+        table_data = self._table_map.model_to_data[type(self._model)]
+        col_to_value = {
+            query: self._py_type_to_sql(self._model.__dict__[query])
+            for query in table_data.columns
+        }
+        table = Table(table_data.tablename)
         self._query = (
-            Query.into(Table(self._table_map.model_to_data[self._model].tablename))
+            self._query.into(table)
             .columns(*table_data.columns)
-            .insert(*values)
+            .insert(*col_to_value.values())
         )
-        if is_upsert:
-            self._query = self._query.on_duplicate_key_update(*values)
+
+        if is_upsert and isinstance(self._query, PostgreSQLQueryBuilder):
+            self._query = self._query.on_conflict(table_data.pk)
+            for column, value in col_to_value.items():
+                self._query = self._query.do_update(table.field(column), value)
         queries = [self._query]
-        if self._depth > 0:
-            for col, rel in table_data.relationships.items():
+        if self._depth < 1:
+            return queries
+        for col, rel in table_data.relationships.items():
+            rel_value = self._model.__dict__[col]
+            if not rel_value:
+                continue
+            models = rel_value if isinstance(rel_value, list) else [rel_value]
+            for model in models:
                 queries.extend(
                     OrmQuery(
-                        model=self._model.__dict__[col],
+                        model=model,
                         table_map=self._table_map,
                         depth=self._depth - 1,
                         processed_models=self._processed_models + [self._model],
                     ).get_upsert_queries()
                 )
+
         return queries
 
     def _py_type_to_sql(self, value: Any) -> Any:
@@ -81,9 +96,10 @@ class OrmQuery:
             return str(value)
         if isinstance(value, (dict, list)):
             return json.dumps(value)
-        if isinstance(value, BaseModel) and type(value) in [
-            self._table_map.model_to_data
-        ]:
+        if (
+            isinstance(value, BaseModel)
+            and type(value) in self._table_map.model_to_data
+        ):
             tablename = Model_Instance(value, self._table_map)
             return self._py_type_to_sql(
                 value.__dict__[self._table_map.name_to_data[tablename].pk]
