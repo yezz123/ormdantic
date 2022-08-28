@@ -5,7 +5,11 @@ from ormdantic.handler.errors import (
     TypeConversionError,
     UndefinedBackReferenceError,
 )
-from ormdantic.handler.helper import Get_M2M_TableName, TableName_From_Model
+from ormdantic.handler.helper import (
+    Get_M2M_TableName,
+    Model_Instance,
+    TableName_From_Model,
+)
 from ormdantic.handler.snake import snake as snake_case
 
 __all__ = [
@@ -17,4 +21,5 @@ __all__ = [
     "MustUnionForeignKeyError",
     "TypeConversionError",
     "snake_case",
+    "Model_Instance",
 ]
