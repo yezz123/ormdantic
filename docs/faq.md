@@ -8,44 +8,12 @@
 
 ## What are the key differences between Ormdantic and Sqlmodel?
 
-- `ormdantic` uses a wrapper/decorator to make pydantic BaseModels behave like database tables as well, whereas the model class of `sqlmodel` inherits from pydantic BaseModel and uses a modified SQLAlchemy base model as its meta-class to achieve the same thing.
-
-- In `sqlmodel`, the database connection is not built into the main class (SQLModel), but handled by separate equivalents of SQLAlchemy classes and functions (Session and create_engine).
-
-  Since the async equivalents are not available in `sqlmodel` yet, one has to use the original SQLAlchemy ext versions, which is certainly possible, but can be a bit cumbersome until SQLAlchemy 2.0 is released (type checking is also a problem).
-
-  `ormdantic` takes a connection string as a constructor parameter instead and creates sessions internally where needed. It is "async by default" one might say.
-
-- The aforementioned difference leads to another difference:
-
-  In `sqlmodel`, you typically interact with both a Session object and a SQLModel object, e.g.:
-
-```python
-  ...
-  hero = Hero()   # Hero inherits from SQLModel
-  session.add(hero)
-  await session.commit()
-  ...
-```
-
-  In `ormdantic`, you just interact with the database abstraction:
-
-```python
-  ...
-  hero = Hero()   # Hero inherits from pydantic BaseModel and is decorated as database table
-  await database["Hero"].insert(hero)
-  ...
-```
-
-    Some people find the latter to be a bit more elegant/intuitive, but that's of course subjective.
-
-- `ormdantic` adds pypika to the mix, `sqlmodel` does not seem to include it or anything similar, but that's more of an internal difference. It is an added dependency though for those who care about it.
-
-- Another difference is of course that `sqlmodel` is a bit more established and has the benefit of being authored by the creator of FastAPI, so on paper it should be the ORM to use with FastAPI.
-
-  Unfortunately said creator has a lot on his plate and thus `sqlmodel` may not publish new releases as often as other projects do. `ormdantic` on the other hand is of course brand new and thus unproven, but could be an exciting alternative (as of August 2022).
-
-- `ormdantic` is similar to `PonyORM` in that it enables youto write queries to the database using Python generator expressions and lambdas. It makes the structure similar to writing SQL queries but even easier to understand and integrate.
+| (as of August 2022) | SQLModel | Ormdantic |
+|---|---|---|
+| Multimorphism  (being both a pydantic model  and a SQLAlchemy model) | Inherits from pydantic BaseModel and uses a modified SQLAlchemy base model  as its meta-class. | Uses a wrapper/decorator to make pydantic BaseModels behave like database tables as well. |
+| Database connection/async | Database connection is not built into the main class (SQLModel),  but handled by separate equivalents of SQLAlchemy classes and functions  (Session and create_engine). <br> <br> Since the async equivalents are not  available in `sqlmodel` yet,  one has to use the original  SQLAlchemy ext versions,  which is certainly possible,  but can be a bit cumbersome  until SQLAlchemy 2.0 is released  (type checking is also a problem). | Takes a connection string as a constructor parameter  and creates sessions internally where needed. <br> <br> It is "async by default" one might say. |
+| API/Syntax | You typically interact  with both a Session object  and a SQLModel object, e.g.:  <pre>hero = Hero()<br>session.add(hero)<br>await session.commit()</pre>  It uses the SQLAlchemy syntax. | You interact with the database abstraction:  <pre>hero = Hero()<br>await database["Hero"].insert(hero)</pre>  The syntax is similar to `PonyORM`, which means you can write queries  to the database using Python generator expressions and lambdas.  It makes the structure similar to writing SQL queries  but even easier to understand and integrate. |
+| Background | A bit more established  and has the benefit of  being authored by the creator of FastAPI,  so on paper it should be the ORM to use with FastAPI. Unfortunately said creator has a lot on his plate, so `sqlmodel` may not publish new releases  as often as other projects do. | Brand new and thus unproven,  but could be an exciting alternative. |
 
 Thanks for [@iron3oxide](https://github.com/iron3oxide) for the great explanation!
 
