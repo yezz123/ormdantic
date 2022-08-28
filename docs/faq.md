@@ -43,7 +43,7 @@
 
 - Another difference is of course that `sqlmodel` is a bit more established and has the benefit of being authored by the creator of FastAPI, so on paper it should be the ORM to use with FastAPI.
 
-  Unfortunately said creator has a lot on his plate and `sqlmodel` hasn't seen a new release for some time now. `ormdantic` on the other hand is of course brand new and thus unproven, but could be an exciting alternative.
+  Unfortunately said creator has a lot on his plate and thus `sqlmodel` may not publish new releases as often as other projects do. `ormdantic` on the other hand is of course brand new and thus unproven, but could be an exciting alternative (as of August 2022).
 
 - `ormdantic` is similar to `PonyORM` in that it enables youto write queries to the database using Python generator expressions and lambdas. It makes the structure similar to writing SQL queries but even easier to understand and integrate.
 
