@@ -1,6 +1,9 @@
 """Utility functions used throughout the project."""
 from typing import Any, Type
 
+from pydantic import BaseModel
+
+from ormdantic.models.models import Map
 from ormdantic.types import ModelType
 
 
@@ -14,3 +17,10 @@ def Get_M2M_TableName(
 ) -> str:
     """Get the name of a table joining two tables in an ManyToMany relation."""
     return f"{table}.{column}-to-{other_table}.{other_column}"
+
+
+def Model_Instance(model: BaseModel, table_map: Map) -> str:
+    """Get a tablename from a model instance."""
+    return [a for a, v in table_map.name_to_data.items() if isinstance(model, v.model)][
+        0
+    ]
