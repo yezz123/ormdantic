@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 
 from ormdantic.generator._query import OrmQuery
 from ormdantic.handler import TableName_From_Model
-from ormdantic.models import Map, OrmTable, Relationship, RelationType, Result
+from ormdantic.models import Map, OrmTable, Relationship, Result
 from ormdantic.types import ModelType
 
 
@@ -61,28 +61,24 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             data=[self._model_from_row_mapping(row._mapping) for row in result],
         )
 
-    async def insert(
-        self,
-        model_instance: ModelType,
-        depth: int = 1,
-    ) -> ModelType:
+    async def insert(self, model_instance: ModelType) -> ModelType:
         """Insert a model instance."""
-        queries = OrmQuery(model_instance, self._table_map, depth).get_insert_queries()
+        queries = OrmQuery(model_instance, self._table_map).get_insert_queries()
         await self._execute_queries(queries)
         return model_instance
 
-    async def update(self, model_instance: ModelType, depth: int = 1) -> ModelType:
+    async def update(self, model_instance: ModelType) -> ModelType:
         """Update a record.
 
         :param `model_instance``: Model representing record to update.
         :param `depth``: Determines how deep in the model tree to upsert.
         :return: The updated model.
         """
-        queries = OrmQuery(model_instance, self._table_map, depth).get_update_queries()
+        queries = OrmQuery(model_instance, self._table_map).get_update_queries()
         await self._execute_queries(queries)
         return model_instance
 
-    async def upsert(self, model_instance: ModelType, depth: int = 1) -> ModelType:
+    async def upsert(self, model_instance: ModelType) -> ModelType:
         """Insert a record if it does not exist, else update it.
 
         :param `model_instance``: Model representing record to insert or update.
@@ -90,7 +86,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         :return: The inserted or updated model.
         """
 
-        queries = OrmQuery(model_instance, self._table_map, depth).get_upsert_queries()
+        queries = OrmQuery(model_instance, self._table_map).get_upsert_queries()
         await self._execute_queries(queries)
         return model_instance
 
@@ -170,26 +166,9 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table = Table(table_data.tablename)
         foreign_table = Table(relation.foreign_table)
         foreign_table_data = self._table_map.name_to_data[relation.foreign_table]
-        if relation.relationship_type == RelationType.ONE_TO_MANY:
-            many_result = await self._find_otm(
-                table_data,
-                foreign_table_data,
-                relation,
-                table,
-                foreign_table,
-                pk,
-                depth,
-            )
-        else:
-            many_result = await self._find_mtm(
-                table_data,
-                foreign_table_data,
-                relation,
-                table,
-                foreign_table,
-                pk,
-                depth,
-            )
+        many_result = await self._find_otm(
+            table_data, foreign_table_data, relation, table, foreign_table, pk, depth
+        )
         return [
             self._model_from_row_mapping(
                 row._mapping, tablename=foreign_table_data.tablename
@@ -224,46 +203,6 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             foreign_table.field(foreign_table_data.pk).isin([it[0] for it in result])
         )
         return await self._execute_query(many_query)  # pragma: no cover
-
-    async def _find_mtm(
-        self,
-        table_data: OrmTable,  # type: ignore
-        foreign_table_data: OrmTable,  # type: ignore
-        relation: Relationship,
-        table: Table,
-        foreign_table: Table,
-        pk: Any,
-        depth: int,
-    ) -> Any:
-        mtm_table = Table(relation.mtm_data.tablename)
-        if relation.foreign_table == table_data.tablename:
-            mtm_field_a = f"{table_data.tablename}_a"
-            mtm_field_b = f"{relation.foreign_table}_b"  # pragma: no cover
-        else:
-            mtm_field_a = table_data.tablename
-            mtm_field_b = relation.foreign_table
-        query = (
-            Query.from_(table)
-            .left_join(mtm_table)
-            .on(
-                mtm_table.field(mtm_field_a)
-                == table.field(self._table_map.name_to_data[table_data.tablename].pk)
-            )
-            .left_join(foreign_table)
-            .on(
-                mtm_table.field(mtm_field_b)
-                == foreign_table.field(foreign_table_data.pk)
-            )
-            .where(table.field(table_data.pk) == pk)
-            .select(foreign_table.field(foreign_table_data.pk))
-        )
-        result = await self._execute_query(query)
-        many_query = self._get_find_many_query(
-            foreign_table_data.tablename, depth=depth
-        ).where(
-            foreign_table.field(foreign_table_data.pk).isin([it[0] for it in result])
-        )
-        return await self._execute_query(many_query)
 
     def _get_find_many_query(
         self,

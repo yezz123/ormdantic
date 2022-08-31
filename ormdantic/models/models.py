@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import Generic, Type
 
 from pydantic import BaseModel, Field
@@ -15,30 +14,11 @@ class Result(GenericModel, Generic[ModelType]):
     data: list[ModelType]
 
 
-class RelationType(Enum):
-    """Table relationship types."""
-
-    ONE_TO_MANY = 1
-    MANY_TO_MANY = 2
-
-
-class M2M(BaseModel):
-    """Stores information about MTM relationships."""
-
-    tablename: str | None = None
-    table_a: str | None = None
-    table_b: str | None = None
-    table_a_column: str | None = None
-    table_b_column: str | None = None
-
-
 class Relationship(BaseModel):
     """Describes a relationship from one table to another."""
 
     foreign_table: str
-    relationship_type: RelationType
     back_references: str | None = None
-    mtm_data: M2M | None = None
 
 
 class OrmTable(BaseModel):

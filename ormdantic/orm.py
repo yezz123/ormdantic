@@ -8,13 +8,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ormdantic.generator import CRUD, Table
 from ormdantic.handler import (
-    Get_M2M_TableName,
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     UndefinedBackReferenceError,
     snake_case,
 )
-from ormdantic.models import M2M, Map, OrmTable, Relationship, RelationType
+from ormdantic.models import Map, OrmTable, Relationship
 from ormdantic.types import ModelType
 
 
@@ -131,8 +130,7 @@ class Ormdantic:
                 )
 
             relationships[field_name] = Relationship(
-                foreign_table=related_table.tablename,
-                relationship_type=RelationType.ONE_TO_MANY,
+                foreign_table=related_table.tablename
             )
 
         return relationships
@@ -171,24 +169,6 @@ class Ormdantic:
                 back_reference,
             )
         # Is the back referenced field also a list?
-        is_mtm = get_origin(back_referenced_field.outer_type_) == list
-        relation_type = RelationType.ONE_TO_MANY
-        mtm_tablename = None
-        if is_mtm:
-            relation_type = RelationType.MANY_TO_MANY
-            # Get mtm tablename or make one.
-            if rel := related_table.relationships.get(back_reference):
-                mtm_tablename = rel.mtm_data.tablename
-            else:
-                mtm_tablename = Get_M2M_TableName(
-                    table_data.tablename,
-                    field_name,
-                    related_table.tablename,
-                    back_reference,
-                )
         return Relationship(
-            foreign_table=related_table.tablename,
-            relationship_type=relation_type,
-            back_references=back_reference,
-            mtm_data=M2M(tablename=mtm_tablename),
+            foreign_table=related_table.tablename, back_references=back_reference
         )
