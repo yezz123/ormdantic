@@ -77,4 +77,11 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         self.assertDictEqual(find_one_a.dict(), many_a_idx_zero.one_a.dict())  # type: ignore
 
     async def test_one_to_many_update(self) -> None:
-        pass
+        one = One()
+        many = Many(one_a=one)
+        await database[Many].insert(many, depth=2)
+        value = "coffee"
+        one.attribute = value
+        await database[Many].update(many, depth=2)
+        find = await database[One].find_one(one.id)
+        self.assertEqual(value, find.attribute)

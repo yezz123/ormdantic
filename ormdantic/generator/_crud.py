@@ -1,4 +1,5 @@
-"""Generate Python CRUD methods for a model."""
+"""Handle table interactions for a model."""
+
 
 import asyncio
 import json
@@ -22,6 +23,8 @@ from ormdantic.types import ModelType
 
 
 class PydanticSQLCRUDGenerator(Generic[ModelType]):
+    """Provides DB CRUD methods and table information for a model."""
+
     def __init__(
         self,
         tablename: str,
