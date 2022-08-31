@@ -63,31 +63,32 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def insert(self, model_instance: ModelType) -> ModelType:
         """Insert a model instance."""
-        queries = OrmQuery(model_instance, self._table_map).get_insert_queries()
-        await self._execute_queries(queries)
+        await self._execute_query(
+            OrmQuery(model_instance, self._table_map).get_insert_query()
+        )
         return model_instance
 
     async def update(self, model_instance: ModelType) -> ModelType:
         """Update a record.
 
         :param `model_instance``: Model representing record to update.
-        :param `depth``: Determines how deep in the model tree to upsert.
         :return: The updated model.
         """
-        queries = OrmQuery(model_instance, self._table_map).get_update_queries()
-        await self._execute_queries(queries)
+        await self._execute_query(
+            OrmQuery(model_instance, self._table_map).get_update_queries()
+        )
         return model_instance
 
     async def upsert(self, model_instance: ModelType) -> ModelType:
         """Insert a record if it does not exist, else update it.
 
         :param `model_instance``: Model representing record to insert or update.
-        :param `depth``: Determines how deep in the model tree to upsert.
         :return: The inserted or updated model.
         """
 
-        queries = OrmQuery(model_instance, self._table_map).get_upsert_queries()
-        await self._execute_queries(queries)
+        await self._execute_query(
+            OrmQuery(model_instance, self._table_map).get_upsert_query()
+        )
         return model_instance
 
     async def delete(self, pk: Any) -> bool:
@@ -246,19 +247,6 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             await session.commit()
         await self._engine.dispose()
         return result
-
-    async def _execute_queries(self, queries: list[QueryBuilder]) -> Any:
-        async_session = sessionmaker(
-            self._engine, expire_on_commit=False, class_=AsyncSession
-        )
-        async with async_session() as session:
-            async with session.begin():
-                results = []
-                for query in queries:
-                    results.append(await session.execute(text(str(query))))
-            await session.commit()
-        await self._engine.dispose()
-        return results
 
     def _build_joins(
         self,
