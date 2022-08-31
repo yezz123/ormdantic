@@ -1,9 +1,18 @@
 from enum import Enum
-from typing import Type
+from typing import Generic, Type
 
 from pydantic import BaseModel, Field
+from pydantic.generics import GenericModel
 
 from ormdantic.types import ModelType
+
+
+class Result(GenericModel, Generic[ModelType]):
+    """Search result object."""
+
+    offset: int
+    limit: int
+    data: list[ModelType]
 
 
 class RelationType(Enum):
@@ -13,7 +22,7 @@ class RelationType(Enum):
     MANY_TO_MANY = 2
 
 
-class M2MData(BaseModel):
+class M2M(BaseModel):
     """Stores information about MTM relationships."""
 
     tablename: str | None = None
@@ -24,15 +33,16 @@ class M2MData(BaseModel):
 
 
 class Relationship(BaseModel):
-    """Relationship data."""
+    """Describes a relationship from one table to another."""
 
     foreign_table: str
     relationship_type: RelationType
-    mtm_data: M2MData | None = None
+    back_references: str | None = None
+    mtm_data: M2M | None = None
 
 
 class OrmTable(BaseModel):
-    """Table metadata."""
+    """Class to store table information, including relationships and back references for many-to-many relationships."""
 
     model: Type[ModelType]
     tablename: str

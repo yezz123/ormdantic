@@ -1,9 +1,17 @@
-from ormdantic.models.models import M2MData, Map, OrmTable, Relationship, RelationType
+from ormdantic.models.models import (
+    M2M,
+    Map,
+    OrmTable,
+    Relationship,
+    RelationType,
+    Result,
+)
 
 __all__ = [
     "RelationType",
-    "M2MData",
+    "M2M",
     "Relationship",
     "OrmTable",
     "Map",
+    "Result",
 ]
