@@ -21,7 +21,7 @@ class Relationship(BaseModel):
     back_references: str | None = None
 
 
-class OrmTable(BaseModel):
+class OrmTable(GenericModel, Generic[ModelType]):
     """Class to store table information, including relationships and back references for many-to-many relationships."""
 
     model: Type[ModelType]
@@ -38,5 +38,9 @@ class OrmTable(BaseModel):
 class Map(BaseModel):
     """Map tablename to table data and model to table data."""
 
-    name_to_data: dict[str, OrmTable] = Field(default_factory=lambda: {})
-    model_to_data: dict[ModelType, OrmTable] = Field(default_factory=lambda: {})
+    name_to_data: dict[str, OrmTable] = Field(  # type: ignore
+        default_factory=lambda: {}
+    )
+    model_to_data: dict[ModelType, OrmTable] = Field(  # type: ignore
+        default_factory=lambda: {}
+    )

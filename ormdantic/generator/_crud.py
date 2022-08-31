@@ -29,7 +29,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         self,
         tablename: str,
         engine: AsyncEngine,
-        table_map: Map,  # type: ignore
+        table_map: Map,
     ) -> None:
 
         self.tablename = tablename

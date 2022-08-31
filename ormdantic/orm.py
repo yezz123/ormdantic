@@ -2,7 +2,7 @@
 from types import UnionType
 from typing import Callable, ForwardRef, Type, get_args, get_origin
 
-from pydantic import Field
+from pydantic.fields import ModelField
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -57,7 +57,7 @@ class Ormdantic:
         def _wrapper(cls: Type[ModelType]) -> Type[ModelType]:
             tablename_ = tablename or snake_case(cls.__name__)
             cls_back_references = back_references or {}
-            table_metadata = OrmTable(
+            table_metadata = OrmTable[ModelType](
                 model=cls,
                 tablename=tablename_,
                 pk=pk,
@@ -96,7 +96,7 @@ class Ormdantic:
         async with self._engine.begin() as conn:
             await conn.run_sync(self._metadata.drop_all)
 
-    def get(self, table_data: OrmTable) -> dict[str, Relationship]:
+    def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         relationships = {}
         for field_name, field in table_data.model.__fields__.items():
             related_table = self._get_related_table(field)
@@ -112,7 +112,7 @@ class Ormdantic:
                 f"list[{table_data.model.__name__}]"
             ):
                 raise MustUnionForeignKeyError(
-                    table_data.tablename, related_table.tablename, field_name
+                    table_data.tablename, related_table.tablename, field_name  # type: ignore
                 )
 
             args = get_args(field.type_)
@@ -135,7 +135,7 @@ class Ormdantic:
 
         return relationships
 
-    def _get_related_table(self, field: Field) -> OrmTable | None:  # type: ignore
+    def _get_related_table(self, field: ModelField) -> OrmTable | None:  # type: ignore
         related_table: OrmTable | None = None  # type: ignore
         # Try to get foreign model from union.
         if args := get_args(field.type_):
@@ -153,8 +153,8 @@ class Ormdantic:
     def _get_many_relationship(
         field_name: str,
         back_reference: str,
-        table_data: OrmTable,
-        related_table: OrmTable,
+        table_data: OrmTable,  # type: ignore
+        related_table: OrmTable,  # type: ignore
     ) -> Relationship:
         back_referenced_field = related_table.model.__fields__.get(back_reference)
         # TODO: Check if back-reference is present but mismatched in type.

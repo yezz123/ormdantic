@@ -76,7 +76,7 @@ class OrmQuery:
                 self._query = self._query.do_update(self._table.field(column), value)
         return self._query
 
-    def _get_columns_and_values(self):
+    def _get_columns_and_values(self):  # type: ignore
         return {
             column: self._py_type_to_sql(self._model.__dict__[column])
             for column in self._table_data.columns
