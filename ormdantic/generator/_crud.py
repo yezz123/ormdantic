@@ -16,8 +16,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
+from ormdantic.generator._query import OrmQuery
 from ormdantic.handler import TableName_From_Model
-from ormdantic.table import PydanticTableMeta, Relation, RelationType, Result
+from ormdantic.models import Map, OrmTable, Relationship, RelationType, Result
 from ormdantic.types import ModelType
 
 
@@ -26,12 +27,12 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         self,
         tablename: str,
         engine: AsyncEngine,
-        schema: dict[str, PydanticTableMeta],  # type: ignore
+        table_map: Map,  # type: ignore
     ) -> None:
 
         self._tablename = tablename
         self._engine = engine
-        self._schema = schema
+        self._table_map = table_map
         self._field_to_column: dict[Any, str] = {}
 
     async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
@@ -51,7 +52,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         query = self._get_find_many_query(
             self._tablename, where, order_by, order, limit, offset, depth
         )
-        result = await self._execute(query)
+        result = await self._execute_query(query)
         return Result(
             offset=offset,
             limit=limit,
@@ -59,10 +60,14 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         )
 
     async def insert(
-        self, model_instance: ModelType, upsert_relations: bool = True
+        self,
+        model_instance: ModelType,
+        depth: int = 1,
     ) -> ModelType:
         """Insert a model instance."""
-        return await self._insert(model_instance, self._tablename, upsert_relations)
+        queries = OrmQuery(model_instance, self._table_map, depth).get_insert_queries()
+        await self._execute_queries(queries)
+        return model_instance
 
     async def update(
         self, model_instance: ModelType, upsert_relations: bool = True
@@ -79,9 +84,9 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def delete(self, pk: Any) -> bool:
         """Delete a model instance by primary key."""
         table = Table(self._tablename)
-        await self._execute(
+        await self._execute_query(
             Query.from_(table)
-            .where(table.field(self._schema[self._tablename].pk) == pk)
+            .where(table.field(self._table_map.name_to_data[self._tablename].pk) == pk)
             .delete()
         )
         return True
@@ -89,7 +94,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def _find_one(
         self, tablename: str, pk: Any, depth: int = 0
     ) -> ModelType | None:
-        table_data = self._schema[tablename]
+        table_data = self._table_map.name_to_data[tablename]
         table = Table(tablename)
         query, columns = self._build_joins(
             Query.from_(table),
@@ -100,7 +105,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         query = query.where(
             table.field(table_data.pk) == self._py_type_to_sql(pk)
         ).select(*columns)
-        result = await self._execute(query)
+        result = await self._execute_query(query)
         try:
 
             model_instance = self._model_from_row_mapping(
@@ -116,14 +121,14 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def _insert(  # type: ignore
         self, model_instance: ModelType, tablename: str, upsert_relations
     ) -> ModelType:
-        table_data = self._schema[tablename]
+        table_data = self._table_map.name_to_data[tablename]
         table = Table(tablename)
         if upsert_relations:
             await self._upsert_relations(model_instance, table_data)
         values = [
             self._py_type_to_sql(model_instance.__dict__[c]) for c in table_data.columns
         ]
-        await self._execute(
+        await self._execute_query(
             Query.into(table).columns(*table_data.columns).insert(*values)
         )
         return model_instance
@@ -131,7 +136,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def _update(
         self, model_instance: ModelType, tablename: str, upsert_relations: bool = True
     ) -> ModelType:
-        table_data = self._schema[tablename]
+        table_data = self._table_map.name_to_data[tablename]
         table = Table(tablename)
         if upsert_relations:
             await self._upsert_relations(model_instance, table_data)
@@ -143,7 +148,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             query = query.set(column, values[i])
         pk = model_instance.__dict__[table_data.pk]
         query = query.where(table.field(table_data.pk) == self._py_type_to_sql(pk))
-        await self._execute(query)
+        await self._execute_query(query)
         return model_instance
 
     async def _upsert(
@@ -151,7 +156,8 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     ) -> ModelType:
         if model := (
             await self._find_one(
-                tablename, model_instance.__dict__[self._schema[tablename].pk]
+                tablename,
+                model_instance.__dict__[self._table_map.name_to_data[tablename].pk],
             )
         ):
             return (
@@ -162,53 +168,55 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return await self._insert(model_instance, tablename, upsert_relations)
 
     async def _upsert_relations(
-        self, model_instance: ModelType, table_data: PydanticTableMeta  # type: ignore
+        self, model_instance: ModelType, table_data: OrmTable  # type: ignore
     ) -> None:
         for column, relation in table_data.relationships.items():
-            if relation.relation_type == RelationType.MANY_TO_MANY:
+            if relation.relationship_type == RelationType.MANY_TO_MANY:
                 for rel_model in model_instance.__dict__.get(column) or []:
-                    rel_tablename = TableName_From_Model(type(rel_model), self._schema)
+                    rel_tablename = TableName_From_Model(
+                        type(rel_model), self._table_map
+                    )
                     await self._upsert(rel_model, rel_tablename, True)
                     await self._upsert_relation(
                         model_instance, table_data, rel_model, relation, rel_tablename
                     )
             elif rel_model := model_instance.__dict__.get(column):
-                tablename = TableName_From_Model(type(rel_model), self._schema)
+                tablename = TableName_From_Model(type(rel_model), self._table_map)
                 await self._upsert(rel_model, tablename, True)
 
     async def _upsert_relation(
         self,
         model_instance: ModelType,
-        table_data: PydanticTableMeta,  # type: ignore
+        table_data: OrmTable,  # type: ignore
         rel_model: ModelType,
-        relation: Relation,
+        relation: Relationship,
         rel_tablename: str,
     ) -> None:
         await self._upsert(rel_model, rel_tablename, True)
-        rel_td = self._schema[rel_tablename]
-        mtm_table = Table(relation.m2m_data.name)  # type: ignore
-        columns = relation.m2m_data.table_a_column, relation.m2m_data.table_b_column  # type: ignore
+        rel_td = self._table_map.name_to_data[rel_tablename]
+        mtm_table = Table(relation.mtm_data.tablename)  # type: ignore
+        columns = relation.mtm_data.table_a_column, relation.mtm_data.table_b_column  # type: ignore
         values = (model_instance.__dict__[table_data.pk], rel_model.__dict__[rel_td.pk])
         query = (
             Query.from_(mtm_table)
             .select(*columns)
             .where(
-                mtm_table.field(relation.m2m_data.table_a_column)  # type: ignore
+                mtm_table.field(relation.mtm_data.table_a_column)  # type: ignore
                 == model_instance.__dict__[table_data.pk]
-                and mtm_table.field(relation.m2m_data.table_b_column)  # type: ignore
+                and mtm_table.field(relation.mtm_data.table_b_column)  # type: ignore
                 == rel_model.__dict__[rel_td.pk]
             )
         )
 
-        res = await self._execute(query)
+        res = await self._execute_query(query)
         with contextlib.suppress(StopIteration):
             next(res)
-            return
+            return None
         query = Query.into(mtm_table).columns(*columns).insert(*values)
-        await self._execute(query)
+        await self._execute_query(query)
 
     async def _populate_many_relations(
-        self, table_data: PydanticTableMeta, model_instance: ModelType, depth: int  # type: ignore
+        self, table_data: OrmTable, model_instance: ModelType, depth: int  # type: ignore
     ) -> ModelType:
         if depth <= 0:
             return model_instance
@@ -221,7 +229,9 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             models = await asyncio.gather(
                 *[
                     self._populate_many_relations(
-                        self._schema[relation.foreign_table], model, depth
+                        self._table_map.name_to_data[relation.foreign_table],
+                        model,
+                        depth,
                     )
                     for model in models  # type: ignore
                 ]
@@ -231,7 +241,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         if depth <= 0:
             return model_instance
         # For each field, populate the many relationships of that field.
-        for tablename, data in self._schema.items():
+        for tablename, data in self._table_map.name_to_data.items():
             for column in table_data.columns:
                 if type(model := model_instance.__dict__.get(column)) == data.model:
                     model = await self._populate_many_relations(data, model, depth)
@@ -239,12 +249,12 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return model_instance
 
     async def _find_many_relation(
-        self, table_data: PydanticTableMeta, pk: Any, relation: Relation, depth: int  # type: ignore
+        self, table_data: OrmTable, pk: Any, relation: Relationship, depth: int  # type: ignore
     ) -> list[ModelType] | None:
-        table = Table(table_data.name)
+        table = Table(table_data.tablename)
         foreign_table = Table(relation.foreign_table)
-        foreign_table_data = self._schema[relation.foreign_table]
-        if relation.relation_type == RelationType.ONE_TO_MANY:
+        foreign_table_data = self._table_map.name_to_data[relation.foreign_table]
+        if relation.relationship_type == RelationType.ONE_TO_MANY:
             many_result = await self._find_otm(
                 table_data,
                 foreign_table_data,
@@ -266,16 +276,16 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             )
         return [
             self._model_from_row_mapping(
-                row._mapping, tablename=foreign_table_data.name
+                row._mapping, tablename=foreign_table_data.tablename
             )
             for row in many_result
         ]
 
     async def _find_otm(
         self,
-        table_data: PydanticTableMeta,  # type: ignore
-        foreign_table_data: PydanticTableMeta,  # type: ignore
-        relation: Relation,
+        table_data: OrmTable,  # type: ignore
+        foreign_table_data: OrmTable,  # type: ignore
+        relation: Relationship,
         table: Table,
         foreign_table: Table,
         pk: Any,
@@ -291,37 +301,37 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             .where(table.field(table_data.pk) == pk)
             .select(foreign_table.field(foreign_table_data.pk))
         )
-        result = await self._execute(query)
+        result = await self._execute_query(query)
         many_query = self._get_find_many_query(
-            foreign_table_data.name, depth=depth
+            foreign_table_data.tablename, depth=depth
         ).where(
             foreign_table.field(foreign_table_data.pk).isin([it[0] for it in result])
         )
-        return await self._execute(many_query)  # pragma: no cover
+        return await self._execute_query(many_query)  # pragma: no cover
 
     async def _find_mtm(
         self,
-        table_data: PydanticTableMeta,  # type: ignore
-        foreign_table_data: PydanticTableMeta,  # type: ignore
-        relation: Relation,
+        table_data: OrmTable,  # type: ignore
+        foreign_table_data: OrmTable,  # type: ignore
+        relation: Relationship,
         table: Table,
         foreign_table: Table,
         pk: Any,
         depth: int,
     ) -> Any:
-        mtm_table = Table(relation.m2m_data.name)  # type: ignore
-        if relation.foreign_table == table_data.name:
-            mtm_field_a = f"{table_data.name}_a"  # pragma: no cover
+        mtm_table = Table(relation.mtm_data.tablename)
+        if relation.foreign_table == table_data.tablename:
+            mtm_field_a = f"{table_data.tablename}_a"
             mtm_field_b = f"{relation.foreign_table}_b"  # pragma: no cover
         else:
-            mtm_field_a = table_data.name
+            mtm_field_a = table_data.tablename
             mtm_field_b = relation.foreign_table
         query = (
             Query.from_(table)
             .left_join(mtm_table)
             .on(
                 mtm_table.field(mtm_field_a)
-                == table.field(self._schema[table_data.name].pk)
+                == table.field(self._table_map.name_to_data[table_data.tablename].pk)
             )
             .left_join(foreign_table)
             .on(
@@ -331,13 +341,13 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             .where(table.field(table_data.pk) == pk)
             .select(foreign_table.field(foreign_table_data.pk))
         )
-        result = await self._execute(query)
+        result = await self._execute_query(query)
         many_query = self._get_find_many_query(
-            foreign_table_data.name, depth=depth
+            foreign_table_data.tablename, depth=depth
         ).where(
             foreign_table.field(foreign_table_data.pk).isin([it[0] for it in result])
         )
-        return await self._execute(many_query)
+        return await self._execute_query(many_query)
 
     def _get_find_many_query(
         self,
@@ -355,7 +365,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table = Table(tablename)
         where = where or {}
         order_by = order_by or []
-        pydantic_table = self._schema[tablename]
+        pydantic_table = self._table_map.name_to_data[tablename]
         query, columns = self._build_joins(
             Query.from_(table),
             pydantic_table,
@@ -371,7 +381,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             query = query.offset(offset)
         return query
 
-    async def _execute(self, query: QueryBuilder) -> Any:
+    async def _execute_query(self, query: QueryBuilder) -> Any:
         async_session = sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
@@ -382,22 +392,39 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         await self._engine.dispose()
         return result
 
+    async def _execute_queries(self, queries: list[QueryBuilder]) -> Any:
+        async_session = sessionmaker(
+            self._engine, expire_on_commit=False, class_=AsyncSession
+        )
+        async with async_session() as session:
+            async with session.begin():
+                results = []
+                for query in queries:
+                    results.append(await session.execute(text(str(query))))
+            await session.commit()
+        await self._engine.dispose()
+        return results
+
     def _build_joins(
         self,
         query: QueryBuilder,
-        table_data: PydanticTableMeta,  # type: ignore
+        table_data: OrmTable,  # type: ignore
         depth: int,
         columns: list[Field],
         table_tree: str | None = None,
     ) -> tuple[QueryBuilder, list[Field]]:
         if depth <= 0:
             return query, columns
-        if not (relationships := self._schema[table_data.name].relationships):
+        if not (
+            relationships := self._table_map.name_to_data[
+                table_data.tablename
+            ].relationships
+        ):
             return query, columns
         depth -= 1
-        table_tree = table_tree or table_data.name
-        pypika_table: Table = Table(table_data.name)
-        if table_data.name != table_tree:
+        table_tree = table_tree or table_data.tablename
+        pypika_table: Table = Table(table_data.tablename)
+        if table_data.tablename != table_tree:
             pypika_table = pypika_table.as_(table_tree)
         # For each related table, add join to query.
         for field_name, relation in relationships.items():
@@ -407,18 +434,22 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             rel_table = Table(relation.foreign_table).as_(relation_name)
             query = query.left_join(rel_table).on(
                 pypika_table.field(field_name)
-                == rel_table.field(self._schema[relation.foreign_table].pk)
+                == rel_table.field(
+                    self._table_map.name_to_data[relation.foreign_table].pk
+                )
             )
             columns.extend(
                 [
                     rel_table.field(c).as_(f"{relation_name}//{depth}//{c}")
-                    for c in self._schema[relation.foreign_table].columns
+                    for c in self._table_map.name_to_data[
+                        relation.foreign_table
+                    ].columns
                 ]
             )
             # Add joins of relations of this table to query.
             query, new_cols = self._build_joins(
                 query,
-                self._schema[relation.foreign_table],
+                self._table_map.name_to_data[relation.foreign_table],
                 depth,
                 columns,
                 relation_name,
@@ -434,10 +465,12 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         tablename: str | None = None,
     ) -> ModelType:
         tablename = tablename or self._tablename
-        model_type = model_type or self._schema[tablename].model
+        model_type = model_type or self._table_map.name_to_data[tablename].model
         table_tree = table_tree or tablename
         py_type = {}
-        table_data = self._schema[TableName_From_Model(model_type, self._schema)]
+        table_data = self._table_map.name_to_data[
+            TableName_From_Model(model_type, self._table_map)
+        ]
         for column, value in row_mapping.items():
             if not column.startswith(f"{table_tree}//"):
                 # This must be a column somewhere else in the tree.
@@ -449,7 +482,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
                 if value is None:
                     # No further depth has been found.
                     continue
-                foreign_table = self._schema[
+                foreign_table = self._table_map.name_to_data[
                     table_data.relationships[column_name].foreign_table
                 ]
                 if depth <= 0:
@@ -473,7 +506,11 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return model_type.construct(**py_type)
 
     def _tablename_from_model_instance(self, model: BaseModel) -> str:
-        return [k for k, v in self._schema.items() if isinstance(model, v.model)][0]
+        return [
+            k
+            for k, v in self._table_map.name_to_data.items()
+            if isinstance(model, v.model)
+        ][0]
 
     def _py_type_to_sql(self, value: Any) -> Any:
         if self._engine.name != "postgres" and isinstance(value, UUID):
@@ -481,25 +518,27 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         if isinstance(value, (dict, list)):
             return json.dumps(value)
         if isinstance(value, BaseModel) and type(value) in [
-            it.model for it in self._schema.values()
+            it.model for it in self._table_map.name_to_data.values()
         ]:
             tablename = self._tablename_from_model_instance(value)
-            return self._py_type_to_sql(value.__dict__[self._schema[tablename].pk])
+            return self._py_type_to_sql(
+                value.__dict__[self._table_map.name_to_data[tablename].pk]
+            )
         return value.json() if isinstance(value, BaseModel) else value
 
     def _sql_pk_to_py_pk_type(self, model_type: Type[ModelType], field_name: str, column: str, row_mapping: dict) -> Any:  # type: ignore
         type_ = None
         for arg in get_args(model_type.__fields__[field_name].type_):
-            if arg in self._schema.values() or arg is NoneType:
+            if arg in self._table_map.name_to_data.values() or arg is NoneType:
                 continue  # pragma: no cover
             type_ = arg
         return type_(row_mapping[column]) if type_ else row_mapping[column]
 
     @staticmethod
-    def _columns(table_data: PydanticTableMeta, depth: int) -> list[Field]:  # type: ignore
-        table = Table(table_data.name)
+    def _columns(table_data: OrmTable, depth: int) -> list[Field]:  # type: ignore
+        table = Table(table_data.tablename)
         return [
-            table.field(c).as_(f"{table_data.name}//{depth}//{c}")
+            table.field(c).as_(f"{table_data.tablename}//{depth}//{c}")
             for c in table_data.columns
         ]
 

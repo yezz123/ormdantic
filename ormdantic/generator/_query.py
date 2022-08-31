@@ -44,14 +44,15 @@ class OrmQuery:
     def get_find_many_query(self, populate_back_references: bool = False) -> Query:
         """pass"""
 
-    def get_update_queries(self) -> list[Query]:
+    def get_update_queries(self) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
         """pass"""
 
-    def get_patch_queries(self) -> list[Query]:
+    def get_patch_queries(self) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
         """pass"""
 
-    def get_delete_queries(self) -> list[Query]:
-        """pass"""
+    def get_delete_queries(self) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
+        """Get Delete Queries for the given model"""
+        # TODO: For each mtm, delete any mappings to this record.
 
     def _get_inserts_or_upserts(
         self, is_upsert: bool
@@ -75,24 +76,40 @@ class OrmQuery:
             for column, value in col_to_value.items():
                 self._query = self._query.do_update(table.field(column), value)
         queries = [self._query]
-        if self._depth < 1:
+        if self._depth <= 1:
             return queries
         for col, rel in table_data.relationships.items():
             rel_value = self._model.__dict__[col]
             if not rel_value:
                 continue
-            models = rel_value if isinstance(rel_value, list) else [rel_value]
-            for model in models:
+            if isinstance(rel_value, list):
+                for model in rel_value:
+                    queries.extend(
+                        OrmQuery(
+                            model=model,
+                            table_map=self._table_map,
+                            depth=self._depth - 1,
+                            processed_models=self._processed_models + [self._model],
+                        ).get_upsert_queries()
+                    )
+                    queries.extend(self._get_mtm_upsert())
+            else:
                 queries.extend(
                     OrmQuery(
                         model=model,
+                        model=rel_value,
                         table_map=self._table_map,
                         depth=self._depth - 1,
                         processed_models=self._processed_models + [self._model],
                     ).get_upsert_queries()
                 )
-
         return queries
+
+    def _get_mtm_upsert(
+        self, relation: ModelType
+    ) -> QueryBuilder | PostgreSQLQueryBuilder:
+        pass
+        # TODO Get mtm table.
 
     def _py_type_to_sql(self, value: Any) -> Any:
         if isinstance(value, UUID):

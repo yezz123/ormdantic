@@ -2,9 +2,9 @@
 from types import UnionType
 from typing import Callable, ForwardRef, Type, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from ormdantic.generator import CRUD, Table
 from ormdantic.handler import (
@@ -14,7 +14,7 @@ from ormdantic.handler import (
     UndefinedBackReferenceError,
     snake_case,
 )
-from ormdantic.table import M2M, PydanticTableMeta, Relation, RelationType
+from ormdantic.models import M2M, Map, OrmTable, Relationship, RelationType
 from ormdantic.types import ModelType
 
 
@@ -29,8 +29,7 @@ class Ormdantic:
         self._metadata: MetaData | None = None
         self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
         self._engine = create_async_engine(connection)
-        self._model_to_metadata: dict[Type[BaseModel], PydanticTableMeta] = {}  # type: ignore
-        self._schema: dict[str, PydanticTableMeta] = {}  # type: ignore
+        self._table_map: Map = Map()
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
         return self._crud_generators[item]
@@ -45,11 +44,22 @@ class Ormdantic:
         unique_constraints: list[list[str]] | None = None,
         back_references: dict[str, str] | None = None,
     ) -> Callable[[Type[ModelType]], Type[ModelType]]:
+        """Register a model as a database table.
+
+        :param tablename: The database table name.
+        :param pk: Field name of table primary key.
+        :param indexed: Names of fields to index.
+        :param unique: Names of fields that must be unique.
+        :param unique_constraints: Fields that must be unique together.
+        :param back_references: Dict of field names to back-referenced field names.
+        :return: The decorated model.
+        """
+
         def _wrapper(cls: Type[ModelType]) -> Type[ModelType]:
             tablename_ = tablename or snake_case(cls.__name__)
-            metadata: PydanticTableMeta = PydanticTableMeta(  # type: ignore
-                name=tablename_,
+            table_metadata = OrmTable(
                 model=cls,
+                tablename=tablename_,
                 pk=pk,
                 indexed=indexed or [],
                 unique=unique or [],
@@ -58,34 +68,34 @@ class Ormdantic:
                 relationships={},
                 back_references=back_references or {},
             )
-            self._schema[tablename_] = metadata
-            self._model_to_metadata[cls] = metadata
+            self._table_map.model_to_data[cls] = table_metadata
+            self._table_map.name_to_data[tablename_] = table_metadata
             return cls
 
         return _wrapper
 
     async def init(self) -> None:
         # Populate relation information.
-        for tablename, table_data in self._schema.items():
+        for tablename, table_data in self._table_map.name_to_data.items():
             cols, rels = self.get(tablename, table_data)
             table_data.columns = cols
             table_data.relationships = rels
         # Now that relation information is populated generate tables.
         self._metadata = MetaData()
-        for tablename, table_data in self._schema.items():
+        for tablename, table_data in self._table_map.name_to_data.items():
             # noinspection PyTypeChecker
             self._crud_generators[table_data.model] = CRUD(
                 tablename,
                 self._engine,
-                self._schema,
+                self._table_map,
             )
-        await Table(self._engine, self._metadata, self._schema).init()
+        await Table(self._engine, self._metadata, self._table_map).init()
         async with self._engine.begin() as conn:
             await conn.run_sync(self._metadata.drop_all)
 
     def get(
-        self, tablename: str, table_data: PydanticTableMeta  # type: ignore
-    ) -> tuple[list[str], dict[str, Relation]]:
+        self, tablename: str, table_data: OrmTable  # type: ignore
+    ) -> tuple[list[str], dict[str, Relationship]]:
         columns = []
         relationships = {}
         for field_name, field in table_data.model.__fields__.items():
@@ -102,7 +112,7 @@ class Ormdantic:
                 and table_data.model != back_referenced_field.type_
             ):
                 raise MismatchingBackReferenceError(
-                    tablename, related_table.name, field_name, back_reference
+                    tablename, related_table.tablename, field_name, back_reference
                 )
             # If this is not a list of another table, add foreign key.
             if get_origin(field.outer_type_) != list and field.type_ != ForwardRef(
@@ -116,21 +126,21 @@ class Ormdantic:
                 if not args or origin != UnionType or not correct_type:
                     raise MustUnionForeignKeyError(
                         tablename,
-                        related_table.name,
+                        related_table.tablename,
                         field_name,
                         related_table.model,
                         related_table.model.__fields__[related_table.pk].type_.__name__,
                     )
                 columns.append(field_name)
-                relationships[field_name] = Relation(
-                    foreign_table=related_table.name,
-                    relation_type=RelationType.ONE_TO_MANY,
+                relationships[field_name] = Relationship(
+                    foreign_table=related_table.tablename,
+                    relationship_type=RelationType.ONE_TO_MANY,
                 )
                 continue
             # MTM Must have a back-reference.
             if not back_reference:
                 raise UndefinedBackReferenceError(
-                    tablename, related_table.name, field_name
+                    tablename, related_table.tablename, field_name
                 )
             # Is the back referenced field also a list?
             is_mtm = get_origin(back_referenced_field.outer_type_) == list
@@ -140,30 +150,33 @@ class Ormdantic:
                 relation_type = RelationType.MANY_TO_MANY
                 # Get mtm tablename or make one.
                 if rel := related_table.relationships.get(back_reference):
-                    mtm_tablename = rel.m2m_data.name  # type: ignore
+                    tablename, related_table.tablename, field_name  # type: ignore
                 else:
                     mtm_tablename = Get_M2M_TableName(
-                        table_data.name, field_name, related_table.name, back_reference
+                        table_data.tablename,
+                        field_name,
+                        related_table.tablename,
+                        back_reference,
                     )
-            relationships[field_name] = Relation(
-                foreign_table=related_table.name,
-                relation_type=relation_type,
+            relationships[field_name] = Relationship(
+                foreign_table=related_table.tablename,
+                relationship_type=relation_type,
                 back_references=back_reference,
-                m2m_data=M2M(name=mtm_tablename),
+                mtm_data=M2M(tablename=mtm_tablename),
             )
         return columns, relationships
 
-    def _get_related_table(self, field) -> PydanticTableMeta:  # type: ignore
-        related_table: PydanticTableMeta | None = None  # type: ignore
+    def _get_related_table(self, field: Field) -> OrmTable:  # type: ignore
+        related_table: OrmTable | None = None  # type: ignore
         # Try to get foreign model from union.
         if args := get_args(field.type_):
             for arg in args:
                 try:
-                    related_table = self._model_to_metadata.get(arg)
+                    related_table = self._table_map.model_to_data.get(arg)
                 except TypeError:
                     break
                 if related_table is not None:
                     break
         # Try to get foreign table from type.
-        related_table = related_table or self._model_to_metadata.get(field.type_)
+        related_table = related_table or self._table_map.model_to_data.get(field.type_)
         return related_table  # type: ignore
