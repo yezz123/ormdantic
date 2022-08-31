@@ -8,7 +8,7 @@ from pypika.dialects import PostgreSQLQueryBuilder
 from pypika.queries import QueryBuilder
 
 from ormdantic.handler import Model_Instance
-from ormdantic.models import Map, Relationship
+from ormdantic.models import Map, Relationship, RelationType
 from ormdantic.types import ModelType
 
 
@@ -79,7 +79,7 @@ class OrmQuery:
         col_to_value = self._get_columns_and_values()
         self._query = (
             self._query.into(self._table)
-            .columns(*self._table_data.columns)
+            .columns(*self._model.__fields__)
             .insert(*col_to_value.values())
         )
 
@@ -95,11 +95,11 @@ class OrmQuery:
     def _get_relation_upserts(self) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
         queries = []
         for col, rel in self._table_data.relationships.items():
-            rel_value = self._model.__dict__[col]
-            if not rel_value:
+            relation_value = self._model.__dict__[col]
+            if not relation_value:
                 continue
-            if isinstance(rel_value, list):
-                for model in rel_value:
+            if isinstance(relation_value, list):
+                for model in relation_value:
                     queries.extend(
                         OrmQuery(
                             model=model,
@@ -108,11 +108,13 @@ class OrmQuery:
                             processed_models=self._processed_models + [self._model],
                         ).get_upsert_queries()
                     )
-                    queries.append(self._get_mtm_upsert(rel, model))
+                    if rel.relationship_type == RelationType.MANY_TO_MANY:
+                        queries.append(self._get_mtm_upsert(rel, model))
+
             else:
                 queries.extend(
                     OrmQuery(
-                        model=rel_value,
+                        model=relation_value,
                         table_map=self._table_map,
                         depth=self._depth - 1,
                         processed_models=self._processed_models + [self._model],
@@ -140,7 +142,7 @@ class OrmQuery:
     def _get_columns_and_values(self):
         return {
             column: self._py_type_to_sql(self._model.__dict__[column])
-            for column in self._table_data.columns
+            for column in self._model.__fields__
         }
 
     def _py_type_to_sql(self, value: Any) -> Any:

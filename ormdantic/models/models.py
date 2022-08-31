@@ -50,7 +50,6 @@ class OrmTable(BaseModel):
     indexed: list[str]
     unique: list[str]
     unique_constraints: list[list[str]]
-    columns: list[str]
     relationships: dict[str, Relationship]
     back_references: dict[str, str]
 
