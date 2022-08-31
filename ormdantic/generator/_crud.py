@@ -356,7 +356,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
                     rel_table.field(c).as_(f"{relation_name}//{depth}//{c}")
                     for c in self._table_map.name_to_data[
                         relation.foreign_table
-                    ].model.__fields__
+                    ].columns
                 ]
             )
             # Add joins of relations of this table to query.
@@ -452,7 +452,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table = Table(table_data.tablename)
         return [
             table.field(c).as_(f"{table_data.tablename}//{depth}//{c}")
-            for c in table_data.model.__fields__
+            for c in table_data.columns
         ]
 
     @staticmethod

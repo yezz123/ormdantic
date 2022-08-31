@@ -21,8 +21,9 @@ class One(BaseModel):
     """One will have many "Many"."""
 
     id: UUID = Field(default_factory=uuid4)
-    many_a: list[Many] | None = None
+    many_a: list[Many] = Field(default_factory=lambda: [])
     many_b: list[Many] | None = None
+    attribute: str | None = None
 
 
 @database.table(pk="id")

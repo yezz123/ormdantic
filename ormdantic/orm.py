@@ -57,6 +57,7 @@ class Ormdantic:
 
         def _wrapper(cls: Type[ModelType]) -> Type[ModelType]:
             tablename_ = tablename or snake_case(cls.__name__)
+            cls_back_references = back_references or {}
             table_metadata = OrmTable(
                 model=cls,
                 tablename=tablename_,
@@ -64,8 +65,13 @@ class Ormdantic:
                 indexed=indexed or [],
                 unique=unique or [],
                 unique_constraints=unique_constraints or [],
+                columns=[
+                    field
+                    for field in cls.__fields__
+                    if field not in cls_back_references
+                ],
                 relationships={},
-                back_references=back_references or {},
+                back_references=cls_back_references,
             )
             self._table_map.model_to_data[cls] = table_metadata
             self._table_map.name_to_data[tablename_] = table_metadata
@@ -75,8 +81,8 @@ class Ormdantic:
 
     async def init(self) -> None:
         # Populate relation information.
-        for tablename, table_data in self._table_map.name_to_data.items():
-            rels = self.get(tablename, table_data)
+        for table_data in self._table_map.name_to_data.values():
+            rels = self.get(table_data)
             table_data.relationships = rels
         # Now that relation information is populated generate tables.
         self._metadata = MetaData()
@@ -91,77 +97,47 @@ class Ormdantic:
         async with self._engine.begin() as conn:
             await conn.run_sync(self._metadata.drop_all)
 
-    def get(
-        self, tablename: str, table_data: OrmTable  # type: ignore
-    ) -> dict[str, Relationship]:
+    def get(self, table_data: OrmTable) -> dict[str, Relationship]:
         relationships = {}
         for field_name, field in table_data.model.__fields__.items():
             related_table = self._get_related_table(field)
             if related_table is None:
                 continue
-            # Check if back-reference is present but mismatched in type.
-            back_reference = table_data.back_references.get(field_name)
-            back_referenced_field = related_table.model.__fields__.get(back_reference)
-            if (
-                back_reference
-                and table_data.model not in get_args(back_referenced_field.type_)
-                and table_data.model != back_referenced_field.type_
-            ):
-                raise MismatchingBackReferenceError(
-                    tablename, related_table.tablename, field_name, back_reference
+            if back_reference := table_data.back_references.get(field_name):
+                relationships[field_name] = self._get_many_relationship(
+                    field_name, back_reference, table_data, related_table
                 )
-            # If this is not a list of another table, add foreign key.
-            if get_origin(field.outer_type_) != list and field.type_ != ForwardRef(
+
+                continue
+            if get_origin(field.outer_type_) == list or field.type_ == ForwardRef(
                 f"list[{table_data.model.__name__}]"
             ):
-                args = get_args(field.type_)
-                correct_type = (
-                    related_table.model.__fields__[related_table.pk].type_ in args
+                raise MustUnionForeignKeyError(
+                    table_data.tablename, related_table.tablename, field_name
                 )
-                origin = get_origin(field.type_)
-                if not args or origin != UnionType or not correct_type:
-                    raise MustUnionForeignKeyError(
-                        tablename,
-                        related_table.tablename,
-                        field_name,
-                        related_table.model,
-                        related_table.model.__fields__[related_table.pk].type_.__name__,
-                    )
-                relationships[field_name] = Relationship(
-                    foreign_table=related_table.tablename,
-                    relationship_type=RelationType.ONE_TO_MANY,
+
+            args = get_args(field.type_)
+            correct_type = (
+                related_table.model.__fields__[related_table.pk].type_ in args
+            )
+            origin = get_origin(field.type_)
+            if not args or origin != UnionType or not correct_type:
+                raise MustUnionForeignKeyError(
+                    table_data.tablename,
+                    related_table.tablename,
+                    field_name,
+                    related_table.model,
+                    related_table.model.__fields__[related_table.pk].type_.__name__,
                 )
-                continue
-            # MTM Must have a back-reference.
-            if not back_reference:
-                raise UndefinedBackReferenceError(
-                    tablename, related_table.tablename, field_name
-                )
-            # Is the back referenced field also a list?
-            is_mtm = get_origin(back_referenced_field.outer_type_) == list
-            relation_type = RelationType.ONE_TO_MANY
-            mtm_tablename = None
-            if is_mtm:
-                relation_type = RelationType.MANY_TO_MANY
-                # Get mtm tablename or make one.
-                if rel := related_table.relationships.get(back_reference):
-                    tablename, related_table.tablename, field_name  # type: ignore
-                else:
-                    mtm_tablename = Get_M2M_TableName(
-                        table_data.tablename,
-                        field_name,
-                        related_table.tablename,
-                        back_reference,
-                    )
+
             relationships[field_name] = Relationship(
                 foreign_table=related_table.tablename,
-                relationship_type=relation_type,
-                back_references=back_reference,
-                mtm_data=M2M(tablename=mtm_tablename),
+                relationship_type=RelationType.ONE_TO_MANY,
             )
+
         return relationships
 
-    def _get_related_table(self, field: Field) -> OrmTable:  # type: ignore
+    def _get_related_table(self, field: Field) -> OrmTable | None:  # type: ignore
         related_table: OrmTable | None = None  # type: ignore
         # Try to get foreign model from union.
         if args := get_args(field.type_):
@@ -173,5 +149,46 @@ class Ormdantic:
                 if related_table is not None:
                     break
         # Try to get foreign table from type.
-        related_table = related_table or self._table_map.model_to_data.get(field.type_)
-        return related_table  # type: ignore
+        return related_table or self._table_map.model_to_data.get(field.type_)
+
+    @staticmethod
+    def _get_many_relationship(
+        field_name: str,
+        back_reference: str,
+        table_data: OrmTable,
+        related_table: OrmTable,
+    ) -> Relationship:
+        back_referenced_field = related_table.model.__fields__.get(back_reference)
+        # TODO: Check if back-reference is present but mismatched in type.
+        if (
+            table_data.model not in get_args(back_referenced_field.type_)
+            and table_data.model != back_referenced_field.type_
+        ):
+            raise MismatchingBackReferenceError(
+                table_data.tablename,
+                related_table.tablename,
+                field_name,
+                back_reference,
+            )
+        # Is the back referenced field also a list?
+        is_mtm = get_origin(back_referenced_field.outer_type_) == list
+        relation_type = RelationType.ONE_TO_MANY
+        mtm_tablename = None
+        if is_mtm:
+            relation_type = RelationType.MANY_TO_MANY
+            # Get mtm tablename or make one.
+            if rel := related_table.relationships.get(back_reference):
+                mtm_tablename = rel.mtm_data.tablename
+            else:
+                mtm_tablename = Get_M2M_TableName(
+                    table_data.tablename,
+                    field_name,
+                    related_table.tablename,
+                    back_reference,
+                )
+        return Relationship(
+            foreign_table=related_table.tablename,
+            relationship_type=relation_type,
+            back_references=back_reference,
+            mtm_data=M2M(tablename=mtm_tablename),
+        )

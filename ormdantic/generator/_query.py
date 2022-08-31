@@ -79,7 +79,7 @@ class OrmQuery:
         col_to_value = self._get_columns_and_values()
         self._query = (
             self._query.into(self._table)
-            .columns(*self._model.__fields__)
+            .columns(*self._table_data.columns)
             .insert(*col_to_value.values())
         )
 
@@ -142,7 +142,7 @@ class OrmQuery:
     def _get_columns_and_values(self):
         return {
             column: self._py_type_to_sql(self._model.__dict__[column])
-            for column in self._model.__fields__
+            for column in self._table_data.columns
         }
 
     def _py_type_to_sql(self, value: Any) -> Any:
