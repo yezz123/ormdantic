@@ -175,12 +175,11 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
             ice=["cubes"],
             size=Money(),
         )
-        await database[Coffee].insert(coffee)
+        await database[Coffee].insert(coffee, depth=2)
         # Find record and compare.
         coffee_dict = coffee.dict()
-        self.assertDictEqual(
-            coffee_dict, (await database[Coffee].find_one(coffee.id, depth=1)).dict()  # type: ignore
-        )
+        find_coffee = await database[Coffee].find_one(coffee.id, depth=1)
+        self.assertDictEqual(coffee_dict, find_coffee.dict())  # type: ignore
         coffee_dict["primary_flavor"] = coffee_dict["primary_flavor"]["id"]
         coffee_dict["secondary_flavor"] = coffee_dict["secondary_flavor"]["id"]
         self.assertDictEqual(
