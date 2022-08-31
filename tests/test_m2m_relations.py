@@ -78,7 +78,7 @@ class PyDBManyRelationsTests(unittest.IsolatedAsyncioTestCase):
     async def test_many_to_many_update(self) -> None:
         many_a = [ManyToManyA(value="coffee"), ManyToManyA(value="caramel")]
         many_b = ManyToManyB(many=many_a)
-        await db[ManyToManyB].insert(many_b)
+        await db[ManyToManyB].insert(many_b, depth=2)
         many_b.many[0].value = "mocha"
         await db[ManyToManyB].update(many_b)
         find_b = await db[ManyToManyB].find_one(many_b.id, depth=1)

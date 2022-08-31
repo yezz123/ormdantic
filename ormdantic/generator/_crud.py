@@ -1,7 +1,6 @@
 """Generate Python CRUD methods for a model."""
 
 import asyncio
-import contextlib
 import json
 import re
 from types import NoneType
@@ -69,17 +68,28 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         await self._execute_queries(queries)
         return model_instance
 
-    async def update(
-        self, model_instance: ModelType, upsert_relations: bool = True
-    ) -> ModelType:
-        """Update a model instance."""
-        return await self._update(model_instance, self._tablename, upsert_relations)
+    async def update(self, model_instance: ModelType, depth: int = 1) -> ModelType:
+        """Update a record.
 
-    async def upsert(
-        self, model_instance: ModelType, upsert_relations: bool = True
-    ) -> ModelType:
-        """Upsert a model instance."""
-        return await self._upsert(model_instance, self._tablename, upsert_relations)
+        :param `model_instance``: Model representing record to update.
+        :param `depth``: Determines how deep in the model tree to upsert.
+        :return: The updated model.
+        """
+        queries = OrmQuery(model_instance, self._table_map, depth).get_update_queries()
+        await self._execute_queries(queries)
+        return model_instance
+
+    async def upsert(self, model_instance: ModelType, depth: int = 1) -> ModelType:
+        """Insert a record if it does not exist, else update it.
+
+        :param `model_instance``: Model representing record to insert or update.
+        :param `depth``: Determines how deep in the model tree to upsert.
+        :return: The inserted or updated model.
+        """
+
+        queries = OrmQuery(model_instance, self._table_map, depth).get_upsert_queries()
+        await self._execute_queries(queries)
+        return model_instance
 
     async def delete(self, pk: Any) -> bool:
         """Delete a model instance by primary key."""
@@ -117,103 +127,6 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             return model_instance
         except StopIteration:
             return None
-
-    async def _insert(  # type: ignore
-        self, model_instance: ModelType, tablename: str, upsert_relations
-    ) -> ModelType:
-        table_data = self._table_map.name_to_data[tablename]
-        table = Table(tablename)
-        if upsert_relations:
-            await self._upsert_relations(model_instance, table_data)
-        values = [
-            self._py_type_to_sql(model_instance.__dict__[c]) for c in table_data.columns
-        ]
-        await self._execute_query(
-            Query.into(table).columns(*table_data.columns).insert(*values)
-        )
-        return model_instance
-
-    async def _update(
-        self, model_instance: ModelType, tablename: str, upsert_relations: bool = True
-    ) -> ModelType:
-        table_data = self._table_map.name_to_data[tablename]
-        table = Table(tablename)
-        if upsert_relations:
-            await self._upsert_relations(model_instance, table_data)
-        values = [
-            self._py_type_to_sql(model_instance.__dict__[c]) for c in table_data.columns
-        ]
-        query = Query.update(table)
-        for i, column in enumerate(table_data.columns):
-            query = query.set(column, values[i])
-        pk = model_instance.__dict__[table_data.pk]
-        query = query.where(table.field(table_data.pk) == self._py_type_to_sql(pk))
-        await self._execute_query(query)
-        return model_instance
-
-    async def _upsert(
-        self, model_instance: ModelType, tablename: str, upsert_relations: bool
-    ) -> ModelType:
-        if model := (
-            await self._find_one(
-                tablename,
-                model_instance.__dict__[self._table_map.name_to_data[tablename].pk],
-            )
-        ):
-            return (
-                model
-                if model == model_instance
-                else await self._update(model_instance, tablename)
-            )
-        return await self._insert(model_instance, tablename, upsert_relations)
-
-    async def _upsert_relations(
-        self, model_instance: ModelType, table_data: OrmTable  # type: ignore
-    ) -> None:
-        for column, relation in table_data.relationships.items():
-            if relation.relationship_type == RelationType.MANY_TO_MANY:
-                for rel_model in model_instance.__dict__.get(column) or []:
-                    rel_tablename = TableName_From_Model(
-                        type(rel_model), self._table_map
-                    )
-                    await self._upsert(rel_model, rel_tablename, True)
-                    await self._upsert_relation(
-                        model_instance, table_data, rel_model, relation, rel_tablename
-                    )
-            elif rel_model := model_instance.__dict__.get(column):
-                tablename = TableName_From_Model(type(rel_model), self._table_map)
-                await self._upsert(rel_model, tablename, True)
-
-    async def _upsert_relation(
-        self,
-        model_instance: ModelType,
-        table_data: OrmTable,  # type: ignore
-        rel_model: ModelType,
-        relation: Relationship,
-        rel_tablename: str,
-    ) -> None:
-        await self._upsert(rel_model, rel_tablename, True)
-        rel_td = self._table_map.name_to_data[rel_tablename]
-        mtm_table = Table(relation.mtm_data.tablename)  # type: ignore
-        columns = relation.mtm_data.table_a_column, relation.mtm_data.table_b_column  # type: ignore
-        values = (model_instance.__dict__[table_data.pk], rel_model.__dict__[rel_td.pk])
-        query = (
-            Query.from_(mtm_table)
-            .select(*columns)
-            .where(
-                mtm_table.field(relation.mtm_data.table_a_column)  # type: ignore
-                == model_instance.__dict__[table_data.pk]
-                and mtm_table.field(relation.mtm_data.table_b_column)  # type: ignore
-                == rel_model.__dict__[rel_td.pk]
-            )
-        )
-
-        res = await self._execute_query(query)
-        with contextlib.suppress(StopIteration):
-            next(res)
-            return None
-        query = Query.into(mtm_table).columns(*columns).insert(*values)
-        await self._execute_query(query)
 
     async def _populate_many_relations(
         self, table_data: OrmTable, model_instance: ModelType, depth: int  # type: ignore
