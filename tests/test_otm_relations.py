@@ -61,7 +61,7 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
             Many(one_a=one_a, one_b=one_b),
         ]
         for many in many_a + many_b:
-            await database[Many].insert(many, depth=2)
+            await database[Many].insert(many)
         find_one_a = await database[One].find_one(one_a.id, depth=2)
         many_a_plus_b = many_a + many_b
         many_a_plus_b.sort(key=lambda x: x.id)
@@ -75,13 +75,3 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         self.assertListEqual([], find_one_b.many_a)  # type: ignore
         many_a_idx_zero = await database[Many].find_one(many_a[0].id, depth=3)
         self.assertDictEqual(find_one_a.dict(), many_a_idx_zero.one_a.dict())  # type: ignore
-
-    async def test_one_to_many_update(self) -> None:
-        one = One()
-        many = Many(one_a=one)
-        await database[Many].insert(many, depth=2)
-        value = "coffee"
-        one.attribute = value
-        await database[Many].update(many, depth=2)
-        find = await database[One].find_one(one.id)
-        self.assertEqual(value, find.attribute)

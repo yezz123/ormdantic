@@ -166,6 +166,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
     async def test_insert_and_find_orm(self) -> None:
         mocha = Flavor(name="mocha")
         vanilla = Flavor(name="vanilla")
+        await database[Flavor].insert(mocha)
+        await database[Flavor].insert(vanilla)
         coffee = Coffee(
             primary_flavor=mocha,
             secondary_flavor=vanilla,
@@ -175,7 +177,7 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
             ice=["cubes"],
             size=Money(),
         )
-        await database[Coffee].insert(coffee, depth=2)
+        await database[Coffee].insert(coffee)
         # Find record and compare.
         coffee_dict = coffee.dict()
         find_coffee = await database[Coffee].find_one(coffee.id, depth=1)
