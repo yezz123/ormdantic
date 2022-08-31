@@ -35,6 +35,7 @@ class PydanticSQLTableGenerator:
         self._metadata = metadata
         self._table_map = table_map
         self._m2m: dict[str, str] = {}
+        self._tables: list[str] = []
 
     async def init(self) -> None:
         """Generate SQL Alchemy tables."""
@@ -43,6 +44,7 @@ class PydanticSQLTableGenerator:
                 UniqueConstraint(*cols, name=f"{'_'.join(cols)}_constraint")
                 for cols in table_data.unique_constraints
             )
+            self._tables.append(tablename)
             Table(
                 tablename,
                 self._metadata,
@@ -136,16 +138,21 @@ class PydanticSQLTableGenerator:
                 table_b_column=col_b,
             )
             table_data.relationships[field_name].mtm_data = mtm_data
-            if self._m2m.get(f"{table_data.tablename}.{back_reference}") == field_name:
-                return None  # type: ignore
-            Table(
-                table_data.relationships[field_name].mtm_data.tablename,  # type: ignore
-                self._metadata,
-                *self._get_m2m_columns(
-                    table_data.tablename, foreign_table, col_a, col_b
-                ),
+            tablename = table_data.relationships[field_name].mtm_data.tablename
+            if tablename in self._tables:
+                # This mtm has already been made.
+                return None
+            # Create joining mtm table.
+            mtm_columns = self._get_m2m_columns(
+                table_data.tablename, foreign_table, col_a, col_b
             )
-            UniqueConstraint(col_a, col_b)
+            self._tables.append(tablename)
+            Table(
+                tablename,  # type: ignore
+                self._metadata,
+                *mtm_columns,
+                UniqueConstraint(*mtm_columns),
+            )
             return None  # type: ignore
         for arg in get_args(field.type_):
             if arg in [it.model for it in self._table_map.name_to_data.values()]:
