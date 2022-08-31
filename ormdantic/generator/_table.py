@@ -119,10 +119,6 @@ class PydanticSQLTableGenerator:
     ) -> Column | None:
         if back_reference := table_data.back_references.get(field_name):
             foreign_table = TableName_From_Model(field.type_, self._table_map)
-            try:
-                table_data.relationships[field_name]
-            except KeyError:
-                print(table_data)
             if (
                 table_data.relationships[field_name].relationship_type
                 != RelationType.MANY_TO_MANY
@@ -132,8 +128,6 @@ class PydanticSQLTableGenerator:
             col_a, col_b = self._get_mtm_column_names(
                 table_data.tablename, foreign_table
             )
-            if table_data.relationships[field_name].mtm_data is None:
-                raise Exception("MTM data not found")
             mtm_data = M2M(
                 tablename=table_data.relationships[field_name].mtm_data.tablename,
                 table_a=table_data.tablename,
@@ -151,7 +145,8 @@ class PydanticSQLTableGenerator:
                     table_data.tablename, foreign_table, col_a, col_b
                 ),
             )
-            return  # type: ignore
+            UniqueConstraint(col_a, col_b)
+            return None  # type: ignore
         for arg in get_args(field.type_):
             if arg in [it.model for it in self._table_map.name_to_data.values()]:
                 foreign_table = TableName_From_Model(arg, self._table_map)
