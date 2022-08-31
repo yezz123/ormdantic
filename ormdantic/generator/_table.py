@@ -77,12 +77,8 @@ class PydanticSQLTableGenerator:
         if outer_origin and outer_origin == list:
             return self._get_column_from_type_args(field_name, field, **kwargs)
         if origin:
-            if origin != UnionType:
-                raise TypeConversionError(field.type_)
-            if (
-                column := self._get_column_from_type_args(field_name, field, **kwargs)
-            ) is not None:
-                return column
+            if origin == UnionType:
+                return self._get_column_from_type_args(field_name, field, **kwargs)
             else:
                 raise TypeConversionError(field.type_)  # pragma: no cover
         if get_origin(field.outer_type_) == dict:

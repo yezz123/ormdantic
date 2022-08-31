@@ -40,14 +40,10 @@ class OrmQuery:
         """Get queries to upsert model tree."""
         return self._get_inserts_or_upserts(is_upsert=True)
 
-    def get_find_one_query(
-        self, depth: int = 1, processed_models: list[ModelType] | None = None
-    ) -> Query:
+    def get_find_one_query(self, depth: int = 1) -> Query:
         """pass"""
 
-    def get_find_many_query(
-        self, depth: int = 1, processed_models: list[ModelType] | None = None
-    ) -> Query:
+    def get_find_many_query(self, depth: int = 1) -> Query:
         """pass"""
 
     def get_update_queries(self) -> QueryBuilder | PostgreSQLQueryBuilder:
