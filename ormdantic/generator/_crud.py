@@ -29,14 +29,14 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table_map: Map,  # type: ignore
     ) -> None:
 
-        self._tablename = tablename
+        self.tablename = tablename
         self._engine = engine
         self._table_map = table_map
         self._field_to_column: dict[Any, str] = {}
 
     async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
         """Find a model instance by primary key."""
-        return await self._find_one(self._tablename, pk, depth)
+        return await self._find_one(self.tablename, pk, depth)
 
     async def find_many(
         self,
@@ -49,7 +49,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     ) -> Result[ModelType]:
         """Find many model instances."""
         query = self._get_find_many_query(
-            self._tablename, where, order_by, order, limit, offset, depth
+            self.tablename, where, order_by, order, limit, offset, depth
         )
         result = await self._execute_query(query)
         return Result(
@@ -93,10 +93,10 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     async def delete(self, pk: Any) -> bool:
         """Delete a model instance by primary key."""
-        table = Table(self._tablename)
+        table = Table(self.tablename)
         await self._execute_query(
             Query.from_(table)
-            .where(table.field(self._table_map.name_to_data[self._tablename].pk) == pk)
+            .where(table.field(self._table_map.name_to_data[self.tablename].pk) == pk)
             .delete()
         )
         return True
@@ -377,7 +377,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table_tree: str | None = None,
         tablename: str | None = None,
     ) -> ModelType:
-        tablename = tablename or self._tablename
+        tablename = tablename or self.tablename
         model_type = model_type or self._table_map.name_to_data[tablename].model
         table_tree = table_tree or tablename
         py_type = {}
