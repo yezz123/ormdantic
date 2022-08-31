@@ -112,7 +112,10 @@ class Ormdantic:
                 f"list[{table_data.model.__name__}]"
             ):
                 raise MustUnionForeignKeyError(
-                    table_data.tablename, related_table.tablename, field_name  # type: ignore
+                    # TODO: TypeError: MustUnionForeignKeyError.__init__() missing 2 required positional arguments: 'model_b' and 'pk_type'
+                    table_data.tablename,
+                    related_table.tablename,
+                    field_name,  # type: ignore
                 )
 
             args = get_args(field.type_)
