@@ -1,7 +1,7 @@
 """Module for building queries from field data."""
 from typing import Any
 
-from pypika.queries import Query, QueryBuilder, Table  # type: ignore
+from pypika.queries import Query, QueryBuilder, Table
 
 from ormdantic.models import Map, OrmTable
 
@@ -9,7 +9,7 @@ from ormdantic.models import Map, OrmTable
 class OrmField:
     """Build SQL queries from field information."""
 
-    def __init__(self, table_data: OrmTable, table_map: Map | None = None) -> None:
+    def __init__(self, table_data: OrmTable, table_map: Map | None = None) -> None:  # type: ignore
         """Build CRUD queries from tablename and field info.
 
         :param table_data: Meta data of target table for SQL script.

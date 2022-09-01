@@ -27,7 +27,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
 
     def __init__(
         self,
-        table_data: OrmTable,
+        table_data: OrmTable,  # type: ignore
         table_map: Map,
         engine: AsyncEngine,
     ) -> None:
