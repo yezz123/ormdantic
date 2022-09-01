@@ -111,16 +111,11 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
         asyncio.run(_init(db_5))
 
     @staticmethod
-    @pytest.mark.skip(
-        reason="TypeError: MustUnionForeignKeyError.__init__() missing 2 required positional arguments: 'model_b' and 'pk_type'"
-    )
     async def test_undefined_back_reference() -> None:
         with pytest.raises(UndefinedBackReferenceError) as e:
             await db_1.init()
         assert e.value.args[0] == (
-            'Many relation defined on "undefined_backreference.self_ref" to table '
-            'undefined_backreference" must be "back-referenced from table '
-            '"undefined_backreference"'
+            'Many relation defined on "undefined_backreference.self_ref" to table undefined_backreference" must be defined with a back reference on "undefined_backreference".'
         )
 
     @staticmethod
@@ -130,8 +125,8 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
         assert (
             e.value.args[0]
             == 'Many relation defined on "mismatched_backreference_a.other" to'
-            ' mismatched_backreference_b.other" must use the same model type'
-            ' back-referenced from table "mismatched_backreference_a"'
+            ' "mismatched_backreference_b.other" must use the same model type'
+            " back-referenced."
         )
 
     @staticmethod

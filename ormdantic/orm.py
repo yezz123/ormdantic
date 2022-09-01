@@ -111,11 +111,8 @@ class Ormdantic:
             if get_origin(field.outer_type_) == list or field.type_ == ForwardRef(
                 f"list[{table_data.model.__name__}]"
             ):
-                raise MustUnionForeignKeyError(
-                    # TODO: TypeError: MustUnionForeignKeyError.__init__() missing 2 required positional arguments: 'model_b' and 'pk_type'
-                    table_data.tablename,
-                    related_table.tablename,
-                    field_name,  # type: ignore
+                raise UndefinedBackReferenceError(
+                    table_data.tablename, related_table.tablename, field_name
                 )
 
             args = get_args(field.type_)
