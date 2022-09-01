@@ -1,13 +1,8 @@
-import json
-from typing import Any
-from uuid import UUID
-
-from pydantic import BaseModel
 from pypika import PostgreSQLQuery, Query, Table
 from pypika.dialects import PostgreSQLQueryBuilder
 from pypika.queries import QueryBuilder
 
-from ormdantic.handler import Model_Instance
+from ormdantic.handler import py_type_to_sql
 from ormdantic.models import Map
 from ormdantic.types import ModelType
 
@@ -39,12 +34,6 @@ class OrmQuery:
     def get_upsert_query(self) -> QueryBuilder | PostgreSQLQueryBuilder:
         """Get queries to upsert model tree."""
         return self._get_inserts_or_upserts(is_upsert=True)
-
-    def get_find_one_query(self, depth: int = 1) -> Query:
-        """pass"""
-
-    def get_find_many_query(self, depth: int = 1) -> Query:
-        """pass"""
 
     def get_update_queries(self) -> QueryBuilder | PostgreSQLQueryBuilder:
         """Get queries to update model tree."""
@@ -78,22 +67,6 @@ class OrmQuery:
 
     def _get_columns_and_values(self):  # type: ignore
         return {
-            column: self._py_type_to_sql(self._model.__dict__[column])
+            column: py_type_to_sql(self._table_map, self._model.__dict__[column])
             for column in self._table_data.columns
         }
-
-    def _py_type_to_sql(self, value: Any) -> Any:
-        if isinstance(value, UUID):
-            return str(value)
-        if isinstance(value, (dict, list)):
-            return json.dumps(value)
-        if (
-            isinstance(value, BaseModel)
-            and type(value) in self._table_map.model_to_data
-        ):
-            tablename = Model_Instance(value, self._table_map)
-            return self._py_type_to_sql(
-                value.__dict__[self._table_map.name_to_data[tablename].pk]
-            )
-
-        return value.json() if isinstance(value, BaseModel) else value

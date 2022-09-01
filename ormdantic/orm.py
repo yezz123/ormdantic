@@ -85,12 +85,12 @@ class Ormdantic:
             table_data.relationships = rels
         # Now that relation information is populated generate tables.
         self._metadata = MetaData()
-        for tablename, table_data in self._table_map.name_to_data.items():
+        for table_data in self._table_map.name_to_data.values():
             # noinspection PyTypeChecker
             self._crud_generators[table_data.model] = CRUD(
-                tablename,
-                self._engine,
+                table_data,
                 self._table_map,
+                self._engine,
             )
         await Table(self._engine, self._metadata, self._table_map).init()
         async with self._engine.begin() as conn:
