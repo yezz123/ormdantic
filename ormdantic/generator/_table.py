@@ -64,6 +64,8 @@ class PydanticSQLTableGenerator:
                 "unique": field_name in table_data.unique,
                 "nullable": not field.required,
             }
+            if field_name in table_data.back_references:
+                continue
             column = self._get_column(field_name, field, **kwargs)
             if column is not None:
                 columns.append(column)
