@@ -55,7 +55,10 @@ jobs:
         run: flit install --symlink
       - name: Setup postgres
         run: |
-            psql -h localhost -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";" -d postgres -U postgres
+          psql -c "CREATE DATABASE test;" -U postgres
+          psql -c "CREATE USER test WITH PASSWORD 'test';" -U postgres
+          psql -c "GRANT ALL PRIVILEGES ON DATABASE test TO test;" -U postgres
+          psql -h localhost -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";" -d test -U postgres
       - name: Integration Tests, Postgres
         run: bash scripts/integration.sh
         env:
@@ -109,8 +112,6 @@ jobs:
           MYSQL_USER: root
           MYSQL_PASSWORD: root
           MYSQL_DATABASE: mysql
-        ports:
-          - 3306:3306
 
     steps:
       - uses: actions/checkout@v3
@@ -132,4 +133,4 @@ jobs:
       - name: Integration Tests, MySQL
         run: bash scripts/integration.sh
         env:
-          DATABASE_URL: mysql+aiomysql://root:root@127.0.0.1:3306/mysql
+          DATABASE_URL: mysql+aiomysql://root:root@localhost/mysql
