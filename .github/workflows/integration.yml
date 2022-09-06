@@ -53,12 +53,6 @@ jobs:
       - name: Install Dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: flit install --symlink
-      - name: Setup postgres
-        run: |
-          psql -c "CREATE DATABASE test;" -U postgres
-          psql -c "CREATE USER test WITH PASSWORD 'test';" -U postgres
-          psql -c "GRANT ALL PRIVILEGES ON DATABASE test TO test;" -U postgres
-          psql -h localhost -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";" -d test -U postgres
       - name: Integration Tests, Postgres
         run: bash scripts/integration.sh
         env:
@@ -112,6 +106,10 @@ jobs:
           MYSQL_USER: root
           MYSQL_PASSWORD: root
           MYSQL_DATABASE: mysql
+          # TODO: Check if the Port it is written through the int
+          # https://stackoverflow.com/a/66858716/12927850
+        ports:
+          - 3306:3306
 
     steps:
       - uses: actions/checkout@v3
@@ -133,4 +131,5 @@ jobs:
       - name: Integration Tests, MySQL
         run: bash scripts/integration.sh
         env:
-          DATABASE_URL: mysql+aiomysql://root:root@localhost/mysql
+          # https://docs.sqlalchemy.org/en/14/core/engines.html
+          DATABASE_URL: mysql+aiomysql://root:root@127.0.0.1:3306/mysql
