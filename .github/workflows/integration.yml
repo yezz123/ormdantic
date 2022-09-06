@@ -55,10 +55,6 @@ jobs:
         run: flit install --symlink
       - name: Setup postgres
         run: |
-            export PGPASSWORD=postgres
-            psql -h localhost -c 'CREATE DATABASE postgres;' -U postgres
-            psql -h localhost -c "CREATE USER postgres PASSWORD 'postgres';" -U postgres
-            psql -h localhost -c "GRANT ALL PRIVILEGES ON DATABASE postgres TO postgres;" -U postgres
             psql -h localhost -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";" -d postgres -U postgres
       - name: Integration Tests, Postgres
         run: bash scripts/integration.sh
@@ -136,4 +132,4 @@ jobs:
       - name: Integration Tests, MySQL
         run: bash scripts/integration.sh
         env:
-          DATABASE_URL: mysql+aiomysql://root:root@localhost:3306/mysql
+          DATABASE_URL: mysql+aiomysql://root:root@127.0.0.1:3306/mysql
