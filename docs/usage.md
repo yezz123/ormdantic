@@ -41,8 +41,13 @@ Now after we create the table, we can initialize the database with the table and
 We use `database.init` will Populate relations information and create the tables.
 
 ```python
-async def main() -> None:
-     await database.init()
+async def demo() -> None:
+    async def _init() -> None:
+        async with db._engine.begin() as conn:
+            await db.init()
+            await conn.run_sync(db._metadata.drop_all)
+            await conn.run_sync(db._metadata.create_all)
+    await _init()
 ```
 
 ### `Insert()`
@@ -57,7 +62,7 @@ class Coffee(BaseModel):
      id: UUID = Field(default_factory=uuid4)
      sweetener: str | None = Field(max_length=63)
      sweetener_count: int | None = None
-     flavor: Flavor
+     flavor: Flavor | UUID
 ```
 
 After we create the table, we can insert data into the table, using the `database.insert` method, is away we insert a Model Instance.
