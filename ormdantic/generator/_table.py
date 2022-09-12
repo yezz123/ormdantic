@@ -20,7 +20,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ormdantic.handler import TableName_From_Model, TypeConversionError
-from ormdantic.table import M2M, PydanticTableMeta, RelationType
+from ormdantic.models import Map, OrmTable
 
 
 class PydanticSQLTableGenerator:
@@ -28,21 +28,22 @@ class PydanticSQLTableGenerator:
         self,
         engine: AsyncEngine,
         metadata: MetaData,
-        schema: dict[str, PydanticTableMeta],  # type: ignore
+        table_map: Map,
     ) -> None:
         """Initialize PydanticSQLTableGenerator."""
         self._engine = engine
         self._metadata = metadata
-        self._schema = schema
-        self._m2m: dict[str, str] = {}
+        self._table_map = table_map
+        self._tables: list[str] = []
 
     async def init(self) -> None:
         """Generate SQL Alchemy tables."""
-        for tablename, table_data in self._schema.items():
+        for tablename, table_data in self._table_map.name_to_data.items():
             unique_constraints = (
                 UniqueConstraint(*cols, name=f"{'_'.join(cols)}_constraint")
                 for cols in table_data.unique_constraints
             )
+            self._tables.append(tablename)
             Table(
                 tablename,
                 self._metadata,
@@ -53,7 +54,7 @@ class PydanticSQLTableGenerator:
             await conn.run_sync(self._metadata.create_all)
 
     def _get_columns(
-        self, table_data: PydanticTableMeta  # type: ignore
+        self, table_data: OrmTable  # type: ignore
     ) -> tuple[Column[Any] | Column, ...]:
         columns = []
         for field_name, field in table_data.model.__fields__.items():
@@ -63,33 +64,25 @@ class PydanticSQLTableGenerator:
                 "unique": field_name in table_data.unique,
                 "nullable": not field.required,
             }
-            column = self._get_column(table_data, field_name, field, **kwargs)
+            if field_name in table_data.back_references:
+                continue
+            column = self._get_column(field_name, field, **kwargs)
             if column is not None:
                 columns.append(column)
         return tuple(columns)
 
-    def _get_column(  # type: ignore
-        self,
-        table_data: PydanticTableMeta,  # type: ignore
-        field_name: str,
-        field: ModelField,
-        **kwargs,
+    def _get_column(
+        self, field_name: str, field: ModelField, **kwargs: Any
     ) -> Column | None:
         outer_origin = get_origin(field.outer_type_)
         origin = get_origin(field.type_)
         if outer_origin and outer_origin == list:
             return self._get_column_from_type_args(
-                table_data, field_name, field, **kwargs
-            )
+                field_name, field, **kwargs
+            )  # pragma: no cover
         if origin:
-            if origin != UnionType:
-                raise TypeConversionError(field.type_)
-            if (
-                column := self._get_column_from_type_args(
-                    table_data, field_name, field, **kwargs
-                )
-            ) is not None:
-                return column
+            if origin == UnionType:
+                return self._get_column_from_type_args(field_name, field, **kwargs)
             else:
                 raise TypeConversionError(field.type_)  # pragma: no cover
         if get_origin(field.outer_type_) == dict:
@@ -107,76 +100,19 @@ class PydanticSQLTableGenerator:
             return Column(field_name, Integer, **kwargs)
         if field.type_ is float:
             return Column(field_name, Float, **kwargs)
-        if field.type_ is dict:
-            return Column(field_name, JSON, **kwargs)
-        if field.type_ is list:
-            return Column(field_name, JSON, **kwargs)
-        else:
-            raise TypeConversionError(field.type_)  # pragma: no cover
+        # Catchall for dict/list or any other.
+        return Column(field_name, JSON, **kwargs)
 
-    def _get_column_from_type_args(  # type: ignore
-        self,
-        table_data: PydanticTableMeta,  # type: ignore
-        field_name: str,
-        field: ModelField,
-        **kwargs,
+    def _get_column_from_type_args(
+        self, field_name: str, field: ModelField, **kwargs: Any
     ) -> Column | None:
-        if back_reference := table_data.back_references.get(field_name):
-            foreign_table = TableName_From_Model(field.type_, self._schema)
-            if (
-                table_data.relationships[field_name].relation_type
-                != RelationType.MANY_TO_MANY
-            ):
-                return  # type: ignore
-            self._m2m[f"{foreign_table}.{field_name}"] = back_reference
-            col_a, col_b = self._get_mtm_column_names(table_data.name, foreign_table)
-            mtm_data = M2M(
-                name=table_data.relationships[field_name].m2m_data.name,  # type: ignore
-                table_a=table_data.name,
-                table_b=foreign_table,
-                table_a_column=col_a,
-                table_b_column=col_b,
-            )
-            table_data.relationships[field_name].m2m_data = mtm_data
-            if self._m2m.get(f"{table_data.name}.{back_reference}") == field_name:
-                return  # type: ignore
-            Table(
-                table_data.relationships[field_name].m2m_data.name,  # type: ignore
-                self._metadata,
-                *self._get_m2m_columns(table_data.name, foreign_table, col_a, col_b),
-            )
-            return  # type: ignore
         for arg in get_args(field.type_):
-            if arg in [it.model for it in self._schema.values()]:
-                foreign_table = TableName_From_Model(arg, self._schema)
-                foreign_data = self._schema[foreign_table]
+            if arg in [it.model for it in self._table_map.name_to_data.values()]:
+                foreign_table = TableName_From_Model(arg, self._table_map)
+                foreign_data = self._table_map.name_to_data[foreign_table]
                 return Column(
                     field_name,
                     ForeignKey(f"{foreign_table}.{foreign_data.pk}"),
                     **kwargs,
                 )
-
-    def _get_m2m_columns(
-        self, table_a: str, table_b: str, column_a: str, column_b: str
-    ) -> list[Column]:
-        table_a_pk = self._schema[table_a].pk
-        table_b_pk = self._schema[table_b].pk
-        return [
-            Column(
-                column_a,
-                ForeignKey(f"{table_a}.{table_a_pk}"),
-            ),
-            Column(
-                column_b,
-                ForeignKey(f"{table_b}.{table_b_pk}"),
-            ),
-        ]
-
-    @staticmethod
-    def _get_mtm_column_names(table_a: str, table_b: str) -> tuple[str, str]:
-        table_a_col_name = table_a
-        table_b_col_name = table_b
-        if table_a == table_b:
-            table_a_col_name = f"{table_a}_a"
-            table_b_col_name = f"{table_b}_b"
-        return table_a_col_name, table_b_col_name
+        return None  # pragma: no cover

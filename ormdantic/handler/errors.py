@@ -28,8 +28,8 @@ class MismatchingBackReferenceError(ConfigurationError):
     ) -> None:
         super().__init__(
             f'Many relation defined on "{table_a}.{field}" to'
-            f' {table_b}.{back_reference}" must use the same model type back-referenced'
-            f' from table "{table_a}"'
+            f' "{table_b}.{back_reference}" must use the same model type'
+            f" back-referenced."
         )
 
 

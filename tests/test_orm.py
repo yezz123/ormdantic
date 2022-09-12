@@ -45,7 +45,7 @@ class Coffee(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     primary_flavor: Flavor | UUID
-    secondary_flavor: Flavor | UUID
+    secondary_flavor: Flavor | UUID | None
     sweetener: str
     cream: float
     place: dict  # type: ignore
@@ -166,6 +166,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
     async def test_insert_and_find_orm(self) -> None:
         mocha = Flavor(name="mocha")
         vanilla = Flavor(name="vanilla")
+        await database[Flavor].insert(mocha)
+        await database[Flavor].insert(vanilla)
         coffee = Coffee(
             primary_flavor=mocha,
             secondary_flavor=vanilla,
@@ -178,11 +180,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         await database[Coffee].insert(coffee)
         # Find record and compare.
         coffee_dict = coffee.dict()
-        self.assertDictEqual(
-            coffee_dict, (await database[Coffee].find_one(coffee.id, depth=1)).dict()  # type: ignore
-        )
+        find_coffee = await database[Coffee].find_one(coffee.id, depth=1)
+        self.assertDictEqual(coffee_dict, find_coffee.dict())  # type: ignore
         coffee_dict["primary_flavor"] = coffee_dict["primary_flavor"]["id"]
         coffee_dict["secondary_flavor"] = coffee_dict["secondary_flavor"]["id"]
-        self.assertDictEqual(
-            coffee_dict, (await database[Coffee].find_one(coffee.id)).dict()  # type: ignore
-        )
+        self.assertDictEqual(coffee_dict, (await database[Coffee].find_one(coffee.id)).dict())  # type: ignore
