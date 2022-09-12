@@ -5,6 +5,7 @@ import unittest
 from typing import Callable
 from uuid import UUID, uuid4
 
+import pytest
 from decouple import config
 from pydantic import BaseModel, Field
 from sqlalchemy import MetaData
@@ -109,42 +110,50 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
         asyncio.run(_init(db_4))
         asyncio.run(_init(db_5))
 
-    async def test_undefined_back_reference(self) -> None:
-        correct_error = False
-        try:
+    @staticmethod
+    async def test_undefined_back_reference() -> None:
+        with pytest.raises(UndefinedBackReferenceError) as e:
             await db_1.init()
-        except UndefinedBackReferenceError:
-            correct_error = True
-        self.assertTrue(correct_error)
+        assert e.value.args[0] == (
+            'Many relation defined on "undefined_backreference.self_ref" to table undefined_backreference" must be defined with a back reference on "undefined_backreference".'
+        )
 
-    async def test_mismatched_back_reference(self) -> None:
-        correct_error = False
-        try:
+    @staticmethod
+    async def test_mismatched_back_reference() -> None:
+        with pytest.raises(MismatchingBackReferenceError) as e:
             await db_2.init()
-        except MismatchingBackReferenceError:
-            correct_error = True
-        self.assertTrue(correct_error)
+        assert (
+            e.value.args[0]
+            == 'Many relation defined on "mismatched_backreference_a.other" to'
+            ' "mismatched_backreference_b.other" must use the same model type'
+            " back-referenced."
+        )
 
-    async def test_missing_foreign_key_union(self) -> None:
-        correct_error = False
-        try:
+    @staticmethod
+    async def test_missing_foreign_key_union() -> None:
+        with pytest.raises(MustUnionForeignKeyError) as e:
             await db_3.init()
-        except MustUnionForeignKeyError:
-            correct_error = True
-        self.assertTrue(correct_error)
+        assert (
+            e.value.args[0]
+            == 'Relation defined on "table_2.table" to "table_1" must be a union type of "Model |'
+            ' model_pk_type" e.g. "Table_1 | UUID"'
+        )
 
-    async def test_missing_wrong_pk_type(self) -> None:
-        correct_error = False
-        try:
+    @staticmethod
+    async def test_missing_wrong_pk_type() -> None:
+        with pytest.raises(MustUnionForeignKeyError) as e:
             await db_4.init()
-        except MustUnionForeignKeyError:
-            correct_error = True
-        self.assertTrue(correct_error)
+        assert (
+            e.value.args[0]
+            == 'Relation defined on "table_4.table" to "table_3" must be a union type of "Model |'
+            ' model_pk_type" e.g. "Table_3 | UUID"'
+        )
 
-    async def test_conversion_type_error(self) -> None:
-        correct_error = False
-        try:
+    @staticmethod
+    async def test_conversion_type_error() -> None:
+        with pytest.raises(TypeConversionError) as e:
             await db_5.init()
-        except TypeConversionError:
-            correct_error = True
-        self.assertTrue(correct_error)
+        assert (
+            e.value.args[0]
+            == "Type typing.Callable[[], int] is not supported by SQLAlchemy 1.4.40."
+        )

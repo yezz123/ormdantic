@@ -18,6 +18,12 @@ database = Ormdantic(connection)
 
 To create tables decorate a pydantic model with the `database.table` decorator, passing the database information ex. `Primary key`, `foreign keys`, `Indexes`, `back_references`, `unique_constraints` etc. to the decorator call.
 
+### Table Restrictions
+
+* Tables must have a single column primary key.
+* The primary key column must be the first column.
+* Relationships must `union-type` the foreign model and that models primary key.
+
 ```python
 from uuid import uuid4
 from pydantic import BaseModel, Field
@@ -57,7 +63,7 @@ class Coffee(BaseModel):
      id: UUID = Field(default_factory=uuid4)
      sweetener: str | None = Field(max_length=63)
      sweetener_count: int | None = None
-     flavor: Flavor
+     flavor: Flavor | UUID
 ```
 
 After we create the table, we can insert data into the table, using the `database.insert` method, is away we insert a Model Instance.

@@ -21,7 +21,7 @@ class One(BaseModel):
     """One will have many "Many"."""
 
     id: UUID = Field(default_factory=uuid4)
-    many_a: list[Many] | None = None
+    many_a: list[Many] = Field(default_factory=lambda: [])
     many_b: list[Many] | None = None
 
 
@@ -53,6 +53,8 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
     async def test_one_to_many_insert_and_get(self) -> None:
         one_a = One()
         one_b = One()
+        await database[One].insert(one_a)
+        await database[One].insert(one_b)
         many_a = [Many(one_a=one_a), Many(one_a=one_a)]
         many_b = [
             Many(one_a=one_a, one_b=one_b),
@@ -66,14 +68,12 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         many_a_plus_b.sort(key=lambda x: x.id)
         find_one_a.many_a.sort(key=lambda x: x.id)  # type: ignore
         self.assertListEqual(many_a_plus_b, find_one_a.many_a)  # type: ignore
-        self.assertListEqual([], find_one_a.many_b)  # type: ignore
+        self.assertIsNone(find_one_a.many_b)  # type: ignore
         find_one_b = await database[One].find_one(one_b.id, depth=2)
         many_b.sort(key=lambda x: x.id)
         find_one_b.many_b.sort(key=lambda x: x.id)  # type: ignore
         self.assertListEqual(many_b, find_one_b.many_b)  # type: ignore
         self.assertListEqual([], find_one_b.many_a)  # type: ignore
         many_a_idx_zero = await database[Many].find_one(many_a[0].id, depth=3)
+        many_a_idx_zero.one_a.many_a.sort(key=lambda x: x.id)  # type: ignore
         self.assertDictEqual(find_one_a.dict(), many_a_idx_zero.one_a.dict())  # type: ignore
-
-    async def test_one_to_many_update(self) -> None:
-        pass
