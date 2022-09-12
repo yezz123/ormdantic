@@ -118,19 +118,14 @@ class OrmField:
                     )
                 )
             # Add columns of rel table to this query.
+            rel_table_data = self._table_map.name_to_data[relation.foreign_table]
             columns.extend(
                 [
                     rel_table.field(c).as_(f"{relation_name}\\{c}")
                     for c in self._table_map.name_to_data[
                         relation.foreign_table
                     ].columns
-                    if not (
-                        depth > 0
-                        and c
-                        in self._table_map.name_to_data[
-                            relation.foreign_table
-                        ].relationships
-                    )
+                    if not (depth > 0 and c in rel_table_data.relationships)
                 ]
             )
 
