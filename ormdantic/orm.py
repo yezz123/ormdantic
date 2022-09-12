@@ -94,7 +94,7 @@ class Ormdantic:
             )
         await Table(self._engine, self._metadata, self._table_map).init()
         async with self._engine.begin() as conn:
-            await conn.run_sync(self._metadata.drop_all)
+            await conn.run_sync(self._metadata.create_all)
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         relationships = {}

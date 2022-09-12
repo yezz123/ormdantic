@@ -69,13 +69,13 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
             table_data=self._table_data,
             table_map=self._table_map,
             result_set=result,
-            is_array=False,
+            is_array=True,
             depth=depth,
         ).deserialize()
         return Result(
             offset=offset,
             limit=limit,
-            data=deserialized_data,
+            data=deserialized_data or [],
         )
 
     async def insert(self, model_instance: ModelType) -> ModelType:
