@@ -68,12 +68,12 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         many_a_plus_b.sort(key=lambda x: x.id)
         find_one_a.many_a.sort(key=lambda x: x.id)  # type: ignore
         self.assertListEqual(many_a_plus_b, find_one_a.many_a)  # type: ignore
-        self.assertIsNone(find_one_a.many_b)
+        self.assertIsNone(find_one_a.many_b)  # type: ignore
         find_one_b = await database[One].find_one(one_b.id, depth=2)
         many_b.sort(key=lambda x: x.id)
         find_one_b.many_b.sort(key=lambda x: x.id)  # type: ignore
         self.assertListEqual(many_b, find_one_b.many_b)  # type: ignore
         self.assertListEqual([], find_one_b.many_a)  # type: ignore
         many_a_idx_zero = await database[Many].find_one(many_a[0].id, depth=3)
-        many_a_idx_zero.one_a.many_a.sort(key=lambda x: x.id)
+        many_a_idx_zero.one_a.many_a.sort(key=lambda x: x.id)  # type: ignore
         self.assertDictEqual(find_one_a.dict(), many_a_idx_zero.one_a.dict())  # type: ignore

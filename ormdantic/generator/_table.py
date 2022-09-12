@@ -72,12 +72,14 @@ class PydanticSQLTableGenerator:
         return tuple(columns)
 
     def _get_column(  # type: ignore
-        self, field_name: str, field: ModelField, **kwargs
+        self, field_name: str, field: ModelField, **kwargs: Any
     ) -> Column | None:
         outer_origin = get_origin(field.outer_type_)
         origin = get_origin(field.type_)
         if outer_origin and outer_origin == list:
-            return self._get_column_from_type_args(field_name, field, **kwargs)
+            return self._get_column_from_type_args(
+                field_name, field, **kwargs
+            )  # pragma: no cover
         if origin:
             if origin == UnionType:
                 return self._get_column_from_type_args(field_name, field, **kwargs)
@@ -102,7 +104,7 @@ class PydanticSQLTableGenerator:
         return Column(field_name, JSON, **kwargs)
 
     def _get_column_from_type_args(  # type: ignore
-        self, field_name: str, field: ModelField, **kwargs
+        self, field_name: str, field: ModelField, **kwargs: Any
     ) -> Column | None:
         for arg in get_args(field.type_):
             if arg in [it.model for it in self._table_map.name_to_data.values()]:
@@ -113,4 +115,4 @@ class PydanticSQLTableGenerator:
                     ForeignKey(f"{foreign_table}.{foreign_data.pk}"),
                     **kwargs,
                 )
-        return None
+        return None  # pragma: no cover

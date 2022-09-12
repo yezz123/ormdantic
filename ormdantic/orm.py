@@ -31,6 +31,11 @@ class Ormdantic:
         self._table_map: Map = Map()
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
+        """Get a `Table` for the given pydantic model.
+
+        :param item: Pydantic model.
+        :return: A `Table` for the given pydantic model.
+        """
         return self._crud_generators[item]
 
     def table(

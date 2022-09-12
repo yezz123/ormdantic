@@ -16,10 +16,9 @@ from ormdantic.types import ModelType, SerializedType
 class ResultSchema(BaseModel):
     """Model to describe the schema of a model result."""
 
-    table_data: OrmTable | None = None
+    table_data: OrmTable | None = None  # type: ignore
     is_array: bool
     references: dict[str, ResultSchema] = Field(default_factory=lambda: {})
-    models: list[ModelType] = Field(default_factory=lambda: [])
 
 
 class OrmSerializer(Generic[SerializedType]):
@@ -74,7 +73,7 @@ class OrmSerializer(Generic[SerializedType]):
                     schema = schema.references[branch]
                     # Update last pk if this column is a pk.
                     if (
-                        column == schema.table_data.pk
+                        column == schema.table_data.pk  # type: ignore
                         and current_tree == f"/{column_tree}"
                     ):
                         row_schema[current_tree] = row[column_idx]
@@ -100,23 +99,23 @@ class OrmSerializer(Generic[SerializedType]):
                     if column:
                         node[column] = row[column_idx]
         if not self._return_dict:
-            return None
+            return None  # type: ignore
         if self._result_schema.is_array:
             return [
                 self._table_data.model(**record)
                 for record in self._prep_result(self._return_dict, self._result_schema)[
                     self._table_data.tablename
-                ]
+                ]  # type: ignore
             ]
         return self._table_data.model(
             **self._prep_result(self._return_dict, self._result_schema)[
                 self._table_data.tablename
-            ]
+            ]  # type: ignore
         )
 
     def _prep_result(
         self, node: dict[Any, Any], schema: ResultSchema
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         for key, val in node.items():
             if td := schema.table_data:
                 node[key] = self._sql_type_to_py(td.model, key, val)

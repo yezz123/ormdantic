@@ -184,6 +184,4 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         self.assertDictEqual(coffee_dict, find_coffee.dict())  # type: ignore
         coffee_dict["primary_flavor"] = coffee_dict["primary_flavor"]["id"]
         coffee_dict["secondary_flavor"] = coffee_dict["secondary_flavor"]["id"]
-        self.assertDictEqual(
-            coffee_dict, (await database[Coffee].find_one(coffee.id)).dict()  # type: ignore
-        )
+        self.assertDictEqual(coffee_dict, (await database[Coffee].find_one(coffee.id)).dict())  # type: ignore
