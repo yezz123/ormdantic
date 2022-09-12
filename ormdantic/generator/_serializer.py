@@ -106,7 +106,7 @@ class OrmSerializer(Generic[SerializedType]):
         return self._table_data.model(
             **self._prep_result(self._return_dict, self._result_schema)[
                 self._table_data.tablename
-            ]  # type: ignore
+            ]
         )
 
     def _prep_result(

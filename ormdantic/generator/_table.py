@@ -71,7 +71,7 @@ class PydanticSQLTableGenerator:
                 columns.append(column)
         return tuple(columns)
 
-    def _get_column(  # type: ignore
+    def _get_column(
         self, field_name: str, field: ModelField, **kwargs: Any
     ) -> Column | None:
         outer_origin = get_origin(field.outer_type_)
@@ -103,7 +103,7 @@ class PydanticSQLTableGenerator:
         # Catchall for dict/list or any other.
         return Column(field_name, JSON, **kwargs)
 
-    def _get_column_from_type_args(  # type: ignore
+    def _get_column_from_type_args(
         self, field_name: str, field: ModelField, **kwargs: Any
     ) -> Column | None:
         for arg in get_args(field.type_):
