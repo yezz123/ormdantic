@@ -1,7 +1,3 @@
-"""Deserialize a result set into Python models."""
-
-from __future__ import annotations
-
 import json
 from types import NoneType
 from typing import Any, Generic, get_args
@@ -18,7 +14,7 @@ class ResultSchema(BaseModel):
 
     table_data: OrmTable | None = None  # type: ignore
     is_array: bool
-    references: dict[str, ResultSchema] = Field(default_factory=lambda: {})
+    references: dict[str, "ResultSchema"] = Field(default_factory=lambda: {})
 
 
 class OrmSerializer(Generic[SerializedType]):
