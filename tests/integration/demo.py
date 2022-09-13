@@ -34,8 +34,8 @@ async def demo() -> None:
     async def _init() -> None:
         async with db._engine.begin() as conn:
             await db.init()
-            await conn.run_sync(db._metadata.drop_all)
-            await conn.run_sync(db._metadata.create_all)
+            await conn.run_sync(db._metadata.drop_all)  # type: ignore
+            await conn.run_sync(db._metadata.create_all)  # type: ignore
 
     await _init()
 
@@ -86,7 +86,7 @@ async def demo() -> None:
     await asyncio.sleep(5)
 
     # Delete
-    await db[Flavor].delete(flavor.id)
+    await db[Flavor].delete(flavor.name)
 
 
 if __name__ == "__main__":
