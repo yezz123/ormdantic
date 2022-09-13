@@ -39,35 +39,51 @@ async def demo() -> None:
 
     await _init()
 
+    await asyncio.sleep(5)
+
     # Insert
     flavor = Flavor(name="mocha")
     await db[Flavor].insert(flavor)
+    await asyncio.sleep(5)
     coffee = Coffee(sweetener=None, flavor=flavor)
     await db[Coffee].insert(coffee)
+    await asyncio.sleep(5)
 
     # Find one
     mocha = await db[Flavor].find_one(flavor.id)
     print(mocha)
 
+    await asyncio.sleep(5)
+
     # Find one with depth.
     find_coffee = await db[Coffee].find_one(coffee.id, depth=1)
     print(find_coffee)
 
+    await asyncio.sleep(5)
+
     # Find many
     await db[Flavor].find_many()  # Find all.
+
+    await asyncio.sleep(5)
 
     # Get paginated results.
     await db[Flavor].find_many(
         where={"name": "mocha"}, order_by=["id", "name"], limit=2, offset=2
     )
 
+    await asyncio.sleep(5)
+
     # Update
     flavor.name = "caramel"
     flavor = await db[Flavor].update(flavor)
 
+    await asyncio.sleep(5)
+
     # Upsert
     flavor.name = "vanilla"
     flavor = await db[Flavor].upsert(flavor)
+
+    await asyncio.sleep(5)
 
     # Delete
     await db[Flavor].delete(flavor.id)

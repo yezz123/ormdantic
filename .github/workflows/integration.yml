@@ -56,7 +56,7 @@ jobs:
       - name: Integration Tests, Postgres
         run: bash scripts/integration.sh
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
 
   sqlite:
     runs-on: ubuntu-latest
@@ -86,50 +86,3 @@ jobs:
         run: bash scripts/integration.sh
         env:
           DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
-
-  mysql:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        python-version: ["3.10"]
-        mysql-version: [5.7]
-
-    # Service containers to run with `container-job`
-    services:
-      # Label used to access the service container
-      mysql:
-        # Docker Hub image
-        image: mysql:${{ matrix.mysql-version }}
-        # Provide the password for mysql
-        env:
-          MYSQL_USER: root
-          MYSQL_PASSWORD: root
-          MYSQL_DATABASE: mysql
-          # TODO: Check if the Port it is written through the int
-          # https://stackoverflow.com/a/66858716/12927850
-        ports:
-          - 3306:3306
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v3
-        id: cache
-        with:
-          path: ${{ env.pythonLocation }}
-          key: ${{ runner.os }}-python-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml') }}-test
-      - name: Install Flit
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: pip install flit
-      - name: Install Dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: flit install --symlink
-      - name: Integration Tests, MySQL
-        run: bash scripts/integration.sh
-        env:
-          # https://docs.sqlalchemy.org/en/14/core/engines.html
-          DATABASE_URL: mysql+aiomysql://root:root@mysql:3306/mysql
