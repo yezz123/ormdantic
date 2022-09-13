@@ -47,8 +47,13 @@ Now after we create the table, we can initialize the database with the table and
 We use `database.init` will Populate relations information and create the tables.
 
 ```python
-async def main() -> None:
-     await database.init()
+async def demo() -> None:
+    async def _init() -> None:
+        async with db._engine.begin() as conn:
+            await db.init()
+            await conn.run_sync(db._metadata.drop_all)
+            await conn.run_sync(db._metadata.create_all)
+    await _init()
 ```
 
 ### `Insert()`
