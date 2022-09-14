@@ -125,7 +125,7 @@ class OrmField:
                     for c in self._table_map.name_to_data[
                         relation.foreign_table
                     ].columns
-                    if not (depth > 0 and c in rel_table_data.relationships)
+                    if depth <= 0 or c not in rel_table_data.relationships
                 ]
             )
 
