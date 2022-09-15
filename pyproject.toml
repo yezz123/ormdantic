@@ -1,13 +1,17 @@
 [build-system]
-requires = ["flit"]
-build-backend = "flit.buildapi"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.flit.metadata]
-module = "ormdantic"
-dist-name = "ormdantic"
-author = "Yasser Tahiri"
-author-email = "hello@yezz.me"
-home-page = "https://github.com/yezz123/ormdantic"
+[project]
+name = "ormdantic"
+description = "asynchronous ORM that uses pydantic models to represent database tables"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Yasser Tahiri", email = "hello@yezz.me" },
+]
+
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -19,16 +23,22 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP :: Session",
     "Typing :: Typed",
 ]
-description-file = "README.md"
-requires-python = ">=3.10"
-requires = [
+
+dependencies = [
     "typing-extensions >=3.7.4,<4.3.0",
     "pydantic >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0",
     "sqlalchemy[asyncio] >=1.3.18,<1.5.0",
     "PyPika ==0.48.9"
 ]
 
-[tool.flit.metadata.requires-extra]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/yezz123/ormdantic"
+Documentation = "https://ormdantic.yezz.me/"
+Funding = 'https://github.com/sponsors/yezz123'
+
+[project.optional-dependencies]
 sqlite = [
     "aiosqlite",
 ]
@@ -61,6 +71,5 @@ docs = [
     "jinja2==3.0.3"
 ]
 
-[tool.flit.metadata.urls]
-Documentation = "https://ormdantic.yezz.me/"
-Source = "https://github.com/yezz123/ormdantic"
+[tool.hatch.version]
+path = "ormdantic/__init__.py"
