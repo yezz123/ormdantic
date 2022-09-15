@@ -240,11 +240,8 @@ source venv/bin/activate
 And then install the development dependencies:
 
 ```bash
-# Install Flit
-pip install flit
-
 # Install dependencies
-flit install --symlink
+pip install -e .[sqlite,postgresql,test,lint,docs]
 ```
 
 ### Run tests 🌝

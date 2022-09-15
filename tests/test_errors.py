@@ -155,5 +155,5 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
             await db_5.init()
         assert (
             e.value.args[0]
-            == "Type typing.Callable[[], int] is not supported by SQLAlchemy 1.4.40."
+            == "Type typing.Callable[[], int] is not supported by SQLAlchemy 1.4.41."
         )
