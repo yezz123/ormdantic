@@ -32,11 +32,12 @@ jobs:
       - name: Set branch name
         uses: nelonoel/branch-name@v1.0.1
       - name: Deploy docs
-        uses: jsmrcaga/action-netlify-deploy@v1.7.2
+        uses: jsmrcaga/action-netlify-deploy@v1.8.0g
         with:
             NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
             NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
             deploy_alias: ${{ env.BRANCH_NAME }}
+            build_directory: build
       # Creates a comment with link to preview
       - name: Comment on PR
         uses: peter-evans/create-or-update-comment@v2
