@@ -32,7 +32,7 @@ jobs:
       - name: Set branch name
         uses: nelonoel/branch-name@v1.0.1
       - name: Deploy docs
-        uses: jsmrcaga/action-netlify-deploy@master
+        uses: jsmrcaga/action-netlify-deploy@v1.1.0
         with:
             NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
             NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
