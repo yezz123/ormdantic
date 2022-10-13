@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -37,6 +38,10 @@ class Flavor(BaseModel):
     name: str = Field(..., max_length=63)
     strength: int | None = None
     coffee: Coffee | UUID | None = None
+    created_at: date = Field(default_factory=date.today)
+    updated_at: date = Field(default_factory=date.today)
+    expire: datetime = Field(default_factory=datetime.now)
+    exist: bool = False
 
 
 @database.table(pk="id")
@@ -52,6 +57,7 @@ class Coffee(BaseModel):
     ice: list  # type: ignore
     size: Money
     attributes: dict[str, Any] | None = None
+    exist: bool = False
 
 
 @database.table(pk="id")
@@ -98,6 +104,24 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
             mocha.dict(), (await database[Flavor].find_one(mocha.id)).dict()  # type: ignore
         )
 
+    async def test_insert_and_find_one_date(self) -> None:
+        # Test Date and Time fields
+        flavor = Flavor(name="mocha", created_at=date(2021, 1, 1))
+        mocha = await database[Flavor].insert(flavor)
+        # Find new record and compare.
+        self.assertDictEqual(
+            mocha.dict(), (await database[Flavor].find_one(mocha.id)).dict()  # type: ignore
+        )
+
+    async def test_insert_and_find_one_bool(self) -> None:
+        # Insert record.
+        flavor = Flavor(name="mocha", exist=True)
+        mocha = await database[Flavor].insert(flavor)
+        # Find new record and compare.
+        self.assertDictEqual(
+            mocha.dict(), (await database[Flavor].find_one(mocha.id)).dict()  # type: ignore
+        )
+
     async def test_find_many(self) -> None:
         # Insert 3 records.
         mocha1 = await database[Flavor].insert(Flavor(name="mocha"))
@@ -138,6 +162,17 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         await database[Flavor].update(flavor)
         # Find the updated record.
         self.assertEqual(flavor.name, (await database[Flavor].find_one(flavor.id)).name)  # type: ignore
+
+    async def test_update_datetime(self) -> None:
+        # Insert record.
+        flavor = await database[Flavor].insert(
+            Flavor(name="mocha", expire=datetime(2021, 1, 1, 1, 1, 1))
+        )
+        # Update record.
+        flavor.expire = datetime(2021, 1, 1, 1, 1, 2)
+        await database[Flavor].update(flavor)
+        # Find the updated record.
+        self.assertEqual(flavor.expire, (await database[Flavor].find_one(flavor.id)).expire)  # type: ignore
 
     async def test_upsert(self) -> None:
         # Upsert record as insert.

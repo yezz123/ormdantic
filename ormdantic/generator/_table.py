@@ -4,13 +4,11 @@ from datetime import date, datetime
 from types import UnionType
 from typing import Any, get_args, get_origin
 
-from ormdantic.handler import TableName_From_Model, TypeConversionError
-from ormdantic.models import Map, OrmTable
 from pydantic import BaseModel
 from pydantic.fields import ModelField
 from sqlalchemy import (
-    Boolean,
     JSON,
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -24,6 +22,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from ormdantic.handler import TableName_From_Model, TypeConversionError
+from ormdantic.models import Map, OrmTable
 
 
 class PydanticSQLTableGenerator:
