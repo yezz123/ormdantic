@@ -1,13 +1,19 @@
 """Module providing PydanticSQLTableGenerator."""
 import uuid
+from datetime import date, datetime
 from types import UnionType
 from typing import Any, get_args, get_origin
 
-from pydantic import BaseModel, ConstrainedStr
+from ormdantic.handler import TableName_From_Model, TypeConversionError
+from ormdantic.models import Map, OrmTable
+from pydantic import BaseModel
 from pydantic.fields import ModelField
 from sqlalchemy import (
+    Boolean,
     JSON,
     Column,
+    Date,
+    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -18,9 +24,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
-
-from ormdantic.handler import TableName_From_Model, TypeConversionError
-from ormdantic.models import Map, OrmTable
 
 
 class PydanticSQLTableGenerator:
@@ -87,19 +90,28 @@ class PydanticSQLTableGenerator:
                 raise TypeConversionError(field.type_)  # pragma: no cover
         if get_origin(field.outer_type_) == dict:
             return Column(field_name, JSON, **kwargs)
-        if issubclass(field.type_, BaseModel):
-            return Column(field_name, JSON, **kwargs)
         if field.type_ is uuid.UUID:
             col_type = (
                 postgresql.UUID if self._engine.name == "postgres" else String(36)
             )
             return Column(field_name, col_type, **kwargs)
-        if field.type_ is str or issubclass(field.type_, ConstrainedStr):
+        if issubclass(field.type_, BaseModel):
+            return Column(field_name, JSON, **kwargs)
+        if issubclass(field.type_, str):
             return Column(field_name, String(field.field_info.max_length), **kwargs)
-        if field.type_ is int:
-            return Column(field_name, Integer, **kwargs)
-        if field.type_ is float:
+        if issubclass(field.type_, float):
             return Column(field_name, Float, **kwargs)
+        if issubclass(field.type_, int):
+            # bool is a subclass of int -> nested check
+            if issubclass(field.type_, bool):
+                return Column(field_name, Boolean, **kwargs)
+            return Column(field_name, Integer, **kwargs)
+        if issubclass(field.type_, date):
+            # datetime is a subclass of date -> nested check
+            if issubclass(field.type_, datetime):
+                return Column(field_name, DateTime, **kwargs)
+            return Column(field_name, Date, **kwargs)
+
         # Catchall for dict/list or any other.
         return Column(field_name, JSON, **kwargs)
 
