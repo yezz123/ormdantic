@@ -45,8 +45,52 @@ async def demo() -> None:
     flavor = Flavor(name="mocha")
     await db[Flavor].insert(flavor)
     await asyncio.sleep(5)
+    coffee = Coffee(sweetener=1, flavor=flavor)
+    await db[Coffee].insert(coffee)
+    await asyncio.sleep(5)
+
+    # Insert
+    flavor = Flavor(name="caramel")
+    await db[Flavor].insert(flavor)
+    await asyncio.sleep(5)
+    coffee = Coffee(sweetener=2, flavor=flavor)
+    await db[Coffee].insert(coffee)
+    await asyncio.sleep(5)
+
+    # Insert
+    flavor = Flavor(name="latte")
+    await db[Flavor].insert(flavor)
+    await asyncio.sleep(5)
+    coffee = Coffee(sweetener=3, flavor=flavor)
+    await db[Coffee].insert(coffee)
+    await asyncio.sleep(5)
+
+    # Insert
+    flavor = Flavor(name="mocha-chai")
+    await db[Flavor].insert(flavor)
+    await asyncio.sleep(5)
+    coffee = Coffee(sweetener=6, flavor=flavor)
+    await db[Coffee].insert(coffee)
+    await asyncio.sleep(5)
+
+    # Insert
+    flavor = Flavor(name="hot chocolate")
+    await db[Flavor].insert(flavor)
+    await asyncio.sleep(5)
     coffee = Coffee(sweetener=None, flavor=flavor)
     await db[Coffee].insert(coffee)
+    await asyncio.sleep(5)
+
+    # Count
+    count = await db[Flavor].count()
+    print(count)
+
+    await asyncio.sleep(5)
+
+    # Count Using Where and depth
+    count = await db[Coffee].count(where={"sweetener": 6}, depth=1)
+    print(count)
+
     await asyncio.sleep(5)
 
     # Find one
@@ -87,6 +131,8 @@ async def demo() -> None:
 
     # Delete
     await db[Flavor].delete(flavor.name)
+
+    await asyncio.sleep(5)
 
 
 if __name__ == "__main__":

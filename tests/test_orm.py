@@ -122,6 +122,15 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
             mocha.dict(), (await database[Flavor].find_one(mocha.id)).dict()  # type: ignore
         )
 
+    async def test_count(self) -> None:
+        # Insert 3 records.
+        await database[Flavor].insert(Flavor(name="mocha"))
+        await database[Flavor].insert(Flavor(name="mocha"))
+        await database[Flavor].insert(Flavor(name="caramel"))
+        # Count records.
+        self.assertEqual(1, await database[Flavor].count(where={"name": "caramel"}))
+        self.assertEqual(3, await database[Flavor].count())
+
     async def test_find_many(self) -> None:
         # Insert 3 records.
         mocha1 = await database[Flavor].insert(Flavor(name="mocha"))
