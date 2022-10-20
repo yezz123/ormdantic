@@ -118,6 +118,18 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         )
         return True
 
+    async def count(self, where: dict[str, Any] | None = None, depth: int = 0) -> int:
+        """Count records.
+
+        :param where: Where clause to filter records.
+        :param depth: ORM fetch depth.
+        :return: Number of records.
+        """
+        result = await self._execute_query(
+            OrmField(self._table_data, self._table_map).get_count_query(where, depth)
+        )
+        return result.scalar()
+
     async def _execute_query(self, query: QueryBuilder) -> Any:
         async_session = sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
