@@ -151,3 +151,22 @@ The `DELETE` statement is used to delete existing records in a table.
      # Delete a Flavor
      await database[Flavor].delete(flavor.id)
 ```
+
+### `Count()`
+
+To count the number of rows of a table or in a result set you can use the `count` function.
+
+```python
+     # Count
+     count = await database[Flavor].count()
+     print(count)
+```
+
+* It's support also `Where` and `Depth`
+
+```python
+     count_advanced = await database[Coffee].count(
+          where={"sweetener": 2}, depth=1
+     )
+     print(count_advanced)
+```
