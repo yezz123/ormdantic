@@ -88,7 +88,7 @@ async def demo() -> None:
     await asyncio.sleep(5)
 
     # Count Using Where and depth
-    count = await db[Coffee].count(where={"sweetener": 6}, depth=1)
+    count = await db[Coffee].count(where={"sweetener": "6"}, depth=1)
     print(count)
 
     await asyncio.sleep(5)
