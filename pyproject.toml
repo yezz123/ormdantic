@@ -51,7 +51,7 @@ mysql = [
 ]
 lint = [
     "pre-commit==2.19.0",
-    "mypy==0.931",
+    "mypy==0.982",
 ]
 test = [
     "pytest==7.1.2",
