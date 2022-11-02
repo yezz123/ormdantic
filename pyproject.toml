@@ -57,7 +57,7 @@ test = [
     "pytest==7.2.0",
     "pytest-asyncio == 0.18.3",
     "codecov==2.1.12",
-    "pytest-cov==3.0.0",
+    "pytest-cov==4.0.0",
     "python-decouple",
 ]
 docs = [
