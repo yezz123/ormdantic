@@ -19,6 +19,7 @@ classifiers = [
     "Framework :: AsyncIO",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Internet :: WWW/HTTP :: Session",
     "Typing :: Typed",
