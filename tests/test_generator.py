@@ -44,7 +44,7 @@ class Coffee(BaseModel):
     multiple_of_int_lt: int = Field(multiple_of=7, lt=-1000)
     range_int_multiple_of: int = Field(lt=200, gt=101, multiple_of=11)
     range_int: int = Field(le=200, ge=101)
-    always_none: types.NoneType
+    always_none: types.NoneType = None
     str_constraint_min: str = Field(min_length=101)
     str_constraint_max: str = Field(max_length=200)
     str_constraint_minmax: str = Field(min_length=101, max_length=200)
@@ -52,7 +52,7 @@ class Coffee(BaseModel):
     time_field: datetime.time
     timedelta_field: datetime.timedelta
     datetime_field: datetime.datetime
-    not_specifically_supported_type: OrderedDict
+    not_specifically_supported_type: OrderedDict  # type: ignore
 
 
 def test_generator() -> None:

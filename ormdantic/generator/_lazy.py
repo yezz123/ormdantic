@@ -53,7 +53,7 @@ def generate(
 
 
 def _get_value(
-    type_: Type,
+    type_: Type,  # type: ignore
     model_field: ModelField,
     use_default_values: bool,
     optionals_use_none: bool,
