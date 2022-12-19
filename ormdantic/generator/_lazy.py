@@ -1,18 +1,24 @@
-"""Generate random instances of the given Pydantic model type."""
-
 import datetime
-import math
 import random
-import string
+import types
+import typing
 from enum import Enum
-from typing import Any, Type, TypeVar
+from typing import Any, Type
 from uuid import UUID, uuid4
 
 import pydantic
 from pydantic import BaseModel
 from pydantic.fields import ModelField
 
-ModelType = TypeVar("ModelType", bound=BaseModel)
+from ormdantic.handler import (
+    RandomDatetimeValue,
+    RandomDateValue,
+    RandomNumberValue,
+    RandomStrValue,
+    RandomTimedeltaValue,
+    RandomTimeValue,
+)
+from ormdantic.types import ModelType
 
 
 def generate(
@@ -21,16 +27,16 @@ def generate(
     optionals_use_none: bool = False,
     **kwargs: Any,
 ) -> ModelType:
-    """Generate an instance of a Pydantic model with random values.
+    """
+    This is a function that generates an instance of a Pydantic model with random values.
+    It takes in a model type, and optional parameters use_default_values, `optionals_use_none`, and kwargs.
+    If `use_default_values` is True, the function will use the model's default values for fields that have them.
+    If `optionals_use_none` is True, the function will set optional fields to None instead of generating a random value for them.
+    `kwargs()` is a dictionary of attributes to set on the model instance, which will override any randomly generated values.
 
-    Any values provided in `kwargs` will be used as model field values
-    instead of randomly generating them.
-
-    :param model_type: Model type to generate an instance of.
-    :param use_default_values: Whether to use model default values.
-    :param optionals_use_none: How to handle optional fields.
-    :param kwargs: Attributes to set on the model instance.
-    :return: A randomly generated instance of the provided model type.
+    The function iterates through all the fields of the model and checks if a value has been provided in kwargs or if the field has a default value or default factory.
+    If none of these conditions are met, the function calls the `_get_value` function to generate a random value for the field based on its type annotation.
+    Finally, the function returns a new instance of the model type with the generated or provided field values.
     """
     for field_name, model_field in model_type.__fields__.items():
         if field_name in kwargs:
@@ -41,71 +47,79 @@ def generate(
             continue
 
         kwargs[field_name] = _get_value(
-            model_field, use_default_values, optionals_use_none
+            model_field.annotation, model_field, use_default_values, optionals_use_none
         )
     return model_type(**kwargs)
 
 
 def _get_value(
-    model_field: ModelField, use_default_values: bool, optionals_use_none: bool
+    type_: Type,
+    model_field: ModelField,
+    use_default_values: bool,
+    optionals_use_none: bool,
 ) -> Any:
-    """Get a random value for the given model field."""
+    """
+    This is a helper function that generates a random value for a given type.
+    It takes in four parameters: `type_`, `model_field`, `use_default_values`, and `optionals_use_none.type_` is the type of the value to generate,
+    `model_field` is an instance of a Pydantic model field, `use_default_values` is a boolean indicating whether to use default values, and `optionals_use_none` is a boolean indicating whether to set optional fields to None.
+
+    The function first checks if type_ is a dictionary, list, or union type, and generates random values accordingly.
+
+    If model_field is an optional field and optionals_use_none is True, the function returns None.
+
+    - `type_ is` a string or constrained string, the function returns a random string using the RandomStrValue class.
+    - `type_ is` a number or constrained number, the function returns a random number using the RandomNumberValue class.
+    - `type_ is` a boolean, the function returns a random boolean value.
+    - `type_ is` a Pydantic model, the function recursively generates a random instance of that model.
+    - `type_ is` an enum, the function returns a random value from the enum.
+    - `type_ is` a UUID, the function returns a randomly generated UUID.
+    - `type_ is` a date, time, timedelta, or datetime, the function returns a random value using the corresponding Random*Value class.
+
+    If none of these conditions are met, the function returns a default value for the given type.
+    """
+    origin = typing.get_origin(type_)
+    if origin is dict:
+        k_type, v_type = typing.get_args(type_)
+        return {
+            _get_value(
+                k_type, model_field, use_default_values, optionals_use_none
+            ): _get_value(v_type, model_field, use_default_values, optionals_use_none)
+            for _ in range(random.randint(1, 100))
+        }
+    if origin is list:
+        return [
+            _get_value(arg, model_field, use_default_values, optionals_use_none)
+            for _ in range(random.randint(1, 100))
+            for arg in typing.get_args(type_)
+        ]
+    if origin and issubclass(origin, types.UnionType):
+        type_choices = [
+            it for it in typing.get_args(type_) if not issubclass(it, types.NoneType)
+        ]
+        chosen_union_type = random.choice(type_choices)
+        return _get_value(
+            chosen_union_type, model_field, use_default_values, optionals_use_none
+        )
     if model_field.allow_none and optionals_use_none:
         return None
-    if model_field.type_ == str:
-        return _random_str()
-    if model_field.type_ == int or isinstance(
-        model_field.type_, pydantic.types.ConstrainedNumberMeta
-    ):
-        return _random_int(model_field)
-    if model_field.type_ == float:
-        return random.random() * 100
-    if model_field.type_ == bool:
+    if type_ == str or issubclass(type_, pydantic.types.ConstrainedStr):
+        return RandomStrValue(model_field)
+    if type_ in [int, float] or isinstance(type_, pydantic.types.ConstrainedNumberMeta):
+        return RandomNumberValue(model_field)
+    if type_ == bool:
         return random.random() > 0.5
-    if issubclass(model_field.type_, BaseModel):
-        return generate(model_field.type_, use_default_values, optionals_use_none)
-    if issubclass(model_field.type_, Enum):
-        return random.choices(list(model_field.type_))[0]
-    if model_field.type_ == UUID:
+    if issubclass(type_, types.NoneType):
+        return None
+    if issubclass(type_, BaseModel):
+        return generate(type_, use_default_values, optionals_use_none)
+    if issubclass(type_, Enum):
+        return random.choice(list(type_))
+    if type_ == UUID:
         return uuid4()
-    if model_field.type_ == datetime.datetime:
-        return datetime.datetime.now()
-
-
-def _random_str() -> str:
-    """Get a random string."""
-    return "".join(random.choices(string.ascii_letters, k=5))
-
-
-def _random_int(model_field: ModelField) -> int:
-    """Get a random integer."""
-    default_max_difference = 256
-    iter_size = model_field.field_info.multiple_of or 1
-    # Determine lower bound.
-    lower = 0
-    if ge := model_field.field_info.ge:
-        while lower < ge:
-            lower += iter_size
-    if gt := model_field.field_info.gt:
-        while lower <= gt:
-            lower += iter_size
-    # Determine upper bound.
-    upper = lower + iter_size * default_max_difference
-    if le := model_field.field_info.le:
-        while upper > le:
-            upper -= iter_size
-    if lt := model_field.field_info.lt:
-        while upper >= lt:
-            upper -= iter_size
-    # Re-evaluate lower bound in case ge/gt unset and upper is negative.
-    if (
-        not model_field.field_info.ge
-        and not model_field.field_info.gt
-        and lower > upper
-    ):
-        lower = upper - iter_size * default_max_difference
-    # Find a random int within determined range.
-    if not model_field.field_info.multiple_of:
-        return random.randint(lower, upper)
-    max_iter_distance = abs(math.floor((upper - lower) / iter_size))
-    return lower + iter_size * random.randint(1, max_iter_distance)
+    if type_ == datetime.date:
+        return RandomDateValue()
+    if type_ == datetime.time:
+        return RandomTimeValue()
+    if type_ == datetime.timedelta:
+        return RandomTimedeltaValue()
+    return RandomDatetimeValue() if type_ == datetime.datetime else type_()
