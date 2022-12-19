@@ -1,0 +1,47 @@
+name: 'Netlify Previews'
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  preview-docs:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - uses: actions/cache@v3
+        id: cache
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ runner.os }}-python-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml') }}-docs
+      - name: Install docs extras
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: pip install -e .[docs]
+      - name: Build docs
+        run: mkdocs build -d build
+      # Sets the branch name as environment variable
+      - name: Set branch name
+        uses: nelonoel/branch-name@v1.0.1
+      - name: Deploy docs
+        uses: jsmrcaga/action-netlify-deploy@v1.8.0
+        with:
+            NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
+            NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+            deploy_alias: ${{ env.BRANCH_NAME }}
+            build_directory: build
+      # Creates a comment with link to preview
+      - name: Comment on PR
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            :sparkles: Preview available at https://${{ env.BRANCH_NAME }}--ormdantic.netlify.app
