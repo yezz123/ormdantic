@@ -44,7 +44,7 @@ class Coffee(BaseModel):
     multiple_of_int_lt: int = Field(multiple_of=7, lt=-1000)
     range_int_multiple_of: int = Field(lt=200, gt=101, multiple_of=11)
     range_int: int = Field(le=200, ge=101)
-    always_none: types.NoneType = None
+    always_none: types.NoneType = None  # type: ignore
     str_constraint_min: str = Field(min_length=101)
     str_constraint_max: str = Field(max_length=200)
     str_constraint_minmax: str = Field(min_length=101, max_length=200)
