@@ -55,6 +55,11 @@ class Coffee(BaseModel):
     not_specifically_supported_type: OrderedDict  # type: ignore
 
 
+def test_validate() -> None:
+    """Test validate."""
+    Generator(Coffee)
+
+
 def test_generator() -> None:
     assert Generator(Coffee).description is not None
 
