@@ -10,10 +10,9 @@ from ormdantic.types import AnyNumber
 
 def _random_str_value(model_field: ModelField) -> str:
     """Get a random string."""
-    random.choices(string.ascii_letters + string.digits)
-    min_len = model_field.field_info.min_length or random.randint(1, 100)
-    max_len = model_field.field_info.max_length or random.randint(1, 100) + min_len
-    target_length = random.choice(range(min_len, max_len))
+    target_length = _get_target_length(
+        model_field.field_info.min_length, model_field.field_info.max_length
+    )
     choices = string.ascii_letters + string.digits
     return _random_str(choices, target_length)
 
@@ -89,3 +88,14 @@ def _random_timedelta_value() -> datetime.timedelta:
 def _random_str(choices: str, target_length: int) -> str:
     """Get a random string."""
     return "".join(random.choice(choices) for _ in range(target_length))
+
+
+def _get_target_length(min_length: int | None, max_length: int | None) -> int:
+    """Get a random target length."""
+    if not min_length:
+        if max_length is not None:
+            min_length = random.randint(0, max_length - 1)
+        else:
+            min_length = random.randint(0, 100)
+    max_length = max_length or random.randint(1, 100) + min_length
+    return random.choice(range(min_length, max_length))

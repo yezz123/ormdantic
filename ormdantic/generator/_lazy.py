@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import random
 import types
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from pydantic.fields import ModelField
 
 from ormdantic.handler import (
+    GetTargetLength,
     RandomDatetimeValue,
     RandomDateValue,
     RandomNumberValue,
@@ -86,12 +88,11 @@ def _get_value(
             ): _get_value(v_type, model_field, use_default_values, optionals_use_none)
             for _ in range(random.randint(1, 100))
         }
-    if origin is list:
-        return [
-            _get_value(arg, model_field, use_default_values, optionals_use_none)
-            for _ in range(random.randint(1, 100))
-            for arg in typing.get_args(type_)
-        ]
+    with contextlib.suppress(TypeError):
+        if origin is list or issubclass(type_, pydantic.types.ConstrainedList):
+            return _get_list_values(
+                type_, model_field, use_default_values, optionals_use_none
+            )
     if origin and issubclass(origin, types.UnionType):
         type_choices = [
             it for it in typing.get_args(type_) if not issubclass(it, types.NoneType)
@@ -123,3 +124,28 @@ def _get_value(
     if type_ == datetime.timedelta:
         return RandomTimedeltaValue()
     return RandomDatetimeValue() if type_ == datetime.datetime else type_()
+
+
+def _get_list_values(
+    type_: Type | pydantic.types.ConstrainedList,  # type: ignore
+    model_field: ModelField,
+    use_default_values: bool = True,
+    optionals_use_none: bool = False,
+) -> list[Any]:
+    target_length = GetTargetLength(
+        model_field.field_info.min_items, model_field.field_info.max_items
+    )
+    items: list = []  # type: ignore
+    if issubclass(type_, pydantic.types.ConstrainedList):  # type: ignore
+        list_types = typing.get_args(type_.item_type) or [
+            type_.item_type
+        ]  # pragma: no cover
+    else:
+        list_types = typing.get_args(type_)
+    while len(items) < target_length:
+        for arg in list_types:
+            value = _get_value(arg, model_field, use_default_values, optionals_use_none)
+            if model_field.field_info.unique_items and value in items:
+                continue  # pragma: no cover
+            items.append(value)
+    return items
