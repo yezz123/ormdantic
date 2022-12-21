@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import random
 import types
@@ -87,12 +88,11 @@ def _get_value(
             ): _get_value(v_type, model_field, use_default_values, optionals_use_none)
             for _ in range(random.randint(1, 100))
         }
-    if origin is list:
-        return [
-            _get_value(arg, model_field, use_default_values, optionals_use_none)
-            for _ in range(random.randint(1, 100))
-            for arg in typing.get_args(type_)
-        ]
+    with contextlib.suppress(TypeError):
+        if origin is list or issubclass(type_, pydantic.types.ConstrainedList):
+            return _get_list_values(
+                type_, model_field, use_default_values, optionals_use_none
+            )
     if origin and issubclass(origin, types.UnionType):
         type_choices = [
             it for it in typing.get_args(type_) if not issubclass(it, types.NoneType)
