@@ -137,13 +137,15 @@ def _get_list_values(
     )
     items: list = []  # type: ignore
     if issubclass(type_, pydantic.types.ConstrainedList):  # type: ignore
-        list_types = typing.get_args(type_.item_type) or [type_.item_type]
+        list_types = typing.get_args(type_.item_type) or [
+            type_.item_type
+        ]  # pragma: no cover
     else:
         list_types = typing.get_args(type_)
     while len(items) < target_length:
         for arg in list_types:
             value = _get_value(arg, model_field, use_default_values, optionals_use_none)
             if model_field.field_info.unique_items and value in items:
-                continue
+                continue  # pragma: no cover
             items.append(value)
     return items
