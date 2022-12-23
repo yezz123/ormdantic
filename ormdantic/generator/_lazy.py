@@ -20,7 +20,7 @@ from ormdantic.handler import (
     RandomTimedeltaValue,
     RandomTimeValue,
 )
-from ormdantic.types import ModelType
+from ormdantic.types import ModelType, default_max_length
 
 
 def generate(
@@ -79,6 +79,9 @@ def _get_value(
 
     If none of these conditions are met, the function returns a default value for the given type.
     """
+    if isinstance(type_, typing.ForwardRef):
+        # noinspection PyUnresolvedReferences
+        type_ = pydantic.typing.evaluate_forwardref(type_, None, None)
     origin = typing.get_origin(type_)
     if origin is dict:
         k_type, v_type = typing.get_args(type_)
@@ -86,7 +89,7 @@ def _get_value(
             _get_value(
                 k_type, model_field, use_default_values, optionals_use_none
             ): _get_value(v_type, model_field, use_default_values, optionals_use_none)
-            for _ in range(random.randint(1, 100))
+            for _ in range(random.randint(1, default_max_length))
         }
     with contextlib.suppress(TypeError):
         if origin is list or issubclass(type_, pydantic.types.ConstrainedList):
