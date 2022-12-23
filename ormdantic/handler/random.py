@@ -5,7 +5,7 @@ import string
 
 from pydantic.fields import ModelField
 
-from ormdantic.types import AnyNumber
+from ormdantic.types import AnyNumber, default_max_length
 
 
 def _random_str_value(model_field: ModelField) -> str:
@@ -96,6 +96,6 @@ def _get_target_length(min_length: int | None, max_length: int | None) -> int:
         if max_length is not None:
             min_length = random.randint(0, max_length - 1)
         else:
-            min_length = random.randint(0, 100)
-    max_length = max_length or random.randint(1, 100) + min_length
+            min_length = random.randint(0, default_max_length)
+    max_length = max_length or random.randint(1, default_max_length) + min_length
     return random.choice(range(min_length, max_length))

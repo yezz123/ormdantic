@@ -1,4 +1,5 @@
-"""Unit tests for model generator."""
+from __future__ import annotations
+
 import datetime
 import types
 from collections import OrderedDict
@@ -53,6 +54,14 @@ class Coffee(BaseModel):
     timedelta_field: datetime.timedelta
     datetime_field: datetime.datetime
     not_specifically_supported_type: OrderedDict  # type: ignore
+    forward_ref_field: ForwardRefClass | None
+
+
+class ForwardRefClass(BaseModel):
+    str_field: str
+
+
+Coffee.update_forward_refs()
 
 
 def test_validate() -> None:
