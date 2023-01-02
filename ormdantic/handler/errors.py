@@ -37,7 +37,12 @@ class MustUnionForeignKeyError(ConfigurationError):
     """Raised when a relation field doesn't allow for just foreign key."""
 
     def __init__(
-        self, table_a: str, table_b: str, field: str, model_b: Type, pk_type: Type  # type: ignore
+        self,
+        table_a: str,
+        table_b: str,
+        field: str,
+        model_b: Type,
+        pk_type: Type,  # type: ignore
     ) -> None:
         super().__init__(
             f'Relation defined on "{table_a}.{field}" to "{table_b}" must be a union'

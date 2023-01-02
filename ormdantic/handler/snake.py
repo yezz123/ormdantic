@@ -4,7 +4,7 @@ from typing import Union
 
 def snake(string: str) -> str:
     """Return a version of the string in `snake_case`` format."""
-    return "_".join(map(lambda w: w.lower(), get_words(string)))
+    return "_".join(w.lower() for w in get_words(string))
 
 
 def get_words(string: str) -> list[str]:
