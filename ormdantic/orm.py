@@ -114,7 +114,7 @@ class Ormdantic:
 
                 continue
             if get_origin(field.outer_type_) == list or field.type_ == ForwardRef(
-                f"list[{table_data.model.__name__}]"
+                f"{related_table.model.__name__}"
             ):
                 raise UndefinedBackReferenceError(
                     table_data.tablename, related_table.tablename, field_name
