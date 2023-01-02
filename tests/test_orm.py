@@ -175,8 +175,9 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         await database[Flavor].update(flavor)
         # Find the updated record.
         self.assertEqual(
-            flavor.name, (await database[Flavor].find_one(flavor.id)).name
-        )  # type: ignore
+            flavor.name,
+            (await database[Flavor].find_one(flavor.id)).name,  # type: ignore
+        )
 
     async def test_update_datetime(self) -> None:
         # Insert record.
@@ -188,8 +189,9 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         await database[Flavor].update(flavor)
         # Find the updated record.
         self.assertEqual(
-            flavor.expire, (await database[Flavor].find_one(flavor.id)).expire
-        )  # type: ignore
+            flavor.expire,
+            (await database[Flavor].find_one(flavor.id)).expire,  # type: ignore
+        )
 
     async def test_upsert(self) -> None:
         # Upsert record as insert.
@@ -237,5 +239,6 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         coffee_dict["primary_flavor"] = coffee_dict["primary_flavor"]["id"]
         coffee_dict["secondary_flavor"] = coffee_dict["secondary_flavor"]["id"]
         self.assertDictEqual(
-            coffee_dict, (await database[Coffee].find_one(coffee.id)).dict()
-        )  # type: ignore
+            coffee_dict,
+            (await database[Coffee].find_one(coffee.id)).dict(),  # type: ignore
+        )

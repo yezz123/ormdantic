@@ -41,7 +41,7 @@ class MustUnionForeignKeyError(ConfigurationError):
         table_a: str,
         table_b: str,
         field: str,
-        model_b: Type,
+        model_b: Type,  # type: ignore
         pk_type: Type,  # type: ignore
     ) -> None:
         super().__init__(
