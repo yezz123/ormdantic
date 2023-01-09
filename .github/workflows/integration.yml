@@ -83,7 +83,7 @@ jobs:
       - name: Integration Tests, MySQL
         run: bash scripts/integration.sh
         env:
-          DATABASE_URL: mysql://mysql:mysql@localhost:3306/mysql
+          DATABASE_URL: mysql+aiomysql://mysql:mysql@localhost:3306/mysql
 
   sqlite:
     runs-on: ubuntu-latest
