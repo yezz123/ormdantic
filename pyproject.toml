@@ -49,6 +49,7 @@ postgresql = [
 ]
 mysql = [
     "aiomysql",
+    "mysqlclient"
 ]
 lint = [
     "pre-commit==2.21.0",
