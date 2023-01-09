@@ -55,7 +55,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11"]
-        mysql-version: ["8.0", "8.1"]
+        mysql-version: ["8.0"]
 
     # Service containers to run with `container-job`
     services:
