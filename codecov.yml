@@ -5,3 +5,6 @@ coverage:
         # basic
         target: auto
         threshold: 100%
+
+ignore:
+    - "tests/integration/demo.py"

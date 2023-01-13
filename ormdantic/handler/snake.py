@@ -4,7 +4,7 @@ from typing import Union
 
 def snake(string: str) -> str:
     """Return a version of the string in `snake_case`` format."""
-    return "_".join(map(lambda w: w.lower(), get_words(string)))
+    return "_".join(w.lower() for w in get_words(string))
 
 
 def get_words(string: str) -> list[str]:
@@ -19,7 +19,9 @@ def get_words(string: str) -> list[str]:
     return words
 
 
-def _split_words_on_regex(words: list[str], regex: Union[re.Pattern, str]) -> list[str]:  # type: ignore
+def _split_words_on_regex(
+    words: list[str], regex: Union[re.Pattern, str]  # type: ignore
+) -> list[str]:
     """Split a list of words on a regex, returning the split words."""
     words = words.copy()
     for i, word in enumerate(words):

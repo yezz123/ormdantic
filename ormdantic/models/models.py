@@ -22,7 +22,11 @@ class Relationship(BaseModel):
 
 
 class OrmTable(GenericModel, Generic[ModelType]):
-    """Class to store table information, including relationships and back references for many-to-many relationships."""
+    """
+    Class to store table information,
+    including relationships,
+    back references for many-to-many relationships.
+    """
 
     model: Type[ModelType]
     tablename: str

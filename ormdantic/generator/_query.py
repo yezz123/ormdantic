@@ -46,8 +46,10 @@ class OrmQuery:
         )
         return self._query
 
-    def get_patch_queries(self) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
-        """pass"""
+    def get_patch_queries(  # type: ignore
+        self,
+    ) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
+        """Get queries to patch model tree."""
 
     def _get_inserts_or_upserts(
         self, is_upsert: bool

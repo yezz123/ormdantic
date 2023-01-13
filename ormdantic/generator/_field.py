@@ -2,6 +2,7 @@
 from typing import Any
 
 from pypika import Field, Order
+from pypika.functions import Count
 from pypika.queries import Query, QueryBuilder, Table
 
 from ormdantic.handler import py_type_to_sql
@@ -80,6 +81,28 @@ class OrmField:
         """
         return self._query.where(self._table.field(self._table_data.pk) == pk).delete()
 
+    def get_count_query(
+        self,
+        where: dict[str, Any] | None,
+        depth: int,
+    ) -> QueryBuilder:
+        """Get a `count` query.
+
+        :param where: Dictionary of column name to desired value.
+        :param depth: Depth of relations to populate.
+        :return: Query to count records.
+        """
+        where = where or {}
+        query, columns = self._build_joins(
+            Query.from_(self._table),
+            self._table_data,
+            depth,
+            self._columns(depth),
+        )
+        for field, value in where.items():
+            query = query.where(self._table.field(field) == value)
+        return query.select(Count("*"))
+
     def _build_joins(
         self,
         query: QueryBuilder,
@@ -125,7 +148,7 @@ class OrmField:
                     for c in self._table_map.name_to_data[
                         relation.foreign_table
                     ].columns
-                    if not (depth > 0 and c in rel_table_data.relationships)
+                    if depth <= 0 or c not in rel_table_data.relationships
                 ]
             )
 

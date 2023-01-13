@@ -1,13 +1,17 @@
 [build-system]
-requires = ["flit"]
-build-backend = "flit.buildapi"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.flit.metadata]
-module = "ormdantic"
-dist-name = "ormdantic"
-author = "Yasser Tahiri"
-author-email = "hello@yezz.me"
-home-page = "https://github.com/yezz123/ormdantic"
+[project]
+name = "ormdantic"
+description = "asynchronous ORM that uses pydantic models to represent database tables"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Yasser Tahiri", email = "hello@yezz.me" },
+]
+
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -15,20 +19,27 @@ classifiers = [
     "Framework :: AsyncIO",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Internet :: WWW/HTTP :: Session",
     "Typing :: Typed",
 ]
-description-file = "README.md"
-requires-python = ">=3.10"
-requires = [
-    "typing-extensions >=3.7.4,<4.3.0",
+
+dependencies = [
+    "typing-extensions >=3.7.4,<4.5.0",
     "pydantic >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0",
     "sqlalchemy[asyncio] >=1.3.18,<1.5.0",
     "PyPika ==0.48.9"
 ]
 
-[tool.flit.metadata.requires-extra]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/yezz123/ormdantic"
+Documentation = "https://ormdantic.yezz.me/"
+Funding = 'https://github.com/sponsors/yezz123'
+
+[project.optional-dependencies]
 sqlite = [
     "aiosqlite",
 ]
@@ -40,27 +51,51 @@ mysql = [
     "aiomysql",
 ]
 lint = [
-    "pre-commit==2.19.0",
-    "mypy==0.931",
+    "pre-commit==2.21.0",
+    "mypy==0.991",
 ]
 test = [
-    "pytest==7.1.2",
-    "pytest-asyncio == 0.18.3",
+    "pytest==7.2.0",
+    "pytest-asyncio == 0.20.3",
     "codecov==2.1.12",
-    "pytest-cov==3.0.0",
+    "pytest-cov==4.0.0",
     "python-decouple",
 ]
 docs = [
     "mkdocs >=1.1.2,<2.0.0",
-    "mkdocs-material >=8.1.4,<9.0.0",
+    "mkdocs-material >=8.1.4,<10.0.0",
     "mdx-include >=1.4.1,<2.0.0",
     "mkdocs-markdownextradata-plugin >=0.1.7,<0.3.0",
-    "mkdocs-mermaid2-plugin==0.5.2",
-    "markdown-include==0.6.0",
-    "pymdown-extensions==9.1",
-    "jinja2==3.0.3"
+    "mkdocs-mermaid2-plugin==0.6.0",
+    "markdown-include==0.8.0",
+    "pymdown-extensions==9.9.1",
+    "jinja2==3.1.2"
 ]
 
-[tool.flit.metadata.urls]
-Documentation = "https://ormdantic.yezz.me/"
-Source = "https://github.com/yezz123/ormdantic"
+[tool.hatch.version]
+path = "ormdantic/__init__.py"
+
+[tool.isort]
+profile = "black"
+known_third_party = ["pydantic", "sqlalchemy", "typing_extensions"]
+
+[tool.ruff]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.isort]
+known-third-party = ["pydantic", "sqlalchemy", "typing_extensions"]

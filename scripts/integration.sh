@@ -6,4 +6,4 @@ set -x
 echo "ENV=${ENV}"
 
 export PYTHONPATH=.
-pytest --cov=ormdantic --cov=tests --cov-report=html
+python3 tests/integration/demo.py
