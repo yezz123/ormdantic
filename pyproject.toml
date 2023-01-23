@@ -17,6 +17,8 @@ classifiers = [
     "Operating System :: OS Independent",
     "Intended Audience :: Developers",
     "Framework :: AsyncIO",
+    "Framework :: Pydantic",
+    "Framework :: Pydantic :: 1",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
