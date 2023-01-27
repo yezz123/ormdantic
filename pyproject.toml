@@ -51,7 +51,7 @@ mysql = [
     "aiomysql",
 ]
 lint = [
-    "pre-commit==3.0.0",
+    "pre-commit==3.0.1",
     "mypy==0.991",
 ]
 test = [
