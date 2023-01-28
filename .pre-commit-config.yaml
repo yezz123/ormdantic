@@ -19,22 +19,16 @@ repos:
         - --py3-plus
         - --keep-runtime-typing
 -   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.0.227
+    rev: v0.0.236
     hooks:
     -   id: ruff
         args:
         - --fix
 -   repo: https://github.com/pycqa/isort
-    rev: 5.11.4
+    rev: 5.12.0
     hooks:
     -   id: isort
         name: isort (python)
-    -   id: isort
-        name: isort (cython)
-        types: [cython]
-    -   id: isort
-        name: isort (pyi)
-        types: [pyi]
 -   repo: https://github.com/psf/black
     rev: 22.12.0
     hooks:
