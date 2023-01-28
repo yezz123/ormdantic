@@ -133,7 +133,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def _execute_query(self, query: QueryBuilder) -> Any:
         async_session = sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
-        )
+        )  # type: ignore
         async with async_session() as session:
             async with session.begin():
                 result = await session.execute(text(str(query)))
