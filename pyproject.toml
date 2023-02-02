@@ -60,7 +60,7 @@ test = [
     "codecov==2.1.12",
     "pytest-cov==4.0.0",
     "python-decouple",
-    "pytest-pretty==1.0.1"
+    "pytest-pretty==1.1.0"
 ]
 docs = [
     "mkdocs >=1.1.2,<2.0.0",
