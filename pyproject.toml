@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "ormdantic"
 description = "asynchronous ORM that uses pydantic models to represent database tables"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.7"
 license = "MIT"
 authors = [
     { name = "Yasser Tahiri", email = "hello@yezz.me" },
@@ -20,6 +20,9 @@ classifiers = [
     "Framework :: Pydantic",
     "Framework :: Pydantic :: 1",
     "Programming Language :: Python",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3 :: Only",
