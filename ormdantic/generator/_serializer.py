@@ -50,7 +50,7 @@ class OrmSerializer(Generic[SerializedType]):
                 )
             },
         )
-        self._columns = [it[0] for it in self._result_set.cursor.description]  # type: ignore
+        self._columns = [it[0] for it in self._result_set.cursor.description]
         self._return_dict: dict[str, Any] = {}
 
     def deserialize(self) -> SerializedType:
