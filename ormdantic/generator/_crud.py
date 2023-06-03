@@ -25,7 +25,6 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table_map: Map,
         engine: AsyncEngine,
     ) -> None:
-
         self._engine = engine
         self._table_map = table_map
         self._table_data = table_data
@@ -133,7 +132,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
     async def _execute_query(self, query: QueryBuilder) -> Any:
         async_session = sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
-        )  # type: ignore
+        )
         async with async_session() as session:
             async with session.begin():
                 result = await session.execute(text(str(query)))

@@ -59,7 +59,7 @@ class PydanticSQLTableGenerator:
 
     def _get_columns(
         self, table_data: OrmTable  # type: ignore
-    ) -> tuple[Column[Any] | Column, ...]:  # type: ignore
+    ) -> tuple[Column[Any] | Column, ...]:
         columns = []
         for field_name, field in table_data.model.__fields__.items():
             kwargs = {
@@ -77,7 +77,7 @@ class PydanticSQLTableGenerator:
 
     def _get_column(
         self, field_name: str, field: ModelField, **kwargs: Any
-    ) -> Column | None:  # type: ignore
+    ) -> Column | None:
         outer_origin = get_origin(field.outer_type_)
         origin = get_origin(field.type_)
         if outer_origin and outer_origin == list:
@@ -95,7 +95,7 @@ class PydanticSQLTableGenerator:
             col_type = (
                 postgresql.UUID if self._engine.name == "postgres" else String(36)
             )
-            return Column(field_name, col_type, **kwargs)  # type: ignore
+            return Column(field_name, col_type, **kwargs)
         if issubclass(field.type_, BaseModel):
             return Column(field_name, JSON, **kwargs)
         if issubclass(field.type_, str):
@@ -118,7 +118,7 @@ class PydanticSQLTableGenerator:
 
     def _get_column_from_type_args(
         self, field_name: str, field: ModelField, **kwargs: Any
-    ) -> Column | None:  # type: ignore
+    ) -> Column | None:
         for arg in get_args(field.type_):
             if arg in [it.model for it in self._table_map.name_to_data.values()]:
                 foreign_table = TableName_From_Model(arg, self._table_map)

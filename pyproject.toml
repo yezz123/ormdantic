@@ -11,11 +11,19 @@ license = "MIT"
 authors = [
     { name = "Yasser Tahiri", email = "hello@yezz.me" },
 ]
+keywords = [
+    "orm",
+    "sqlalchemy",
+    "pydantic",
+    "asyncio",
+]
 
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "Framework :: AsyncIO",
     "Framework :: Pydantic",
     "Framework :: Pydantic :: 1",
@@ -31,11 +39,14 @@ classifiers = [
 dependencies = [
     "typing-extensions >=3.7.4,<4.7.0",
     "pydantic >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0",
-    "sqlalchemy[asyncio] >=1.3.18,<2.1.0",
+    "sqlalchemy[asyncio]>=1.3.18,<2.0.0",
     "PyPika ==0.48.9"
 ]
 
 dynamic = ["version"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [project.urls]
 Homepage = "https://github.com/yezz123/ormdantic"
@@ -49,9 +60,6 @@ sqlite = [
 postgresql = [
     "psycopg2-binary",
     "asyncpg"
-]
-mysql = [
-    "aiomysql",
 ]
 lint = [
     "pre-commit==3.3.2",
@@ -103,6 +111,16 @@ ignore = [
 [tool.ruff.isort]
 known-third-party = ["pydantic", "sqlalchemy", "typing_extensions"]
 
+[tool.coverage.run]
+source = ["ormdantic"]
+branch = true
+context = '${CONTEXT}'
+
+[tool.coverage.paths]
+source = [
+    "ormdantic",
+]
+
 [tool.mypy]
 plugins = "pydantic.mypy"
 follow_imports = "silent"
@@ -113,6 +131,12 @@ disallow_any_generics = true
 check_untyped_defs = true
 ignore_missing_imports = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    'dotenv.*',
+]
+ignore_missing_imports = true
 
 [tool.coverage.report]
 precision = 2
@@ -125,8 +149,8 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 ]
 
-[tool.pytest]
-testpaths = "tests/"
+[tool.pytest.ini_options]
+testpaths = 'tests'
 log_cli = "1"
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"

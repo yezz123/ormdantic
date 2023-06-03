@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-<a href="https://github.com/yezz123/ormdantic/actions/workflows/test.yml" target="_blank">
-    <img src="https://github.com/yezz123/ormdantic/actions/workflows/test.yml/badge.svg" alt="Test">
+<a href="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml" target="_blank">
+    <img src="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml/badge.svg" alt="Test">
 </a>
 <a href="https://codecov.io/gh/yezz123/ormdantic">
     <img src="https://codecov.io/gh/yezz123/ormdantic/branch/main/graph/badge.svg"/>
@@ -55,9 +55,6 @@ Successfully installed Ormdantic
 * Install The specific Asynchronous ORM library for your database.
 
 ```shell
-# MySQL
-$ pip install ormdantic[mysql]
-
 # PostgreSQL
 $ pip install ormdantic[postgres]
 

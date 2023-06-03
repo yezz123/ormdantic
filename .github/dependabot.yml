@@ -5,17 +5,13 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
-    reviewers:
-    - yezz123
+      interval: "weekly"
     commit-message:
       prefix: ⬆
   # Python
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "daily"
-    reviewers:
-    - yezz123
+      interval: "weekly"
     commit-message:
       prefix: ⬆
