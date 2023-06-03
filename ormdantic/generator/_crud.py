@@ -25,7 +25,6 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table_map: Map,
         engine: AsyncEngine,
     ) -> None:
-
         self._engine = engine
         self._table_map = table_map
         self._table_data = table_data
