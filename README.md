@@ -55,9 +55,6 @@ Successfully installed Ormdantic
 * Install The specific Asynchronous ORM library for your database.
 
 ```shell
-# MySQL
-$ pip install ormdantic[mysql]
-
 # PostgreSQL
 $ pip install ormdantic[postgres]
 

@@ -18,12 +18,6 @@ Successfully installed Ormdantic
 
 * Install The specific Asynchronous ORM library for your database.
 
-### MySQL
-
-```shell
-$ pip install ormdantic[mysql]
-```
-
 ### SQLite
 
 ```shell
