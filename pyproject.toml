@@ -63,17 +63,10 @@ postgresql = [
 ]
 lint = [
     "pre-commit==3.3.3",
-<<<<<<< HEAD
     "mypy==1.4.1",
 ]
 test = [
     "pytest==7.4.0",
-=======
-    "mypy==1.3.0",
-]
-test = [
-    "pytest==7.3.2",
->>>>>>> a53dcd4 (⬆ Update pydantic requirement from !=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0,>=1.6.2 to >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<3.0.0 (#137))
     "pytest-asyncio == 0.21.0",
     "pytest-cov==4.1.0",
     "python-decouple",
