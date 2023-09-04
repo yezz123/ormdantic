@@ -79,7 +79,7 @@ docs = [
     "mkdocs-markdownextradata-plugin >=0.1.7,<0.3.0",
     "mkdocs-mermaid2-plugin==1.0.6",
     "markdown-include==0.8.1",
-    "pymdown-extensions==10.0.1",
+    "pymdown-extensions==10.3",
     "jinja2==3.1.2"
 ]
 
