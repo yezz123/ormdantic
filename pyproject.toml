@@ -64,7 +64,7 @@ postgresql = [
 ]
 lint = [
     "pre-commit==3.5.0",
-    "mypy==1.6.1",
+    "mypy==1.7.1",
 ]
 test = [
     "pytest==7.4.3",
