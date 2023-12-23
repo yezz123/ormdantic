@@ -65,7 +65,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: pip install -e .[sqlite,test]
-      
+
       - name: Freeze Dependencies
         run: pip freeze
 
