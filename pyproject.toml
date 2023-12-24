@@ -112,6 +112,9 @@ ignore = [
 [tool.ruff.isort]
 known-third-party = ["pydantic", "sqlalchemy", "typing_extensions"]
 
+[tool.ruff.pyupgrade]
+keep-runtime-typing = true
+
 [tool.coverage.run]
 source = ["ormdantic"]
 branch = true

@@ -58,7 +58,8 @@ class PydanticSQLTableGenerator:
             await conn.run_sync(self._metadata.create_all)
 
     def _get_columns(
-        self, table_data: OrmTable  # type: ignore
+        self,
+        table_data: OrmTable,  # type: ignore
     ) -> tuple[Column[Any] | Column, ...]:
         columns = []
         for field_name, field in table_data.model.__fields__.items():
