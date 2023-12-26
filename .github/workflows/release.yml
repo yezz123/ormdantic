@@ -21,7 +21,7 @@ jobs:
       - name: Install build dependencies
         run: pip install build
       - name: check GITHUB_REF matches package version
-        uses: samuelcolvin/check-python-version@v3.1
+        uses: samuelcolvin/check-python-version@v4.1
         with:
           version_file_path: ormdantic/__init__.py
       - name: Build distribution
