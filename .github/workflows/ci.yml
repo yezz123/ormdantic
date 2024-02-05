@@ -70,7 +70,7 @@ jobs:
       - name: Upload coverage
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
 
   postgres:
     name: test on python ${{ matrix.python-version }} with postgres ${{ matrix.postgres-version }}
