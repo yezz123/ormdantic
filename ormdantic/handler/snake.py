@@ -20,7 +20,8 @@ def get_words(string: str) -> list[str]:
 
 
 def _split_words_on_regex(
-    words: list[str], regex: Union[re.Pattern, str]  # type: ignore
+    words: list[str],
+    regex: Union[re.Pattern, str],  # type: ignore
 ) -> list[str]:
     """Split a list of words on a regex, returning the split words."""
     words = words.copy()

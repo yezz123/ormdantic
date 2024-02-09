@@ -15,9 +15,9 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Dependencies
@@ -29,39 +29,48 @@ jobs:
         run: bash scripts/lint.sh
 
   tests:
-    name: test on python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+
+    name: test py${{ matrix.python-version }} on ${{ matrix.os }}
+
+    runs-on: ${{ matrix.os }}-latest
+
+
     strategy:
+
       matrix:
-        python-version: ["3.10", "3.11"]
+
+        python-version: ["3.10", "3.11", "3.12"]
+
+        os: [ubuntu, macos, windows]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v3
-        id: cache
-        with:
-          path: ${{ env.pythonLocation }}
-          key: ${{ runner.os }}-python-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml') }}-test-v02
+
       - name: Install SQLAlchemy version 1.4.42
         run: |
           python -m pip install --upgrade pip
           pip install SQLAlchemy==1.4.42
+
       - name: Install Dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
         run: pip install -e .[sqlite,test]
+
+      - name: Freeze Dependencies
+        run: pip freeze
+
       - name: Test with pytest
         run: bash scripts/test.sh
         env:
           DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
+
       - name: Upload coverage
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
 
   postgres:
     name: test on python ${{ matrix.python-version }} with postgres ${{ matrix.postgres-version }}
@@ -69,7 +78,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.10", "3.11", "3.12"]
         postgres-version: [14]
 
     # Service containers to run with `container-job`
@@ -93,9 +102,9 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Dependencies
@@ -111,22 +120,20 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v4
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v3
-        id: cache
-        with:
-          path: ${{ env.pythonLocation }}
-          key: ${{ runner.os }}-python-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml') }}-test
+
       - name: Install Dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
         run: pip install -e .[sqlite,test]
+
       - name: Integration Tests, SQLite
         run: bash scripts/integration.sh
         env:

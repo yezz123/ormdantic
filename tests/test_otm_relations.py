@@ -76,5 +76,6 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         many_a_idx_zero = await database[Many].find_one(many_a[0].id, depth=3)
         many_a_idx_zero.one_a.many_a.sort(key=lambda x: x.id)  # type: ignore
         self.assertDictEqual(
-            find_one_a.dict(), many_a_idx_zero.one_a.dict()  # type: ignore
+            find_one_a.dict(),
+            many_a_idx_zero.one_a.dict(),  # type: ignore
         )
