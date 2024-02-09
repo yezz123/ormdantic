@@ -68,7 +68,7 @@ lint = [
 ]
 test = [
     "pytest==7.4.4",
-    "pytest-asyncio == 0.23.3",
+    "pytest-asyncio == 0.23.4",
     "pytest-cov==4.1.0",
     "python-decouple",
     "pytest-pretty==1.2.0"
