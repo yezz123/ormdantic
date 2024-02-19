@@ -63,7 +63,7 @@ postgresql = [
     "asyncpg"
 ]
 lint = [
-    "pre-commit==3.6.1",
+    "pre-commit==3.6.2",
     "mypy==1.8.0",
 ]
 test = [
