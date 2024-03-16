@@ -4,12 +4,11 @@ import random
 import types
 import typing
 from enum import Enum
-from typing import Any, Type
+from typing import Any, List, Type, get_args
 from uuid import UUID, uuid4
 
 import pydantic
-from pydantic import BaseModel
-from pydantic.fields import ModelField
+from pydantic import BaseModel, Field
 
 from ormdantic.handler import (
     GetTargetLength,
@@ -40,7 +39,7 @@ def generate(
     If none of these conditions are met, the function calls the `_get_value` function to generate a random value for the field based on its type annotation.
     Finally, the function returns a new instance of the model type with the generated or provided field values.
     """
-    for field_name, model_field in model_type.__fields__.items():
+    for field_name, model_field in model_type.model_fields.items():
         if field_name in kwargs:
             continue
         if (
@@ -56,7 +55,7 @@ def generate(
 
 def _get_value(
     type_: Type,  # type: ignore
-    model_field: ModelField,
+    model_field: Field,
     use_default_values: bool,
     optionals_use_none: bool,
 ) -> Any:
@@ -92,7 +91,7 @@ def _get_value(
             for _ in range(random.randint(1, default_max_length))
         }
     with contextlib.suppress(TypeError):
-        if origin is list or issubclass(type_, pydantic.types.ConstrainedList):
+        if origin is list:
             return _get_list_values(
                 type_, model_field, use_default_values, optionals_use_none
             )
@@ -130,25 +129,18 @@ def _get_value(
 
 
 def _get_list_values(
-    type_: Type | pydantic.types.ConstrainedList,  # type: ignore
-    model_field: ModelField,
+    type_: Type,  # type: ignore
+    model_field: Field,
     use_default_values: bool = True,
     optionals_use_none: bool = False,
-) -> list[Any]:
-    target_length = GetTargetLength(
-        model_field.field_info.min_items, model_field.field_info.max_items
-    )
-    items: list = []  # type: ignore
-    if issubclass(type_, pydantic.types.ConstrainedList):  # type: ignore
-        list_types = typing.get_args(type_.item_type) or [
-            type_.item_type
-        ]  # pragma: no cover
-    else:
-        list_types = typing.get_args(type_)
+) -> List[Any]:
+    target_length = GetTargetLength(model_field.min_items, model_field.max_items)
+    items: List[Any] = []
+    list_types = get_args(type_)
     while len(items) < target_length:
         for arg in list_types:
             value = _get_value(arg, model_field, use_default_values, optionals_use_none)
-            if model_field.field_info.unique_items and value in items:
+            if model_field.unique_items and value in items:
                 continue  # pragma: no cover
             items.append(value)
     return items

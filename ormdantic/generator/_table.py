@@ -4,8 +4,7 @@ from datetime import date, datetime
 from types import UnionType
 from typing import Any, get_args, get_origin
 
-from pydantic import BaseModel
-from pydantic.fields import ModelField
+from pydantic import BaseModel, Field
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -77,10 +76,10 @@ class PydanticSQLTableGenerator:
         return tuple(columns)
 
     def _get_column(
-        self, field_name: str, field: ModelField, **kwargs: Any
+        self, field_name: str, field: Field, **kwargs: Any
     ) -> Column | None:
         outer_origin = get_origin(field.outer_type_)
-        origin = get_origin(field.type_)
+        origin = get_origin(field)
         if outer_origin and outer_origin == list:
             return self._get_column_from_type_args(
                 field_name, field, **kwargs
@@ -118,7 +117,7 @@ class PydanticSQLTableGenerator:
         return Column(field_name, JSON, **kwargs)
 
     def _get_column_from_type_args(
-        self, field_name: str, field: ModelField, **kwargs: Any
+        self, field_name: str, field: Field, **kwargs: Any
     ) -> Column | None:
         for arg in get_args(field.type_):
             if arg in [it.model for it in self._table_map.name_to_data.values()]:

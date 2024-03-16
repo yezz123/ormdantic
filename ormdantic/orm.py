@@ -1,8 +1,8 @@
 """Module providing a way to create ORM models and schemas"""
 from types import UnionType
-from typing import Callable, ForwardRef, Type, get_args, get_origin
+from typing import Callable, ForwardRef, Type, Union, get_args, get_origin
 
-from pydantic.fields import ModelField
+from pydantic import Field
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -140,10 +140,12 @@ class Ormdantic:
 
         return relationships
 
-    def _get_related_table(self, field: ModelField) -> OrmTable | None:  # type: ignore
+    def _get_related_table(self, field: Field) -> OrmTable | None:  # type: ignore
         related_table: OrmTable | None = None  # type: ignore
-        # Try to get foreign model from union.
-        if args := get_args(field.type_):
+        # Access origin type for unions and get origin model
+        origin = field.type_.__origin__  # Get the origin type for unions
+        if origin is Union:
+            args = get_args(field.type_)  # Get arguments of the union
             for arg in args:
                 try:
                     related_table = self._table_map.model_to_data.get(arg)
@@ -151,8 +153,12 @@ class Ormdantic:
                     break
                 if related_table is not None:
                     break
-        # Try to get foreign table from type.
-        return related_table or self._table_map.model_to_data.get(field.type_)
+
+        # If not found in union args, try the direct type
+        if related_table is None:
+            related_table = self._table_map.model_to_data.get(field.type_)
+
+        return related_table
 
     @staticmethod
     def _get_many_relationship(
