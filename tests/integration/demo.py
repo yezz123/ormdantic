@@ -23,7 +23,7 @@ class Coffee(BaseModel):
     """Drink it in the morning."""
 
     id: UUID = Field(default_factory=uuid4)
-    sweetener: str | None = Field(max_length=63)
+    sweetener: str | None = Field(None, max_length=63)
     sweetener_count: int | None = None
     flavor: Flavor | UUID
 

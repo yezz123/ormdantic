@@ -3,49 +3,43 @@ import math
 import random
 import string
 
-from pydantic.fields import ModelField
+from pydantic import Field
 
 from ormdantic.types import AnyNumber, default_max_length
 
 
-def _random_str_value(model_field: ModelField) -> str:
+def _random_str_value(model_field: Field) -> str:
     """Get a random string."""
-    target_length = _get_target_length(
-        model_field.field_info.min_length, model_field.field_info.max_length
-    )
+    target_length = _get_target_length(model_field.min_length, model_field.max_length)
     choices = string.ascii_letters + string.digits
     return _random_str(choices, target_length)
 
 
-def _random_number_value(model_field: ModelField) -> AnyNumber:
+def _random_number_value(model_field: Field) -> AnyNumber:
     """Get a random number."""
     default_max_difference = 256
-    iter_size = model_field.field_info.multiple_of or 1
+    iter_size = model_field.multiple_of or 1
     # Determine lower bound.
     lower = 0
-    if ge := model_field.field_info.ge:
+    if ge := model_field.ge:
         while lower < ge:
             lower += iter_size
-    if gt := model_field.field_info.gt:
+    if gt := model_field.gt:
         while lower <= gt:
             lower += iter_size
     # Determine upper bound.
     upper = lower + iter_size * default_max_difference
-    if le := model_field.field_info.le:
+    if le := model_field.le:
         while upper > le:
             upper -= iter_size
-    if lt := model_field.field_info.lt:
+    if lt := model_field.lt:
         while upper >= lt:
             upper -= iter_size
     # Ensure lower bound is not greater than upper bound.
-    if (
-        not model_field.field_info.ge
-        and not model_field.field_info.gt
-        and lower > upper
-    ):
+    if not model_field.ge and not model_field.gt and lower > upper:
         lower = upper - iter_size * default_max_difference
     # Ensure upper bound is not less than lower bound.
-    if not model_field.field_info.multiple_of:
+    if not model_field.multiple_of:
         return random.randint(lower, upper)
     max_iter_distance = abs(math.floor((upper - lower) / iter_size))
     return lower + iter_size * random.randint(1, max_iter_distance)

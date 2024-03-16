@@ -153,14 +153,14 @@ class OrmSerializer(Generic[SerializedType]):
 
     @staticmethod
     def _sql_type_to_py(model_type: type[ModelType], column: str, value: Any) -> Any:
-        if model_type.__fields__[column].type_ == dict:
+        if model_type.model_fields[column].type_ == dict:
             return {} if value is None else json.loads(value)
-        if model_type.__fields__[column].type_ == list:
+        if model_type.model_fields[column].type_ == list:
             return [] if value is None else json.loads(value)
         if value is None:
             return None
-        if get_args(model_type.__fields__[column].type_):
-            for arg in get_args(model_type.__fields__[column].type_):
+        if get_args(model_type.model_fields[column].type_):
+            for arg in get_args(model_type.model_fields[column].type_):
                 if arg is NoneType:
                     continue
                 try:
@@ -168,7 +168,7 @@ class OrmSerializer(Generic[SerializedType]):
                 except (AttributeError, TypeError):
                     continue
         try:
-            if issubclass(model_type.__fields__[column].type_, BaseModel):
+            if issubclass(model_type.model_fields[column].type_, BaseModel):
                 return json.loads(value)
         except TypeError:
             return value

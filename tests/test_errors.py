@@ -33,7 +33,7 @@ class UndefinedBackreference(BaseModel):
     """Missing explicit back-reference to raise exception."""
 
     id: UUID = Field(default_factory=uuid4)
-    self_ref: list[UndefinedBackreference | UUID] | None
+    self_ref: list[UndefinedBackreference | UUID] | None = None
 
 
 @db_2.table(pk="id", back_references={"other": "other"})
@@ -41,7 +41,7 @@ class MismatchedBackreferenceA(BaseModel):
     """Type of back-reference for "other" is not this model."""
 
     id: UUID = Field(default_factory=uuid4)
-    other: list[MismatchedBackreferenceB] | None
+    other: list[MismatchedBackreferenceB] | None = None
 
 
 @db_2.table(pk="id", back_references={"other": "other"})
@@ -49,7 +49,7 @@ class MismatchedBackreferenceB(BaseModel):
     """Type of back-reference for "other" is this model."""
 
     id: UUID = Field(default_factory=uuid4)
-    other: list[MismatchedBackreferenceB] | None
+    other: list[MismatchedBackreferenceB] | None = None
 
 
 @db_3.table(pk="id")
