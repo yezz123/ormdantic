@@ -50,7 +50,7 @@ class Coffee(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     primary_flavor: Flavor | UUID
-    secondary_flavor: Flavor | UUID | None
+    secondary_flavor: Flavor | UUID | None = None
     sweetener: str
     cream: float
     place: dict  # type: ignore

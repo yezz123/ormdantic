@@ -28,7 +28,7 @@ class Coffee(BaseModel):
     """Test model."""
 
     id: UUID = Field(default_factory=uuid4)
-    description: str | None
+    description: str | None = None
     cream: bool
     sweetener: int
     flavor: Flavor
@@ -54,7 +54,7 @@ class Coffee(BaseModel):
     timedelta_field: datetime.timedelta
     datetime_field: datetime.datetime
     not_specifically_supported_type: OrderedDict  # type: ignore
-    forward_ref_field: ForwardRefClass | None
+    forward_ref_field: ForwardRefClass | None = None
 
 
 class ForwardRefClass(BaseModel):
