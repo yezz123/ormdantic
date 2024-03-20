@@ -1,4 +1,5 @@
 """Module for building queries from field data."""
+
 from typing import Any
 
 from pypika import Field, Order

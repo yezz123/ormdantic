@@ -1,4 +1,5 @@
 """Utility functions used throughout the project."""
+
 import json
 from typing import Any, Type
 from uuid import UUID
