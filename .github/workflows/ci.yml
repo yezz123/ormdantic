@@ -20,11 +20,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Dependencies
-        run: pip install -e .[lint]
-      - uses: pre-commit/action@v3.0.1
+      - name: setup uv
+        uses: yezz123/setup-uv@v4
         with:
-          extra_args: --all-files --verbose
+          uv-version: "0.1.22"
+          uv-venv: ".venv"
+      - name: Install Dependencies
+        run: uv pip install -e .[lint]
+      - name: Run Pre-commit
+        run: bash scripts/format.sh
       - name: check Static Analysis
         run: bash scripts/lint.sh
 
@@ -50,17 +54,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: setup uv
+        uses: yezz123/setup-uv@v4
+        with:
+          uv-version: "0.1.22"
+          uv-venv: ".venv"
 
       - name: Install SQLAlchemy version 1.4.42
         run: |
-          python -m pip install --upgrade pip
-          pip install SQLAlchemy==1.4.42
+          uv pip install SQLAlchemy==1.4.42
 
       - name: Install Dependencies
-        run: pip install -e .[sqlite,test]
+        run: uv pip install -e .[sqlite,test]
 
       - name: Freeze Dependencies
-        run: pip freeze
+        run: uv pip freeze
 
       - name: Test with pytest
         run: bash scripts/test.sh
@@ -107,8 +115,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: setup uv
+        uses: yezz123/setup-uv@v4
+        with:
+          uv-version: "0.1.22"
+          uv-venv: ".venv"
       - name: Install Dependencies
-        run: pip install -e .[postgresql,test]
+        run: uv pip install -e .[postgresql,test]
       - name: Integration Tests, Postgres
         run: bash scripts/integration.sh
         env:
@@ -131,8 +144,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: setup uv
+        uses: yezz123/setup-uv@v4
+        with:
+          uv-version: "0.1.22"
+          uv-venv: ".venv"
+
       - name: Install Dependencies
-        run: pip install -e .[sqlite,test]
+        run: uv pip install -e .[sqlite,test]
 
       - name: Integration Tests, SQLite
         run: bash scripts/integration.sh
