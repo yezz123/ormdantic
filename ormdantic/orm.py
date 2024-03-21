@@ -1,4 +1,5 @@
 """Module providing a way to create ORM models and schemas"""
+
 from types import UnionType
 from typing import Callable, ForwardRef, Type, get_args, get_origin
 

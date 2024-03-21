@@ -1,6 +1,5 @@
 """Handle table interactions for a model."""
 
-
 from typing import Any, Generic
 
 from pypika import Order

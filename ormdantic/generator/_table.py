@@ -1,4 +1,5 @@
 """Module providing PydanticSQLTableGenerator."""
+
 import uuid
 from datetime import date, datetime
 from types import UnionType
