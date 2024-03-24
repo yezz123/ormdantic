@@ -1,0 +1,19 @@
+mkdocs
+mkdocs-material
+mdx-include
+mkdocs-markdownextradata-plugin
+mkdocs-mermaid2-plugin
+markdown-include
+pymdown-extensions
+jinja2
+typer-cli
+typer
+pyyaml
+# For image processing by Material for MkDocs
+pillow
+# For image processing by Material for MkDocs
+cairosvg
+mkdocstrings[python]
+griffe-typingdoc==0.2.5
+httpx
+starlette==0.36.3
