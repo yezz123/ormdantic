@@ -102,7 +102,9 @@ context = '${CONTEXT}'
 
 [tool.coverage.paths]
 source = [
-    "ormdantic",
+    'ormdantic/',
+    '/Users/runner/work/ormdantic/ormdantic/ormdantic/',
+    'D:\a\ormdantic\ormdantic\ormdantic',
 ]
 
 [tool.mypy]
