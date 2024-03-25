@@ -315,12 +315,6 @@ You can run all the tests with:
 bash scripts/test.sh
 ```
 
-> Note: You can also generate a coverage report with:
-
-```bash
-bash scripts/test_html.sh
-```
-
 ### Format the code 🍂
 
 Execute the following command to apply `pre-commit` formatting:

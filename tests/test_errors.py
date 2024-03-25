@@ -6,6 +6,7 @@ from typing import Callable
 from uuid import UUID, uuid4
 
 import pytest
+import sqlalchemy
 from decouple import config
 from pydantic import BaseModel, Field
 from sqlalchemy import MetaData
@@ -155,5 +156,5 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
             await db_5.init()
         assert (
             e.value.args[0]
-            == "Type typing.Callable[[], int] is not supported by SQLAlchemy 1.4.42."
+            == f"Type typing.Callable[[], int] is not supported by SQLAlchemy {sqlalchemy.__version__}."
         )

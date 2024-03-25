@@ -41,7 +41,7 @@ dependencies = [
     "typing-extensions >=3.7.4,<4.11.0",
     "pydantic >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0",
     "sqlalchemy[asyncio]>=1.3.18,<2.0.0",
-    "PyPika ==0.48.9"
+    "PyPika==0.48.9"
 ]
 
 dynamic = ["version"]
@@ -61,27 +61,6 @@ sqlite = [
 postgresql = [
     "psycopg2-binary",
     "asyncpg"
-]
-lint = [
-    "pre-commit==3.6.2",
-    "mypy==1.9.0",
-]
-test = [
-    "pytest==8.1.1",
-    "pytest-asyncio == 0.23.5.post1",
-    "pytest-cov==4.1.0",
-    "python-decouple",
-    "pytest-pretty==1.2.0"
-]
-docs = [
-    "mkdocs >=1.1.2,<2.0.0",
-    "mkdocs-material >=8.1.4,<10.0.0",
-    "mdx-include >=1.4.1,<2.0.0",
-    "mkdocs-markdownextradata-plugin >=0.1.7,<0.3.0",
-    "mkdocs-mermaid2-plugin==1.1.1",
-    "markdown-include==0.8.1",
-    "pymdown-extensions==10.7.1",
-    "jinja2==3.1.3"
 ]
 
 [tool.hatch.version]
@@ -123,7 +102,9 @@ context = '${CONTEXT}'
 
 [tool.coverage.paths]
 source = [
-    "ormdantic",
+    'ormdantic/',
+    '/Users/runner/work/ormdantic/ormdantic/ormdantic/',
+    'D:\a\ormdantic\ormdantic\ormdantic',
 ]
 
 [tool.mypy]

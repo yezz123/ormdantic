@@ -1,0 +1,5 @@
+# PostgreSQL driver
+asyncpg
+psycopg2-binary
+# SQLite Driver
+aiosqlite

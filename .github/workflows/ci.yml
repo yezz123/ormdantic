@@ -26,7 +26,7 @@ jobs:
           uv-version: "0.1.22"
           uv-venv: ".venv"
       - name: Install Dependencies
-        run: uv pip install -e .[lint]
+        run: uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/linting.txt
       - name: Run Pre-commit
         run: bash scripts/format.sh
       - name: check Static Analysis
@@ -60,12 +60,8 @@ jobs:
           uv-version: "0.1.22"
           uv-venv: ".venv"
 
-      - name: Install SQLAlchemy version 1.4.42
-        run: |
-          uv pip install SQLAlchemy==1.4.42
-
       - name: Install Dependencies
-        run: uv pip install -e .[sqlite,test]
+        run:  uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/testing.txt && uv pip install -r requirements/extra.txt
 
       - name: Freeze Dependencies
         run: uv pip freeze
@@ -80,8 +76,8 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         uses: codecov/codecov-action@v4
 
-  postgres:
-    name: test on python ${{ matrix.python-version }} with postgres ${{ matrix.postgres-version }}
+  Integration:
+    name: test on python ${{ matrix.python-version }} with Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -121,47 +117,21 @@ jobs:
           uv-version: "0.1.22"
           uv-venv: ".venv"
       - name: Install Dependencies
-        run: uv pip install -e .[postgresql,test]
-      - name: Integration Tests, Postgres
+        run: uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/testing.txt && uv pip install -r requirements/extra.txt
+      - name: Integration Tests - SQLite
+        run: bash scripts/integration.sh
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
+      - name: Integration Tests - Postgres
         run: bash scripts/integration.sh
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
 
-  sqlite:
-    name: test on python ${{ matrix.python-version }} with sqlite
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: setup uv
-        uses: yezz123/setup-uv@v4
-        with:
-          uv-version: "0.1.22"
-          uv-venv: ".venv"
-
-      - name: Install Dependencies
-        run: uv pip install -e .[sqlite,test]
-
-      - name: Integration Tests, SQLite
-        run: bash scripts/integration.sh
-        env:
-          DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
 
   # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
   check:
     if: always()
-    needs: [lint, tests, postgres, sqlite]
+    needs: [lint, tests, Integration]
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed
