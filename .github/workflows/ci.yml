@@ -60,10 +60,6 @@ jobs:
           uv-version: "0.1.22"
           uv-venv: ".venv"
 
-      - name: Install SQLAlchemy version 1.4.42
-        run: |
-          uv pip install SQLAlchemy==1.4.42
-
       - name: Install Dependencies
         run:  uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/testing.txt && uv pip install -r requirements/extra.txt
 
