@@ -136,11 +136,7 @@ The `.pre-commit-config.yaml` contains the following configuration with the
 linting packages.
 
 - `pre-commit-hooks` - Some out-of-the-box hooks for pre-commit.
-- `isort` - A tool to sort imports.
-- `flake8` - A tool to check Python code for errors.
-- `mirrors-autoflake` - Mirror of the autoflake package for pre-commit.
-- `black` - A tool to format Python code.
-- `pyupgrade` - A tool to automatically upgrade syntax for newer versions of the language.
+- `ruff-pre-commit` - A tool to check Python code for errors.
 
 ## Documentation
 
@@ -215,7 +211,7 @@ If you want to generate the test report:
 <div class="termy">
 
 ```console
-bash scripts/test_html.sh
+bash scripts/test.sh
 ```
 
 </div>
