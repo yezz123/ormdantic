@@ -5,8 +5,7 @@ from typing import Any, Generic
 from pypika import Order
 from pypika.queries import QueryBuilder
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from ormdantic.generator._field import OrmField
 from ormdantic.generator._query import OrmQuery
@@ -129,7 +128,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return result.scalar()
 
     async def _execute_query(self, query: QueryBuilder) -> Any:
-        async_session = sessionmaker(
+        async_session = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
         async with async_session() as session:
