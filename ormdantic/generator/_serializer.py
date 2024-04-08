@@ -25,7 +25,7 @@ class OrmSerializer(Generic[SerializedType]):
         table_data: OrmTable,  # type: ignore
         table_map: Map,
         # TODO: Missing type parameters for generic type "CursorResult".
-        result_set: CursorResult,
+        result_set: CursorResult[Any],
         is_array: bool,
         depth: int,
     ) -> None:
