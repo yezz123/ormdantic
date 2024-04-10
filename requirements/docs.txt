@@ -164,9 +164,9 @@ tinycss2==1.2.1
     # via
     #   cairosvg
     #   cssselect2
-typer==0.12.1
+typer==0.12.3
     # via typer-cli
-typer-cli==0.12.1
+typer-cli==0.12.3
 typing-extensions==4.11.0
     # via
     #   griffe-typingdoc
