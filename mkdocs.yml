@@ -54,6 +54,11 @@ plugins:
           ^(JSON.parse(window.localStorage.getItem('/.__palette')).index == 1) ? 'dark' : 'light'
 extra_javascript:
     - https://unpkg.com/mermaid/dist/mermaid.min.js
+    - js/termynal.js
+    - js/custom.js
+extra_css:
+    - css/termynal.css
+    - css/custom.css
 
 nav:
   - About: index.md

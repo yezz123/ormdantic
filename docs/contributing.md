@@ -3,20 +3,27 @@
 If you already cloned the repository and you know that you need to deep dive
 into the code, here is a guideline to set up your environment:
 
-### Virtual environment with `venv`
+## Developing
 
-You can create a virtual environment in a directory using Python's `venv`
+If you already cloned the repository and you know that you need to deep dive
+into the code, here is a guideline to set up your environment:
+
+### Virtual environment with `uv`
+
+You can create a virtual environment in a directory using Python's [`uv`](https://github.com/astral-sh/uv)
 module:
 
 <div class="termy">
 
 ```console
-python -m venv env
+pip install uv
+
+uv venv
 ```
 
 </div>
 
-That will create a directory `./env/` with the python binaries and then you will
+That will create a directory `.venv` with the python binaries and then you will
 be able to install packages for that isolated environment.
 
 ### Activate the environment
@@ -28,7 +35,7 @@ Activate the new environment with:
     <div class="termy">
 
     ```console
-    $ source ./env/bin/activate
+    $ source ./.venv/bin/activate
     ```
 
     </div>
@@ -38,7 +45,7 @@ Activate the new environment with:
     <div class="termy">
 
     ```console
-    $ .\env\Scripts\Activate.ps1
+    $ .\.venv\Scripts\Activate.ps1
     ```
 
     </div>
@@ -50,7 +57,7 @@ Activate the new environment with:
     <div class="termy">
 
     ```console
-    $ source ./env/Scripts/activate
+    $ source ./.venv/Scripts/activate
     ```
 
     </div>
@@ -77,20 +84,23 @@ To check it worked, use:
 
     </div>
 
-If it shows the `pip` binary at `env/bin/pip` then it worked. 🎉
+If it shows the `pip` binary at `venv/bin/pip` then it worked. 🎉
 
-> Every time you install a new package with `pip` under that environment, activate the environment again.
+!!! tip
 
-- This makes sure that if you use a terminal program installed by that package (like `pre-commit`), you use the one from your local environment and not any other that could be installed globally.
+    Every time you install a new package with `pip` under that environment,
+    activate the environment again.
+
+    This makes sure that if you use a terminal program installed by that package (like `pre-commit`), you use the one from your local environment and not any other that could be installed globally.
 
 ### pip
 
-After activating the environment as described above, Now lets install all the package that you need to develop Ormdantic:
+After activating the environment as described above, Now lets install all the package that you need to develop ormdantic:
 
 <div class="termy">
 
 ```console
-$ pip install -e .[sqlite,postgresql,test,lint,docs]
+$ uv pip install -r requirements/all.txt
 
 ---> 100%
 ```
@@ -102,9 +112,9 @@ It will install all the dependencies in your local environment.
 #### Including
 
 The Dependencies file contains all the dependencies that you need to develop
-Ormdantic, which are:
+ormdantic, which are:
 
-- The Base Dependencies - the ones that are needed to run Ormdantic.
+- The Base Dependencies - the ones that are needed to run ormdantic.
   [See Installation](installation.md).
 
 ### Format
@@ -123,7 +133,7 @@ Now, install the pre-commit hooks in your `.git/hooks/` directory:
 <div class="termy">
 
 ```console
-pre-commit install
+$ pre-commit install
 ```
 
 </div>
@@ -150,59 +160,27 @@ All the documentation is in Markdown format in the directory `./docs`.
 
 ### Including
 
-To Build Ormdantic Documentation we need the following packages, which are:
+To Build ormdantic Documentation we need the following packages, which are:
 
 - `mkdocs` - The tool that builds the documentation.
-- `mkdocs-material` - The theme that Ormdantic uses.
+- `mkdocs-material` - The theme that ormdantic uses.
 - `mkdocs-markdownextradata-plugin` - The plugin that allows to add extra data
   to the documentation.
 
-#### Tips and guideline
-
-- Check the currently
-  <a href="https://github.com/yezz123/Ormdantic/pulls" class="external-link" target="_blank">existing
-  pull requests</a> for your language and add reviews requesting changes or
-  approving them.
-
-> You can <a href="https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/commenting-on-a-pull-request" class="external-link" target="_blank">add comments with change suggestions</a> to existing pull requests.
-
-> Check the docs about <a href="https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-request-reviews" class="external-link" target="_blank">adding a pull request review</a> to approve it or request changes.
-
-> Check in the <a href="https://github.com/yezz123/Ormdantic/issues" class="external-link" target="_blank">issues</a> to see if there's one coordinating translations for your language.
-
-- Add a single pull request per page translated. That will make it much easier
-  for others to review it.
-
-For the languages I don't speak, I'll wait for several others to review the
-translation before merging.
-
-- You can also check if there are translations for your language and add a
-  review to them, that will help me know that the translation is correct and I
-  can merge it.
-
-- Use the same Python examples and only translate the text in the docs. You
-  don't have to change anything for this to work.
-
-- Use the same images, file names, and links. You don't have to change anything
-  for it to work.
-
-- To check the 2-letter code for the language you want to translate you can use
-  the table
-  <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes" class="external-link" target="_blank">List
-  of ISO 639-1 codes</a>.
-
 ## Testing
 
-all the dependencies that you need to test Ormdantic, which are:
+all the dependencies that you need to test ormdantic, which are:
 
 ### Including
 
 - `pytest` - The tool that runs the tests.
 - `pytest-asyncio` - The plugin that runs the tests in the background.
 
+and other dependencies that are needed to run the tests.
+
 ### Generate a Test Report
 
-As we know, the tests are very important to make sure that Ormdantic works as
+As we know, the tests are very important to make sure that ormdantic works as
 expected, that why i provide a multi test for and functions to provide a good
 test.
 
@@ -211,7 +189,7 @@ If you want to generate the test report:
 <div class="termy">
 
 ```console
-bash scripts/test.sh
+$ bash scripts/test.sh
 ```
 
 </div>
