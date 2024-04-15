@@ -8,24 +8,38 @@ As **Ormdantic** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, it 
 
 You can add Ormdantic in a few easy steps. First of all, install the dependency:
 
-```shell
+<div class="termy">
+
+```console
 $ pip install ormdantic
 
 ---> 100%
-
-Successfully installed Ormdantic
 ```
+
+</div>
 
 * Install The specific Asynchronous ORM library for your database.
 
 ### SQLite
 
-```shell
+<div class="termy">
+
+```console
 $ pip install ormdantic[sqlite]
+
+---> 100%
 ```
+
+</div>
 
 ### PostgreSQL
 
-```shell
+<div class="termy">
+
+```console
 $ pip install ormdantic[postgresql]
+
+---> 100%
 ```
+
+</div>
