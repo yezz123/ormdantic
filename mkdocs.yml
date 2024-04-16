@@ -100,9 +100,8 @@ extra_css:
 
 nav:
   - About: index.md
-  - Get Started:
-    - Installation: get-started/installation.md
-    - Basic Usage: get-started/usage.md
+  - Installation: installation.md
+  - Usage: usage.md
   - Development:
     - Contributing: development/contributing.md
   - FAQ:

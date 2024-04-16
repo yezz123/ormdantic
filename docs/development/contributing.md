@@ -120,8 +120,7 @@ The Dependencies file contains all the dependencies that you need to develop
 ormdantic, which are:
 
 - The Base Dependencies - the ones that are needed to run ormdantic.
-  [See Installation](../get-started/installation.md).
-
+  [See Installation](../installation.md).
 
 ### Format
 
