@@ -1,3 +1,8 @@
+---
+hide:
+  - navigation
+---
+
 ![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/.github/logo.png)
 
 <p align="center">
