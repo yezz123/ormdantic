@@ -1,4 +1,9 @@
-# Development - Contributing 🐣
+---
+hide:
+  - navigation
+---
+
+# Development
 
 If you already cloned the repository and you know that you need to deep dive
 into the code, here is a guideline to set up your environment:
@@ -115,7 +120,7 @@ The Dependencies file contains all the dependencies that you need to develop
 ormdantic, which are:
 
 - The Base Dependencies - the ones that are needed to run ormdantic.
-  [See Installation](installation.md).
+  [See Installation](../installation.md).
 
 ### Format
 

@@ -3,8 +3,6 @@ site_description: A fast, async, and type-safe ORM for Python 3.10+ based on SQL
 site_url: https://ormdantic.yezz.me/
 
 theme:
-  features:
-    - header.autohide
   name: 'material'
   palette:
     - scheme: default
@@ -24,36 +22,76 @@ theme:
   - search.suggest
   - search.highlight
   - content.tabs.link
+  - navigation.indexes
+  - content.tooltips
+  - navigation.path
+  - content.code.annotate
+  - content.code.copy
+  - content.code.select
+  - navigation.tabs
   icon:
     repo: fontawesome/brands/github-alt
     logo: fontawesome/solid/database
+  language: en
 repo_name: Yezz123/Ormdantic
 repo_url: https://github.com/yezz123/ormdantic
-edit_uri: ""
+edit_uri: edit/main/docs/
+
+plugins:
+  - search: null
+  - social:
+      cards_layout_options:
+        background_color: "#009485"
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            extensions:
+            - griffe_typingdoc
+            show_root_heading: true
+            show_if_no_docstring: true
+            preload_modules:
+            - pydantic
+            - sqlalchemy
+            inherited_members: true
+            members_order: source
+            separate_signature: true
+            unwrap_annotated: true
+            filters:
+            - '!^_'
+            heading_level: 3
+            merge_init_into_class: true
+            docstring_section_style: spacy
+            signature_crossrefs: true
+            allow_inspection: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
 
 markdown_extensions:
-  - markdown_include.include:
-      base_path: docs
-  - toc:
-      permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - abbr
   - admonition
-  - codehilite
+  - pymdownx.details
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
-          format: !!python/name:mermaid2.fence_mermaid
-  - pymdownx.tasklist
-  - pymdownx.tabbed
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
-plugins:
-  - search
-  - mermaid2:
-      arguments:
-        theme: |
-          ^(JSON.parse(window.localStorage.getItem('/.__palette')).index == 1) ? 'dark' : 'light'
 extra_javascript:
-    - https://unpkg.com/mermaid/dist/mermaid.min.js
     - js/termynal.js
     - js/custom.js
 extra_css:
@@ -62,21 +100,22 @@ extra_css:
 
 nav:
   - About: index.md
-  - installation.md
+  - Installation: installation.md
   - Usage: usage.md
-  - Development - Contributing: contributing.md
-  - Frequently Asked Questions: faq.md
-  - Code of Conduct: code_of_conduct.md
-  - License: license.md
+  - Development:
+    - Contributing: development/contributing.md
+  - FAQ:
+    - Frequently Asked Questions: faq/faq.md
+    - Code of Conduct: faq/code_of_conduct.md
+    - License: faq/license.md
   - Changelog: release.md
 
 extra:
+  generator: true
   social:
   - icon: fontawesome/brands/github-alt
-    link: https://github.com/yezz123
-  - icon: fontawesome/brands/twitter
-    link: https://twitter.com/THyasser1
-  - icon: fontawesome/brands/linkedin
-    link: https://www.linkedin.com/in/yezz123
+    link: https://github.com/yezz123/ormdantic
+  - icon: fontawesome/brands/x-twitter
+    link: https://x.com/THyasser1
   - icon: fontawesome/solid/globe
-    link: https://yezz.me
+    link: https://ormdantic.yezz.me
