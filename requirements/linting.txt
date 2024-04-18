@@ -18,9 +18,9 @@ platformdirs==4.2.0
 pre-commit==3.6.2
 pyyaml==6.0.1
     # via pre-commit
-setuptools==69.2.0
+setuptools==69.5.1
     # via nodeenv
 typing-extensions==4.11.0
     # via mypy
-virtualenv==20.25.1
+virtualenv==20.25.3
     # via pre-commit
