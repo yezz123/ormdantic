@@ -1,0 +1,3 @@
+# Ormdantic
+
+::: ormdantic.orm.Ormdantic
