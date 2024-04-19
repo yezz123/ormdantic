@@ -1,3 +1,3 @@
 # OrmTable
 
-::: ormdantic.generator._table.OrmTable
+::: ormdantic.generator._table.OrmTableGenerator

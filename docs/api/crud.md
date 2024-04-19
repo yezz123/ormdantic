@@ -1,3 +1,3 @@
 # OrmCrud
 
-::: ormdantic.generator._crud:OrmCrud
+::: ormdantic.generator._crud.OrmCrud
