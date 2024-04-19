@@ -20,8 +20,7 @@ from ormdantic.types import ModelType
 
 class Ormdantic:
     """
-    It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum,
-    but while getting the best developer experience possible.
+    Ormdantic provides a way to create ORM models and schemas.
     """
 
     def __init__(self, connection: str) -> None:
@@ -32,11 +31,7 @@ class Ormdantic:
         self._table_map: Map = Map()
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
-        """Get a `Table` for the given pydantic model.
-
-        :param item: Pydantic model.
-        :return: A `Table` for the given pydantic model.
-        """
+        """Get a `Table` for the given pydantic model."""
         return self._crud_generators[item]
 
     def table(
@@ -49,18 +44,10 @@ class Ormdantic:
         unique_constraints: list[list[str]] | None = None,
         back_references: dict[str, str] | None = None,
     ) -> Callable[[Type[ModelType]], Type[ModelType]]:
-        """Register a model as a database table.
-
-        :param tablename: The database table name.
-        :param pk: Field name of table primary key.
-        :param indexed: Names of fields to index.
-        :param unique: Names of fields that must be unique.
-        :param unique_constraints: Fields that must be unique together.
-        :param back_references: Dict of field names to back-referenced field names.
-        :return: The decorated model.
-        """
+        """Register a model as a database table."""
 
         def _wrapper(cls: Type[ModelType]) -> Type[ModelType]:
+            """Decorator function."""
             tablename_ = tablename or snake_case(cls.__name__)
             cls_back_references = back_references or {}
             table_metadata = OrmTable[ModelType](
@@ -85,6 +72,7 @@ class Ormdantic:
         return _wrapper
 
     async def init(self) -> None:
+        """Initialize ORM models."""
         # Populate relation information.
         for table_data in self._table_map.name_to_data.values():
             rels = self.get(table_data)
@@ -92,7 +80,6 @@ class Ormdantic:
         # Now that relation information is populated generate tables.
         self._metadata = MetaData()
         for table_data in self._table_map.name_to_data.values():
-            # noinspection PyTypeChecker
             self._crud_generators[table_data.model] = CRUD(
                 table_data,
                 self._table_map,
@@ -103,6 +90,7 @@ class Ormdantic:
             await conn.run_sync(self._metadata.create_all)
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
+        """Get relationships for a given table."""
         relationships = {}
         for field_name, field in table_data.model.__fields__.items():
             related_table = self._get_related_table(field)
@@ -142,6 +130,7 @@ class Ormdantic:
         return relationships
 
     def _get_related_table(self, field: ModelField) -> OrmTable | None:  # type: ignore
+        """Get related table for a given field."""
         related_table: OrmTable | None = None  # type: ignore
         # Try to get foreign model from union.
         if args := get_args(field.type_):
@@ -162,6 +151,7 @@ class Ormdantic:
         table_data: OrmTable,  # type: ignore
         related_table: OrmTable,  # type: ignore
     ) -> Relationship:
+        """Get many-to-many relationship."""
         back_referenced_field = related_table.model.__fields__.get(back_reference)
         # TODO: Check if back-reference is present but mismatched in type.
         if (

@@ -80,7 +80,6 @@ def _get_value(
     If none of these conditions are met, the function returns a default value for the given type.
     """
     if isinstance(type_, typing.ForwardRef):
-        # noinspection PyUnresolvedReferences
         type_ = pydantic.typing.evaluate_forwardref(type_, None, None)
     origin = typing.get_origin(type_)
     if origin is dict:

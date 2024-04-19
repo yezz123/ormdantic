@@ -14,6 +14,6 @@ pillow
 # For image processing by Material for MkDocs
 cairosvg
 mkdocstrings[python]
-griffe-typingdoc==0.2.5
+griffe-typingdoc
 httpx
-starlette==0.36.3
+starlette
