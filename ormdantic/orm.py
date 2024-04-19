@@ -20,8 +20,7 @@ from ormdantic.types import ModelType
 
 class Ormdantic:
     """
-    It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum,
-    but while getting the best developer experience possible.
+    Ormdantic provides a way to create ORM models and schemas.
     """
 
     def __init__(self, connection: str) -> None:
@@ -32,14 +31,7 @@ class Ormdantic:
         self._table_map: Map = Map()
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
-        """Get a `Table` for the given pydantic model.
-
-        Args:
-            item (Type[ModelType]): Pydantic model.
-
-        Returns:
-            CRUD[ModelType]: Table for the given model.
-        """
+        """Get a `Table` for the given pydantic model."""
         return self._crud_generators[item]
 
     def table(
@@ -52,19 +44,7 @@ class Ormdantic:
         unique_constraints: list[list[str]] | None = None,
         back_references: dict[str, str] | None = None,
     ) -> Callable[[Type[ModelType]], Type[ModelType]]:
-        """Register a model as a database table.
-
-        Args:
-            tablename (str, optional): Name of the table. Defaults to the model name.
-            pk (str): Name of the primary key.
-            indexed (list[str], optional): List of columns to index. Defaults to None.
-            unique (list[str], optional): List of columns to make unique. Defaults to None.
-            unique_constraints (list[list[str]], optional): List of columns to make unique. Defaults to None.
-            back_references (dict[str, str], optional): Dictionary of back references. Defaults to None.
-
-        Returns:
-            Callable[[Type[ModelType]], Type[ModelType]]: Decorator function.
-        """
+        """Register a model as a database table."""
 
         def _wrapper(cls: Type[ModelType]) -> Type[ModelType]:
             """Decorator function."""
@@ -100,7 +80,6 @@ class Ormdantic:
         # Now that relation information is populated generate tables.
         self._metadata = MetaData()
         for table_data in self._table_map.name_to_data.values():
-            # noinspection PyTypeChecker
             self._crud_generators[table_data.model] = CRUD(
                 table_data,
                 self._table_map,
@@ -111,14 +90,7 @@ class Ormdantic:
             await conn.run_sync(self._metadata.create_all)
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
-        """Get relationships for a given table.
-
-        Args:
-            table_data (OrmTable[ModelType]): Table data.
-
-        Returns:
-            dict[str, Relationship]: Relationships for the given table.
-        """
+        """Get relationships for a given table."""
         relationships = {}
         for field_name, field in table_data.model.__fields__.items():
             related_table = self._get_related_table(field)
@@ -158,13 +130,7 @@ class Ormdantic:
         return relationships
 
     def _get_related_table(self, field: ModelField) -> OrmTable | None:  # type: ignore
-        """Get related table for a given field.
-        Args:
-            field (ModelField): Field to get related table for.
-
-        Returns:
-            OrmTable | None: Related table for the given field.
-        """
+        """Get related table for a given field."""
         related_table: OrmTable | None = None  # type: ignore
         # Try to get foreign model from union.
         if args := get_args(field.type_):
@@ -185,16 +151,7 @@ class Ormdantic:
         table_data: OrmTable,  # type: ignore
         related_table: OrmTable,  # type: ignore
     ) -> Relationship:
-        """Get many-to-many relationship.
-        Args:
-            field_name (str): Name of the field.
-            back_reference (str): Name of the back reference.
-            table_data (OrmTable): Table data.
-            related_table (OrmTable): Related table data.
-
-        Returns:
-            Relationship: Many-to-many relationship.
-        """
+        """Get many-to-many relationship."""
         back_referenced_field = related_table.model.__fields__.get(back_reference)
         # TODO: Check if back-reference is present but mismatched in type.
         if (

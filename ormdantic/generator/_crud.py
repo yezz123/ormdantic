@@ -14,7 +14,7 @@ from ormdantic.models import Map, OrmTable, Result
 from ormdantic.types import ModelType
 
 
-class PydanticSQLCRUDGenerator(Generic[ModelType]):
+class OrmCrud(Generic[ModelType]):
     """Provides DB CRUD methods and table information for a model."""
 
     def __init__(
@@ -23,6 +23,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         table_map: Map,
         engine: AsyncEngine,
     ) -> None:
+        """Initialize OrmCrud."""
         self._engine = engine
         self._table_map = table_map
         self._table_data = table_data
@@ -30,12 +31,7 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         self.columns = table_data.columns
 
     async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
-        """Find a model instance by primary key.
-
-        :param pk: Primary key of the record to get.
-        :param depth: ORM fetch depth.
-        :return: A model representing the record if it exists else None.
-        """
+        """Find a model instance by primary key."""
         result = await self._execute_query(
             OrmField(self._table_data, self._table_map).get_find_one_query(pk, depth)
         )
@@ -83,22 +79,14 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return model_instance
 
     async def update(self, model_instance: ModelType) -> ModelType:
-        """Update a record.
-
-        :param `model_instance``: Model representing record to update.
-        :return: The updated model.
-        """
+        """Update a record."""
         await self._execute_query(
             OrmQuery(model_instance, self._table_map).get_update_queries()
         )
         return model_instance
 
     async def upsert(self, model_instance: ModelType) -> ModelType:
-        """Insert a record if it does not exist, else update it.
-
-        :param `model_instance``: Model representing record to insert or update.
-        :return: The inserted or updated model.
-        """
+        """Insert a record if it does not exist, else update it."""
 
         await self._execute_query(
             OrmQuery(model_instance, self._table_map).get_upsert_query()
@@ -106,28 +94,21 @@ class PydanticSQLCRUDGenerator(Generic[ModelType]):
         return model_instance
 
     async def delete(self, pk: Any) -> bool:
-        """Delete a model instance by primary key.
-
-        :param pk: Primary key of the record to delete.
-        """
+        """Delete a model instance by primary key."""
         await self._execute_query(
             OrmField(self._table_data, self._table_map).get_delete_query(pk)
         )
         return True
 
     async def count(self, where: dict[str, Any] | None = None, depth: int = 0) -> int:
-        """Count records.
-
-        :param where: Where clause to filter records.
-        :param depth: ORM fetch depth.
-        :return: Number of records.
-        """
+        """Count records."""
         result = await self._execute_query(
             OrmField(self._table_data, self._table_map).get_count_query(where, depth)
         )
         return result.scalar()
 
     async def _execute_query(self, query: QueryBuilder) -> Any:
+        """Execute a query."""
         async_session = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
