@@ -304,7 +304,7 @@ And then install the development dependencies:
 
 ```bash
 # Install dependencies
-pip install -e .[sqlite,postgresql,test,lint,docs]
+pip install -r requirements/all.txt
 ```
 
 ### Run tests 🌝
