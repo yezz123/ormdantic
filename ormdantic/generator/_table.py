@@ -1,4 +1,4 @@
-"""Module providing OrmTable."""
+"""Module providing OrmTableGenerator."""
 
 import uuid
 from datetime import date, datetime
@@ -28,14 +28,14 @@ from ormdantic.handler import TableName_From_Model, TypeConversionError
 from ormdantic.models import Map, OrmTable
 
 
-class OrmTable:
+class OrmTableGenerator:
     def __init__(
         self,
         engine: AsyncEngine,
         metadata: MetaData,
         table_map: Map,
     ) -> None:
-        """Initialize OrmTable."""
+        """Initialize OrmTableGenerator."""
         self._engine = engine
         self._metadata = metadata
         self._table_map = table_map
