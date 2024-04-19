@@ -41,7 +41,7 @@ plugins:
   - search: null
   - social:
       cards_layout_options:
-        background_color: "#009485"
+        background_color: "#FFDE59"
   - mkdocstrings:
       handlers:
         python:
