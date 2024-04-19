@@ -50,9 +50,6 @@ plugins:
             - griffe_typingdoc
             show_root_heading: true
             show_if_no_docstring: true
-            preload_modules:
-            - pydantic
-            - sqlalchemy
             inherited_members: true
             members_order: source
             separate_signature: true
@@ -101,10 +98,20 @@ extra_css:
 nav:
   - About: index.md
   - Installation: installation.md
-  - Usage: usage.md
+  - Usage:
+    - Getting Started: usage/usage.md
+    - Generator: usage/generator.md
   - Reference - API:
     - api/reference.md
     - api/ormdantic.md
+    - Errors:
+      - api/errors.md
+    - Generator:
+      - api/crud.md
+      - api/table.md
+      - api/field.md
+      - api/query.md
+      - api/serializer.md
   - Development:
     - Contributing: development/contributing.md
   - FAQ:
