@@ -1,5 +1,5 @@
 pytest==8.1.1
-pytest-asyncio == 0.23.5.post1
-pytest-cov==4.1.0
+pytest-asyncio == 0.23.6
+pytest-cov==5.0.0
 python-decouple
 pytest-pretty
