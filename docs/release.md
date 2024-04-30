@@ -7,6 +7,7 @@ hide:
 
 ## Latest Changes
 
+* [pre-commit.ci] pre-commit autoupdate. PR [#209](https://github.com/yezz123/ormdantic/pull/209) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump the python-packages group with 4 updates. PR [#208](https://github.com/yezz123/ormdantic/pull/208) by [@dependabot[bot]](https://github.com/apps/dependabot).
 
 ## 1.7.0
