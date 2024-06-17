@@ -7,6 +7,7 @@ hide:
 
 ## Latest Changes
 
+* ⬆ Bump pypa/gh-action-pypi-publish from 1.8.14 to 1.9.0. PR [#213](https://github.com/yezz123/ormdantic/pull/213) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * [pre-commit.ci] pre-commit autoupdate. PR [#211](https://github.com/yezz123/ormdantic/pull/211) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ☔ [pre-commit.ci] pre-commit autoupdate. PR [#210](https://github.com/yezz123/ormdantic/pull/210) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * [pre-commit.ci] pre-commit autoupdate. PR [#209](https://github.com/yezz123/ormdantic/pull/209) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
