@@ -15,6 +15,7 @@ hide:
 
 ### Upgrades
 
+* ⬆ Bump `ruff-pre-commit` from v0.4.8 to v0.4.9. PR [#214](https://github.com/yezz123/ormdantic/pull/214) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump `ruff-pre-commit` from v0.4.7 to v0.4.8. PR [#212](https://github.com/yezz123/ormdantic/pull/212) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 
 ## 1.7.0
