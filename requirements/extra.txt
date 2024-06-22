@@ -5,5 +5,5 @@ async-timeout==4.0.3
     # via asyncpg
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
-typing-extensions==4.11.0
+typing-extensions==4.12.2
     # via aiosqlite

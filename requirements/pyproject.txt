@@ -2,10 +2,10 @@
 #    uv pip compile pyproject.toml -o requirements/pyproject.txt
 greenlet==3.0.3
     # via sqlalchemy
-pydantic==1.10.15
+pydantic==1.10.17
 pypika==0.48.9
-sqlalchemy==2.0.29
-typing-extensions==4.11.0
+sqlalchemy==2.0.31
+typing-extensions==4.12.2
     # via
     #   pydantic
     #   sqlalchemy
