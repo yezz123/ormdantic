@@ -7,6 +7,10 @@ hide:
 
 ## Latest Changes
 
+### Refactors
+
+* ♻️ Refactor demo project to use Class notion. PR [#215](https://github.com/yezz123/ormdantic/pull/215) by [@yezz123](https://github.com/yezz123).
+
 ### Upgrades
 
 * ⬆ Bump `ruff-pre-commit` from v0.4.8 to v0.4.9. PR [#214](https://github.com/yezz123/ormdantic/pull/214) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
