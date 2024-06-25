@@ -13,6 +13,7 @@ hide:
 
 ### Upgrades
 
+* ⬆ Bump the python-packages group with 4 updates. PR [#216](https://github.com/yezz123/ormdantic/pull/216) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump `ruff-pre-commit` from v0.4.8 to v0.4.9. PR [#214](https://github.com/yezz123/ormdantic/pull/214) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump `ruff-pre-commit` from v0.4.7 to v0.4.8. PR [#212](https://github.com/yezz123/ormdantic/pull/212) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump pypa/gh-action-pypi-publish from 1.8.14 to 1.9.0. PR [#213](https://github.com/yezz123/ormdantic/pull/213) by [@dependabot[bot]](https://github.com/apps/dependabot).
