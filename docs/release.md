@@ -13,6 +13,7 @@ hide:
 
 ### Upgrades
 
+* ⬆ Bump the python-packages group with 2 updates. PR [#218](https://github.com/yezz123/ormdantic/pull/218) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump `ruff-pre-commit` from v0.4.9 to v0.4.10. PR [#217](https://github.com/yezz123/ormdantic/pull/217) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump the python-packages group with 4 updates. PR [#216](https://github.com/yezz123/ormdantic/pull/216) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump `ruff-pre-commit` from v0.4.8 to v0.4.9. PR [#214](https://github.com/yezz123/ormdantic/pull/214) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
