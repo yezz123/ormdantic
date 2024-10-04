@@ -7,6 +7,8 @@ hide:
 
 ## Latest Changes
 
+* ⬆ Bump pypa/gh-action-pypi-publish from 1.10.1 to 1.10.2. PR [#222](https://github.com/yezz123/ormdantic/pull/222) by [@dependabot[bot]](https://github.com/apps/dependabot).
+
 ### Refactors
 
 * ♻️ Refactor demo project to use Class notion. PR [#215](https://github.com/yezz123/ormdantic/pull/215) by [@yezz123](https://github.com/yezz123).
