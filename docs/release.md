@@ -15,6 +15,7 @@ hide:
 
 ### Upgrades
 
+* ⬆ Bump codecov/codecov-action from 4 to 5. PR [#226](https://github.com/yezz123/ormdantic/pull/226) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump pypa/gh-action-pypi-publish from 1.9.0 to 1.10.1. PR [#221](https://github.com/yezz123/ormdantic/pull/221) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump the python-packages group with 2 updates. PR [#218](https://github.com/yezz123/ormdantic/pull/218) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump `ruff-pre-commit` from v0.4.9 to v0.4.10. PR [#217](https://github.com/yezz123/ormdantic/pull/217) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
