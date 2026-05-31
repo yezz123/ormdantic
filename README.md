@@ -245,6 +245,10 @@ And then install the development dependencies:
 uv sync --all-groups
 ```
 
+### Rust workspace
+
+Ormdantic's Rust crates live under `rust/crates/` and are managed by the repository-root `Cargo.toml`. See [`rust/README.md`](rust/README.md) for the crate layout, feature flags, and Rust build/test commands.
+
 ### Run tests 🌝
 
 You can run all the tests with:
