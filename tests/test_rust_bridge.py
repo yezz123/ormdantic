@@ -119,6 +119,23 @@ def test_rust_query_bridge_compiles_insert() -> None:
     }
 
 
+def test_rust_query_bridge_compiles_mysql_connection_url() -> None:
+    query = compile_insert(
+        dialect="mysql+pymysql://user:pass@localhost/db",
+        table="flavors",
+        columns=["id", "name"],
+    )
+
+    if query is None:
+        return
+
+    assert query == {
+        "sql": "INSERT INTO `flavors` (`id`, `name`) VALUES (%s, %s)",
+        "params": ["id", "name"],
+        "operation": "insert",
+    }
+
+
 def test_rust_query_bridge_compiles_update() -> None:
     query = compile_update(
         dialect="postgresql",
