@@ -4,7 +4,7 @@
 
 ## What is the purpose of this project?
 
-- **Ormdantic** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+- **Ormdantic** is powered by a Rust SQL compiler, <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a>, and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a> async execution, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
 
 ## What are the key differences between Ormdantic and Sqlmodel?
 

@@ -2,7 +2,7 @@
 
 A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
 
-As **Ormdantic** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, it requires them. They will be automatically installed when you install Ormdantic.
+As **Ormdantic** is based on **Pydantic**, **SQLAlchemy**, and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
 
 ## Installation
 

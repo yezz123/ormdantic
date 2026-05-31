@@ -20,13 +20,11 @@ The runtime bridge binds values in the order returned by the Rust compiler and u
 
 ## Retired From The Hot Path
 
-For `depth <= 0`, `OrmField` and `OrmQuery` now prefer Rust query compilation and only fall back to PyPika when the extension is unavailable or does not expose the required symbol. This retires PyPika from the installed-extension hot path for flat CRUD and count operations.
+For `depth <= 0`, `OrmField` and `OrmQuery` now use Rust query compilation for flat CRUD and count operations.
 
-## Still Kept
+## Superseded By Later Work
 
-PyPika remains for relationship joins and extension-less local checkouts.
-
-Relationship loading still depends on Python join construction and alias expansion. Removing PyPika completely would be unsafe until Rust owns join planning, relationship path aliases, and nested result-shape execution for the current `table/relation\column` contract.
+Relationship loading later moved to Rust join compilation for the current `table/relation\column` contract. Python still constructs Pydantic objects from result payloads.
 
 ## Next Migration Work
 

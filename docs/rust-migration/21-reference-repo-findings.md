@@ -50,7 +50,7 @@ The first implementation sprint should keep the plan narrow:
 - Add a minimal PyO3/maturin skeleton.
 - Prototype only flat row hydration first.
 - Return Python dictionaries/lists, not Pydantic model instances.
-- Keep SQLAlchemy execution and PyPika query generation unchanged.
+- Keep SQLAlchemy execution unchanged while Rust query generation is introduced.
 - Benchmark before claiming wins.
 
 ## Deferred Decisions
@@ -58,7 +58,7 @@ The first implementation sprint should keep the plan narrow:
 These should not be part of the first sprint:
 
 - Full pydantic-core schema integration.
-- Replacing PyPika with a Rust SQL compiler.
+- Removing SQLAlchemy execution.
 - Native Rust database execution.
 - Pydantic v2 migration.
 - SQLAlchemy-style session/unit-of-work.

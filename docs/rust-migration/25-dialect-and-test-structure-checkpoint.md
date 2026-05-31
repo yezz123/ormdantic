@@ -33,7 +33,7 @@ The older inline tests remain useful for module-local cases, while integration t
 
 Removed an unused `OrmQuery.get_patch_queries()` stub and unused constructor state from `ormdantic/generator/_query.py`.
 
-PyPika is still intentionally kept for relationship joins because Rust does not yet compile relationship joins or nested row folding end-to-end. Removing it now would break depth-based relationship queries.
+The old Python query-builder fallback was removed after Rust joined-select compilation covered current depth-based relationship queries.
 
 ## Remaining SQLAlchemy Parity Work
 
@@ -46,4 +46,4 @@ SQLAlchemy-level parity still requires:
 - Native migration/Alembic interop decisions.
 - Driver-specific runtime verification beyond SQLite and PostgreSQL.
 
-The next safe removal target is the PyPika relationship join path, but only after Rust owns join alias generation and nested hydration.
+The next safe migration target is moving nested result folding fully into Rust. Python still owns Pydantic object construction.

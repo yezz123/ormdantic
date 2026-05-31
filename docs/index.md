@@ -26,17 +26,13 @@ hide:
 
 Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
 
-**Ormdantic** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
-
-> What is [Pypika](https://github.com/kayak/pypika)?
->
-> PyPika is a Python API for building SQL queries. The motivation behind PyPika is to provide a simple interface for building SQL queries without limiting the flexibility of handwritten SQL. Designed with data analysis in mind, PyPika leverages the builder design pattern to construct queries to avoid messy string formatting and concatenation. It is also easily extended to take full advantage of specific features of SQL database vendors.
+**Ormdantic** is powered by a Rust SQL compiler, <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a>, and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a> async execution, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
 
 The key features are:
 
 * **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-* **Compatible**: It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-* **Extensible**: You have all the power of SQLAlchemy and Pypika underneath.
+* **Compatible**: It combines SQLAlchemy async execution, Pydantic models, and Rust query compilation to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
+* **Extensible**: You have SQLAlchemy's async execution layer and Ormdantic's Rust internals underneath.
 * **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
 
 ## License

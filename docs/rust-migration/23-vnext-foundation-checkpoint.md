@@ -37,7 +37,7 @@ The Rust compiler foundation supports:
 - PostgreSQL placeholders
 - quoted identifiers
 
-The existing PyPika paths remain in place until Rust output is integrated into CRUD execution and covered by behavior tests.
+Rust query compilation now covers current CRUD execution and depth-based relationship joins.
 
 ## Current Boundary
 
@@ -51,4 +51,4 @@ Rust now owns metadata validation, result-shape planning, and SQL compilation pr
 
 ## Next Step
 
-The next migration slice should connect Rust query compilation into `OrmField` and `OrmQuery` behind a runtime fallback, then compare SQL behavior with existing PyPika queries before removing PyPika.
+The next migration slice should move nested result folding into Rust and keep comparing relationship behavior against the Python serializer contract.
