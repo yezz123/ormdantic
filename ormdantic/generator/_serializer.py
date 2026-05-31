@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.engine import CursorResult
 
 from ormdantic._introspect import is_dict_annotation, is_list_annotation, model_field
-from ormdantic.generator._hydration import hydrate_flat_payload
+from ormdantic.generator._hydration import hydrate_flat_payload, hydrate_joined_payload
 from ormdantic.models import Map, OrmTable
 from ormdantic.types import ModelType, SerializedType
 
@@ -59,46 +59,12 @@ class OrmSerializer(Generic[SerializedType]):
         """Deserialize the result set into Python models."""
         if self._can_use_flat_hydration():
             return self._deserialize_flat()
-        for row in self._result_set:
-            row_schema = {}
-            for column_idx, column_tree in enumerate(self._columns):
-                # `node` is the currently acted on level of depth in return.
-                node = self._return_dict
-                # `schema` describes acted on level of depth.
-                schema = self._result_schema
-                column_tree, column = column_tree.split("\\")
-                current_tree = ""
-                for branch in column_tree.split("/"):
-                    current_tree += f"/{branch}"
-                    # Update schema position.
-                    schema = schema.references[branch]
-                    # Update last pk if this column is a pk.
-                    if (
-                        column == schema.table_data.pk  # type: ignore
-                        and current_tree == f"/{column_tree}"
-                    ):
-                        row_schema[current_tree] = row[column_idx]
-                    # If this branch in schema is absent from result set.
-                    if row_schema[current_tree] is None:
-                        break
-                    # Initialize this object if it is None.
-                    if node.get(branch) is None:
-                        node[branch] = {}
-                    if (
-                        schema.is_array
-                        and node[branch].get(row_schema[current_tree]) is None
-                    ):
-                        node[branch][row_schema[current_tree]] = {}
-                    # Set node to this level.
-                    if schema.is_array:
-                        node = node[branch][row_schema[current_tree]]
-                    else:
-                        node = node[branch]
-                # If we did not break.
-                else:
-                    # Set value.
-                    if column:
-                        node[column] = row[column_idx]
+        self._return_dict = hydrate_joined_payload(
+            columns=self._columns,
+            rows=[tuple(row) for row in self._result_set],
+            path_pks=self._path_pks(self._result_schema),
+            array_paths=self._array_paths(self._result_schema),
+        ) or {}
         if not self._return_dict:
             return None  # type: ignore
         if self._result_schema.is_array:
@@ -144,6 +110,28 @@ class OrmSerializer(Generic[SerializedType]):
             column: self._sql_type_to_py(self._table_data.model, column, value)
             for column, value in record.items()
         }
+
+    def _path_pks(
+        self, schema: ResultSchema, prefix: str | None = None
+    ) -> list[tuple[str, str]]:
+        paths = []
+        for name, reference in schema.references.items():
+            path = name if prefix is None else f"{prefix}/{name}"
+            if reference.table_data is not None:
+                paths.append((path, reference.table_data.pk))
+            paths.extend(self._path_pks(reference, path))
+        return paths
+
+    def _array_paths(
+        self, schema: ResultSchema, prefix: str | None = None
+    ) -> list[str]:
+        paths = []
+        for name, reference in schema.references.items():
+            path = name if prefix is None else f"{prefix}/{name}"
+            if reference.is_array:
+                paths.append(path)
+            paths.extend(self._array_paths(reference, path))
+        return paths
 
     def _prep_result(
         self, node: dict[Any, Any], schema: ResultSchema

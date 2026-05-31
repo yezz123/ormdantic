@@ -43,6 +43,31 @@ def hydrate_flat_payload(
     )
 
 
+def hydrate_joined_payload(
+    *,
+    columns: list[str],
+    rows: list[tuple[Any, ...]],
+    path_pks: list[tuple[str, str]],
+    array_paths: list[str],
+) -> dict[str, Any] | None:
+    """Hydrate joined SQL rows into the serializer's nested dict payload."""
+    if _ormdantic is None or not hasattr(_ormdantic, "hydrate_joined"):
+        raise RuntimeError(
+            "Ormdantic vNext requires the Rust extension for joined hydration. "
+            "Install the package with maturin or reinstall the wheel."
+        )
+    payload = cast(
+        dict[str, Any],
+        _ormdantic.hydrate_joined(
+            columns,
+            [list(row) for row in rows],
+            path_pks,
+            array_paths,
+        ),
+    )
+    return payload or None
+
+
 def plan_result_shape(
     *,
     root_table: str,

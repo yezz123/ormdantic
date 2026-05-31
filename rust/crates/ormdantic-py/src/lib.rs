@@ -10,6 +10,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
+use std::collections::{HashMap, HashSet};
 
 #[pyfunction]
 fn hydrate_flat(
@@ -53,6 +54,73 @@ fn hydrate_flat(
 }
 
 #[pyfunction]
+fn hydrate_joined(
+    py: Python<'_>,
+    columns: Vec<String>,
+    rows: Vec<Vec<Py<PyAny>>>,
+    path_pks: Vec<(String, String)>,
+    array_paths: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    let parsed_columns = columns
+        .iter()
+        .map(|alias| split_alias(alias))
+        .collect::<PyResult<Vec<_>>>()?;
+    let path_pk_map = path_pks.into_iter().collect::<HashMap<_, _>>();
+    let array_paths = array_paths.into_iter().collect::<HashSet<_>>();
+    let root = PyDict::new(py);
+
+    for row in rows {
+        let row_pks = collect_row_pks(py, &row, &parsed_columns, &path_pk_map);
+        for (idx, (path, column)) in parsed_columns.iter().enumerate() {
+            let mut node = root.clone();
+            let mut current_path = String::new();
+            let mut should_set = true;
+            for (branch_idx, branch) in path.split('/').enumerate() {
+                if branch_idx == 0 {
+                    current_path.push_str(branch);
+                } else {
+                    current_path.push('/');
+                    current_path.push_str(branch);
+                }
+                let Some(pk_value) = row_pks.get(&current_path) else {
+                    should_set = false;
+                    break;
+                };
+                if pk_value.bind(py).is_none() {
+                    should_set = false;
+                    break;
+                }
+                if !node.contains(branch)? {
+                    node.set_item(branch, PyDict::new(py))?;
+                }
+                let branch_node = node
+                    .get_item(branch)?
+                    .expect("branch exists")
+                    .downcast_into::<PyDict>()?;
+                if array_paths.contains(&current_path) {
+                    if !branch_node.contains(pk_value.bind(py))? {
+                        branch_node.set_item(pk_value.bind(py), PyDict::new(py))?;
+                    }
+                    node = branch_node
+                        .get_item(pk_value.bind(py))?
+                        .expect("array item exists")
+                        .downcast_into::<PyDict>()?;
+                } else {
+                    node = branch_node;
+                }
+            }
+            if should_set && !column.is_empty() {
+                if let Some(value) = row.get(idx) {
+                    node.set_item(column, value.bind(py))?;
+                }
+            }
+        }
+    }
+
+    Ok(root.into_any().unbind())
+}
+
+#[pyfunction]
 fn plan_result_shape(
     py: Python<'_>,
     root_table: &str,
@@ -74,6 +142,34 @@ fn plan_result_shape(
     result.set_item("relationship_paths", shape.relationship_paths())?;
     result.set_item("array_paths", shape.array_paths())?;
     Ok(result.into_any().unbind())
+}
+
+fn split_alias(alias: &str) -> PyResult<(String, String)> {
+    alias.split_once('\\').map_or_else(
+        || {
+            Err(PyValueError::new_err(format!(
+                "invalid result alias '{alias}'"
+            )))
+        },
+        |(path, column)| Ok((path.to_string(), column.to_string())),
+    )
+}
+
+fn collect_row_pks(
+    py: Python<'_>,
+    row: &[Py<PyAny>],
+    parsed_columns: &[(String, String)],
+    path_pk_map: &HashMap<String, String>,
+) -> HashMap<String, Py<PyAny>> {
+    let mut row_pks = HashMap::new();
+    for (idx, (path, column)) in parsed_columns.iter().enumerate() {
+        if path_pk_map.get(path) == Some(column) {
+            if let Some(value) = row.get(idx) {
+                row_pks.insert(path.clone(), value.clone_ref(py));
+            }
+        }
+    }
+    row_pks
 }
 
 #[pyfunction]
@@ -574,6 +670,7 @@ fn row_to_dict<'py>(
 #[pymodule]
 fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hydrate_flat, m)?)?;
+    m.add_function(wrap_pyfunction!(hydrate_joined, m)?)?;
     m.add_function(wrap_pyfunction!(plan_result_shape, m)?)?;
     m.add_function(wrap_pyfunction!(validate_schema_tables, m)?)?;
     m.add_function(wrap_pyfunction!(compile_select_pk, m)?)?;
