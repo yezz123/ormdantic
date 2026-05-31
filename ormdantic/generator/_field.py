@@ -41,9 +41,7 @@ FILTER_OPERATORS = {
 class OrmField:
     """Build SQL queries from field information."""
 
-    def __init__(
-        self, table_data: OrmTable[Any], table_map: Map, dialect: str
-    ) -> None:
+    def __init__(self, table_data: OrmTable[Any], table_map: Map, dialect: str) -> None:
         """Build CRUD queries from tablename and field info.
 
         :param table_data: Meta data of target table for SQL script.

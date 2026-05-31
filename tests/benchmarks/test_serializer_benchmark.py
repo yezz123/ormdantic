@@ -92,9 +92,7 @@ def _one_table() -> OrmTable[_BenchOne]:
         unique_constraints=[],
         columns=["id", "name"],
         relationships={
-            "many": Relationship(
-                foreign_table="bench_many", back_references="one"
-            )
+            "many": Relationship(foreign_table="bench_many", back_references="one")
         },
         back_references={"many": "one"},
     )
@@ -115,10 +113,7 @@ def _many_table() -> OrmTable[_BenchMany]:
 
 
 def _flat_rows(row_count: int) -> list[tuple[Any, ...]]:
-    return [
-        (str(uuid4()), f"flavor-{index}", index)
-        for index in range(row_count)
-    ]
+    return [(str(uuid4()), f"flavor-{index}", index) for index in range(row_count)]
 
 
 def _joined_rows(row_count: int) -> list[tuple[Any, ...]]:
@@ -134,7 +129,9 @@ def _joined_rows(row_count: int) -> list[tuple[Any, ...]]:
     ]
 
 
-def _one_to_many_rows(parent_count: int, children_per_parent: int) -> list[tuple[Any, ...]]:
+def _one_to_many_rows(
+    parent_count: int, children_per_parent: int
+) -> list[tuple[Any, ...]]:
     rows = []
     for parent_index in range(parent_count):
         parent_id = str(uuid4())

@@ -92,9 +92,7 @@ def _hydrate_flat_payload_python(
     rows: list[tuple[Any, ...]],
     is_array: bool,
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
-    parsed_columns = [
-        _parse_column_alias(alias, tablename) for alias in columns
-    ]
+    parsed_columns = [_parse_column_alias(alias, tablename) for alias in columns]
     pk_idx = _get_pk_index(parsed_columns, tablename, pk)
 
     if not rows:
@@ -145,9 +143,7 @@ def _parse_column_alias(alias: str, tablename: str) -> str | None:
     return column
 
 
-def _get_pk_index(
-    parsed_columns: list[str | None], tablename: str, pk: str
-) -> int:
+def _get_pk_index(parsed_columns: list[str | None], tablename: str, pk: str) -> int:
     try:
         return parsed_columns.index(pk)
     except ValueError as exc:

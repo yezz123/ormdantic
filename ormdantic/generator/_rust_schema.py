@@ -105,7 +105,9 @@ def _field_kind(field: FieldMetadata) -> str:
         return "dict"
     if is_list_annotation(annotation):
         return "list"
-    if annotation.__class__.__name__ == "UnionType" or getattr(annotation, "__origin__", None):
+    if annotation.__class__.__name__ == "UnionType" or getattr(
+        annotation, "__origin__", None
+    ):
         for arg in field.args:
             if arg is type(None):
                 continue
@@ -145,8 +147,7 @@ def _field_kind(field: FieldMetadata) -> str:
 
 def _index_descriptors(table: Any) -> list[tuple[str, list[str], bool]]:
     indexes = [
-        (f"{table.tablename}_{column}_idx", [column], False)
-        for column in table.indexed
+        (f"{table.tablename}_{column}_idx", [column], False) for column in table.indexed
     ]
     indexes.extend(
         (f"{table.tablename}_{column}_unique_idx", [column], True)

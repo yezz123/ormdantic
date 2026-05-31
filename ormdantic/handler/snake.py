@@ -1,5 +1,5 @@
-import re
 import importlib
+import re
 from typing import Union
 
 _ormdantic = importlib.import_module("ormdantic._ormdantic")

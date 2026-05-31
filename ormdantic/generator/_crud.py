@@ -69,9 +69,7 @@ class OrmCrud(Generic[ModelType]):
         result = await self._execute_query(
             OrmField(
                 self._table_data, self._table_map, self._connection
-            ).get_find_many_query(
-                where, order_by, order, limit, offset, depth
-            )
+            ).get_find_many_query(where, order_by, order, limit, offset, depth)
         )
         deserialized_data = OrmSerializer[ModelType | None](
             table_data=self._table_data,
@@ -88,24 +86,32 @@ class OrmCrud(Generic[ModelType]):
 
     async def insert(self, model_instance: ModelType) -> ModelType:
         """Insert a model instance."""
-        await self._events.dispatch("before_insert", model=model_instance, table=self._table_data)
+        await self._events.dispatch(
+            "before_insert", model=model_instance, table=self._table_data
+        )
         await self._execute_query(
             OrmQuery(
                 model_instance, self._table_map, dialect=self._connection
             ).get_insert_query()
         )
-        await self._events.dispatch("after_insert", model=model_instance, table=self._table_data)
+        await self._events.dispatch(
+            "after_insert", model=model_instance, table=self._table_data
+        )
         return model_instance
 
     async def update(self, model_instance: ModelType) -> ModelType:
         """Update a record."""
-        await self._events.dispatch("before_update", model=model_instance, table=self._table_data)
+        await self._events.dispatch(
+            "before_update", model=model_instance, table=self._table_data
+        )
         await self._execute_query(
             OrmQuery(
                 model_instance, self._table_map, dialect=self._connection
             ).get_update_queries()
         )
-        await self._events.dispatch("after_update", model=model_instance, table=self._table_data)
+        await self._events.dispatch(
+            "after_update", model=model_instance, table=self._table_data
+        )
         return model_instance
 
     async def upsert(self, model_instance: ModelType) -> ModelType:

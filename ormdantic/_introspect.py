@@ -127,7 +127,9 @@ def is_dict_annotation(annotation: Any) -> bool:
     return get_origin(annotation) is dict or annotation is dict
 
 
-def first_model_arg(annotation: Any, table_models: set[type[BaseModel]]) -> type[BaseModel] | None:
+def first_model_arg(
+    annotation: Any, table_models: set[type[BaseModel]]
+) -> type[BaseModel] | None:
     try:
         if annotation in table_models:
             return annotation

@@ -2,8 +2,8 @@
 
 __version__ = "1.7.0"
 
-from ormdantic.orm import Ormdantic
 from ormdantic.events import EventRegistry
 from ormdantic.loaders import joined, lazy, selectin
+from ormdantic.orm import Ormdantic
 
 __all__ = ["Ormdantic", "EventRegistry", "joined", "selectin", "lazy"]

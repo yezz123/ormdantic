@@ -7,13 +7,12 @@ from ormdantic._introspect import (
     FieldMetadata,
     contains_list_annotation,
     first_model_arg,
-    is_list_annotation,
     model_field,
     model_fields,
 )
-from ormdantic.generator import CRUD, Table
 from ormdantic.engine import NativeEngine
 from ormdantic.events import EventHandler, EventRegistry
+from ormdantic.generator import CRUD, Table
 from ormdantic.generator._rust_schema import compile_drop_table_sql
 from ormdantic.handler import (
     MismatchingBackReferenceError,
@@ -143,9 +142,9 @@ class Ormdantic:
                 )
 
                 continue
-            if contains_list_annotation(field.annotation) or field.annotation == ForwardRef(
-                f"{related_table.model.__name__}"
-            ):
+            if contains_list_annotation(
+                field.annotation
+            ) or field.annotation == ForwardRef(f"{related_table.model.__name__}"):
                 raise UndefinedBackReferenceError(
                     table_data.tablename, related_table.tablename, field_name
                 )

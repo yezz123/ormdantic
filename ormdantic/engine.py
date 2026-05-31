@@ -42,9 +42,7 @@ class NativeEngine:
 
     async def execute(self, sql: str, values: tuple[Any, ...]) -> NativeResult:
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, self._execute_sync, sql, list(values)
-        )
+        result = await loop.run_in_executor(None, self._execute_sync, sql, list(values))
         return NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],

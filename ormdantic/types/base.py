@@ -9,4 +9,3 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 # SerializedType is a TypeVar that is bound to dict, so it can only be used
 # with subclasses of dict.
 SerializedType = TypeVar("SerializedType")
-

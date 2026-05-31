@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 LoaderStrategy = Literal["joined", "selectin", "lazy"]
 
 
@@ -32,4 +31,6 @@ def lazy(path: str) -> LoaderOption:
 def loader_depth(load: list[LoaderOption] | None) -> int:
     if not load:
         return 0
-    return max((option.depth for option in load if option.strategy != "lazy"), default=0)
+    return max(
+        (option.depth for option in load if option.strategy != "lazy"), default=0
+    )

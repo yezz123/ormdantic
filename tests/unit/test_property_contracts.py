@@ -21,7 +21,11 @@ def test_snake_case_contract(source: str, expected: str) -> None:
 
 def test_bind_compiled_query_preserves_parameter_order() -> None:
     query = bind_compiled_query(
-        {"sql": "SELECT * FROM t WHERE a = ? AND b = ?", "params": ["b", "a"], "operation": "select"},
+        {
+            "sql": "SELECT * FROM t WHERE a = ? AND b = ?",
+            "params": ["b", "a"],
+            "operation": "select",
+        },
         {"a": 1, "b": 2},
     )
 

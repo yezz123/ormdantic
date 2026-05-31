@@ -29,9 +29,7 @@ async def test_find_many_supports_comparison_and_like_filters(database) -> None:
     mocha = await db[Flavor].insert(Flavor(name="mocha", strength=3))
     await db[Flavor].insert(Flavor(name="vanilla", strength=1))
 
-    result = await db[Flavor].find_many(
-        where={"strength__gt": 1, "name__like": "mo%"}
-    )
+    result = await db[Flavor].find_many(where={"strength__gt": 1, "name__like": "mo%"})
 
     assert result.data == [mocha]
 

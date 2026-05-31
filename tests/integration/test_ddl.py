@@ -16,7 +16,12 @@ class DdlFlavor(Enum):
 def test_compile_create_table_sql_includes_types_indexes_and_checks() -> None:
     db = Ormdantic("sqlite:///:memory:")
 
-    @db.table(pk="id", indexed=["name"], unique=["code"], unique_constraints=[["name", "code"]])
+    @db.table(
+        pk="id",
+        indexed=["name"],
+        unique=["code"],
+        unique_constraints=[["name", "code"]],
+    )
     class Flavor(BaseModel):
         id: str
         name: str = Field(min_length=2, max_length=63)
@@ -36,7 +41,10 @@ def test_compile_create_table_sql_includes_types_indexes_and_checks() -> None:
         '"flavor" TEXT NOT NULL, '
         'UNIQUE ("name", "code"))'
     )
-    assert 'CREATE INDEX IF NOT EXISTS "flavor_name_idx" ON "flavor" ("name")' in statements
+    assert (
+        'CREATE INDEX IF NOT EXISTS "flavor_name_idx" ON "flavor" ("name")'
+        in statements
+    )
     assert (
         'CREATE UNIQUE INDEX IF NOT EXISTS "flavor_code_unique_idx" ON "flavor" ("code")'
         in statements

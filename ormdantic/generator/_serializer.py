@@ -57,12 +57,15 @@ class OrmSerializer(Generic[SerializedType]):
         """Deserialize the result set into Python models."""
         if self._can_use_flat_hydration():
             return self._deserialize_flat()
-        self._return_dict = hydrate_joined_payload(
-            columns=self._columns,
-            rows=[tuple(row) for row in self._result_set],
-            path_pks=self._path_pks(self._result_schema),
-            array_paths=self._array_paths(self._result_schema),
-        ) or {}
+        self._return_dict = (
+            hydrate_joined_payload(
+                columns=self._columns,
+                rows=[tuple(row) for row in self._result_set],
+                path_pks=self._path_pks(self._result_schema),
+                array_paths=self._array_paths(self._result_schema),
+            )
+            or {}
+        )
         if not self._return_dict:
             return None  # type: ignore
         if self._result_schema.is_array:
@@ -99,9 +102,7 @@ class OrmSerializer(Generic[SerializedType]):
                 for record in records
             ]  # type: ignore
         record = cast(dict[str, Any], payload)
-        return self._table_data.model(
-            **self._prep_flat_result(record)
-        )
+        return self._table_data.model(**self._prep_flat_result(record))
 
     def _prep_flat_result(self, record: dict[str, Any]) -> dict[str, Any]:
         return {
