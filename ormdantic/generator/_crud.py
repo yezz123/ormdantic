@@ -2,12 +2,9 @@
 
 from typing import Any, Generic
 
-from pypika import Order
-from pypika.queries import QueryBuilder
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from ormdantic.generator._field import OrmField
+from ormdantic.generator._field import Order, OrmField
 from ormdantic.generator._query import OrmQuery
 from ormdantic.generator._rust_query import RustQuery
 from ormdantic.generator._serializer import OrmSerializer
@@ -122,7 +119,7 @@ class OrmCrud(Generic[ModelType]):
         )
         return result.scalar()
 
-    async def _execute_query(self, query: QueryBuilder | RustQuery) -> Any:
+    async def _execute_query(self, query: RustQuery) -> Any:
         """Execute a query."""
         async_session = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
@@ -130,13 +127,8 @@ class OrmCrud(Generic[ModelType]):
         async with async_session() as session:
             result: Any
             async with session.begin():
-                if isinstance(query, RustQuery):
-                    connection = await session.connection()
-                    result = await connection.exec_driver_sql(
-                        query.sql, query.values
-                    )
-                else:
-                    result = await session.execute(text(str(query)))
+                connection = await session.connection()
+                result = await connection.exec_driver_sql(query.sql, query.values)
             await session.commit()
         await self._engine.dispose()
         return result

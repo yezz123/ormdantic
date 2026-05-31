@@ -8,9 +8,9 @@ from uuid import UUID, uuid4
 
 from decouple import config
 from pydantic import BaseModel, Field
-from pypika import Order
 
 from ormdantic import Ormdantic
+from ormdantic.generator._field import Order
 
 URL = config("DATABASE_URL")
 

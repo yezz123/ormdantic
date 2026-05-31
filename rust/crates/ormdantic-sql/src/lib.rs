@@ -319,8 +319,9 @@ fn compile_joined_select(
             join.right_column(),
         ));
     }
-    let params = append_filters(dialect, &mut sql, filters, &mut bind_index);
-    append_ordering(dialect, &mut sql, order_by);
+    let params =
+        append_filters_with_alias(dialect, &mut sql, filters, &mut bind_index, table.name());
+    append_ordering_with_alias(dialect, &mut sql, order_by, table.name());
     if let Some(limit) = limit {
         sql.push_str(&format!(" LIMIT {limit}"));
     }
@@ -512,6 +513,66 @@ fn append_ordering(dialect: &impl Dialect, sql: &mut String, order_by: &[OrderBy
     sql.push_str(&rendered);
 }
 
+fn append_filters_with_alias(
+    dialect: &impl Dialect,
+    sql: &mut String,
+    filters: &[Filter],
+    bind_index: &mut usize,
+    table_alias: &str,
+) -> Vec<String> {
+    if filters.is_empty() {
+        return Vec::new();
+    }
+
+    let mut params = Vec::with_capacity(filters.len());
+    let rendered = filters
+        .iter()
+        .map(|filter| match filter {
+            Filter::Eq { column, param } => {
+                params.push(param.clone());
+                let placeholder = dialect.placeholder(*bind_index);
+                *bind_index += 1;
+                format!(
+                    "{} = {placeholder}",
+                    qualified_alias_column(dialect, table_alias, column)
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    sql.push_str(" WHERE ");
+    sql.push_str(&rendered);
+    params
+}
+
+fn append_ordering_with_alias(
+    dialect: &impl Dialect,
+    sql: &mut String,
+    order_by: &[OrderBy],
+    table_alias: &str,
+) {
+    if order_by.is_empty() {
+        return;
+    }
+
+    let rendered = order_by
+        .iter()
+        .map(|order| {
+            let direction = match order.direction() {
+                SortDirection::Asc => "ASC",
+                SortDirection::Desc => "DESC",
+            };
+            format!(
+                "{} {direction}",
+                qualified_alias_column(dialect, table_alias, order.column())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    sql.push_str(" ORDER BY ");
+    sql.push_str(&rendered);
+}
+
 fn require_columns(columns: &[String], operation: &str) -> OrmdanticResult<()> {
     if columns.is_empty() {
         return Err(OrmdanticError::SqlCompile {
@@ -674,7 +735,7 @@ mod tests {
 
         assert_eq!(
             query.sql(),
-            "SELECT \"coffee\".\"id\" AS \"coffee\\id\", \"coffee/flavor\".\"id\" AS \"coffee/flavor\\id\", \"coffee/flavor\".\"name\" AS \"coffee/flavor\\name\" FROM \"coffee\" LEFT JOIN \"flavors\" AS \"coffee/flavor\" ON \"coffee\".\"flavor\" = \"coffee/flavor\".\"id\" WHERE \"id\" = ?"
+            "SELECT \"coffee\".\"id\" AS \"coffee\\id\", \"coffee/flavor\".\"id\" AS \"coffee/flavor\\id\", \"coffee/flavor\".\"name\" AS \"coffee/flavor\\name\" FROM \"coffee\" LEFT JOIN \"flavors\" AS \"coffee/flavor\" ON \"coffee\".\"flavor\" = \"coffee/flavor\".\"id\" WHERE \"coffee\".\"id\" = ?"
         );
         assert_eq!(query.params(), &["id".to_string()]);
     }

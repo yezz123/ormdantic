@@ -27,6 +27,15 @@ def rust_available() -> bool:
     return _ormdantic is not None and hasattr(_ormdantic, "compile_select_pk")
 
 
+def _require_extension(symbol: str) -> Any:
+    if _ormdantic is None or not hasattr(_ormdantic, symbol):
+        raise RuntimeError(
+            "Ormdantic vNext requires the Rust extension for SQL compilation. "
+            "Install the package with maturin or reinstall the wheel."
+        )
+    return _ormdantic
+
+
 def compile_select_pk(
     *,
     dialect: str,
@@ -34,12 +43,11 @@ def compile_select_pk(
     primary_key: str,
     columns: list[str],
     aliases: list[str] | None = None,
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_select_pk"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_select_pk")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_select_pk(dialect, table, primary_key, columns, aliases),
+        rust.compile_select_pk(dialect, table, primary_key, columns, aliases),
     )
 
 
@@ -54,12 +62,11 @@ def compile_find_many(
     limit: int | None = None,
     offset: int | None = None,
     aliases: list[str] | None = None,
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_find_many"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_find_many")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_find_many(
+        rust.compile_find_many(
             dialect,
             table,
             columns,
@@ -84,12 +91,11 @@ def compile_joined_find_many(
     order_direction: str,
     limit: int | None = None,
     offset: int | None = None,
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_joined_find_many"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_joined_find_many")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_joined_find_many(
+        rust.compile_joined_find_many(
             dialect,
             table,
             columns,
@@ -108,12 +114,11 @@ def compile_count(
     dialect: str,
     table: str,
     filter_columns: list[str],
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_count"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_count")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_count(dialect, table, filter_columns),
+        rust.compile_count(dialect, table, filter_columns),
     )
 
 
@@ -122,10 +127,9 @@ def compile_insert(
     dialect: str,
     table: str,
     columns: list[str],
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_insert"):
-        return None
-    return cast(CompiledQuery, _ormdantic.compile_insert(dialect, table, columns))
+) -> CompiledQuery:
+    rust = _require_extension("compile_insert")
+    return cast(CompiledQuery, rust.compile_insert(dialect, table, columns))
 
 
 def compile_update(
@@ -134,12 +138,11 @@ def compile_update(
     table: str,
     primary_key: str,
     columns: list[str],
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_update"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_update")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_update(dialect, table, primary_key, columns),
+        rust.compile_update(dialect, table, primary_key, columns),
     )
 
 
@@ -149,12 +152,11 @@ def compile_upsert(
     table: str,
     primary_key: str,
     columns: list[str],
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_upsert"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_upsert")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_upsert(dialect, table, primary_key, columns),
+        rust.compile_upsert(dialect, table, primary_key, columns),
     )
 
 
@@ -163,21 +165,18 @@ def compile_delete_pk(
     dialect: str,
     table: str,
     primary_key: str,
-) -> CompiledQuery | None:
-    if _ormdantic is None or not hasattr(_ormdantic, "compile_delete_pk"):
-        return None
+) -> CompiledQuery:
+    rust = _require_extension("compile_delete_pk")
     return cast(
         CompiledQuery,
-        _ormdantic.compile_delete_pk(dialect, table, primary_key),
+        rust.compile_delete_pk(dialect, table, primary_key),
     )
 
 
 def bind_compiled_query(
-    compiled: CompiledQuery | None,
+    compiled: CompiledQuery,
     values_by_param: Mapping[str, Any],
-) -> RustQuery | None:
-    if compiled is None:
-        return None
+) -> RustQuery:
     return RustQuery(
         sql=compiled["sql"],
         values=tuple(values_by_param[param] for param in compiled["params"]),

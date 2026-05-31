@@ -10,6 +10,7 @@ from ormdantic.generator._rust_query import (
     compile_count,
     compile_delete_pk,
     compile_find_many,
+    compile_joined_find_many,
     compile_insert,
     compile_select_pk,
     compile_update,
@@ -99,6 +100,37 @@ def test_rust_query_bridge_compiles_count() -> None:
         "sql": 'SELECT COUNT(*) FROM "flavors" WHERE "name" = $1',
         "params": ["name"],
         "operation": "count",
+    }
+
+
+def test_rust_query_bridge_compiles_joined_find_many() -> None:
+    query = compile_joined_find_many(
+        dialect="sqlite",
+        table="coffee",
+        columns=[
+            ("coffee", "id", "coffee\\id"),
+            ("coffee/flavor", "id", "coffee/flavor\\id"),
+            ("coffee/flavor", "name", "coffee/flavor\\name"),
+        ],
+        joins=[
+            (
+                "flavors",
+                "coffee/flavor",
+                "coffee",
+                "flavor",
+                "coffee/flavor",
+                "id",
+            )
+        ],
+        filter_columns=["id"],
+        order_columns=[],
+        order_direction="asc",
+    )
+
+    assert query == {
+        "sql": 'SELECT "coffee"."id" AS "coffee\\id", "coffee/flavor"."id" AS "coffee/flavor\\id", "coffee/flavor"."name" AS "coffee/flavor\\name" FROM "coffee" LEFT JOIN "flavors" AS "coffee/flavor" ON "coffee"."flavor" = "coffee/flavor"."id" WHERE "coffee"."id" = ?',
+        "params": ["id"],
+        "operation": "select",
     }
 
 
