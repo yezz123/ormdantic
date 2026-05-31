@@ -8,7 +8,7 @@ use ormdantic_sql::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
 #[pyfunction]
@@ -325,6 +325,46 @@ fn execute_native(
     Ok(output.into_any().unbind())
 }
 
+#[pyfunction]
+fn snake_case(value: &str) -> String {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut previous: Option<char> = None;
+    for ch in value.chars() {
+        if ch == '_' || ch == '-' || ch.is_whitespace() {
+            push_word(&mut words, &mut current);
+            previous = None;
+            continue;
+        }
+        if let Some(prev) = previous {
+            if (prev.is_lowercase() && ch.is_uppercase())
+                || (prev.is_ascii_digit() && ch.is_alphabetic())
+            {
+                push_word(&mut words, &mut current);
+            }
+        }
+        current.push(ch);
+        previous = Some(ch);
+    }
+    push_word(&mut words, &mut current);
+    words
+        .into_iter()
+        .map(|word| word.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+#[pyfunction]
+fn sql_value(py: Python<'_>, value: Py<PyAny>) -> PyResult<Py<PyAny>> {
+    match py_to_db_value(py, value)? {
+        DbValue::Null => Ok(py.None()),
+        DbValue::Integer(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::Real(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::Text(value) => Ok(PyString::new(py, &value).into_any().unbind()),
+        DbValue::Bool(value) => Ok(value.into_py_any(py)?),
+    }
+}
+
 type ColumnDdl = (
     String,
     String,
@@ -391,7 +431,10 @@ fn compile_create_table_sql(
 fn compile_drop_table_sql(dialect: &str, table: &str) -> PyResult<String> {
     let dialect =
         AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
-    Ok(format!("DROP TABLE IF EXISTS {}", dialect.quote_ident(table)))
+    Ok(format!(
+        "DROP TABLE IF EXISTS {}",
+        dialect.quote_ident(table)
+    ))
 }
 
 fn select_columns(
@@ -478,6 +521,12 @@ fn py_to_db_value(py: Python<'_>, value: Py<PyAny>) -> PyResult<DbValue> {
     Ok(DbValue::Text(value.str()?.to_string()))
 }
 
+fn push_word(words: &mut Vec<String>, current: &mut String) {
+    if !current.is_empty() {
+        words.push(std::mem::take(current));
+    }
+}
+
 fn db_value_to_py(py: Python<'_>, value: &DbValue) -> PyResult<Py<PyAny>> {
     match value {
         DbValue::Null => Ok(py.None()),
@@ -536,6 +585,8 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile_upsert, m)?)?;
     m.add_function(wrap_pyfunction!(compile_delete_pk, m)?)?;
     m.add_function(wrap_pyfunction!(execute_native, m)?)?;
+    m.add_function(wrap_pyfunction!(snake_case, m)?)?;
+    m.add_function(wrap_pyfunction!(sql_value, m)?)?;
     m.add_function(wrap_pyfunction!(compile_create_table_sql, m)?)?;
     m.add_function(wrap_pyfunction!(compile_drop_table_sql, m)?)?;
     Ok(())

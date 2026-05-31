@@ -1,10 +1,13 @@
 import re
+import importlib
 from typing import Union
+
+_ormdantic = importlib.import_module("ormdantic._ormdantic")
 
 
 def snake(string: str) -> str:
     """Return a version of the string in `snake_case`` format."""
-    return "_".join(w.lower() for w in get_words(string))
+    return str(_ormdantic.snake_case(string))
 
 
 def get_words(string: str) -> list[str]:
