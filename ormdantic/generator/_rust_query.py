@@ -73,6 +73,36 @@ def compile_find_many(
     )
 
 
+def compile_joined_find_many(
+    *,
+    dialect: str,
+    table: str,
+    columns: list[tuple[str, str, str]],
+    joins: list[tuple[str, str, str, str, str, str]],
+    filter_columns: list[str],
+    order_columns: list[str],
+    order_direction: str,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> CompiledQuery | None:
+    if _ormdantic is None or not hasattr(_ormdantic, "compile_joined_find_many"):
+        return None
+    return cast(
+        CompiledQuery,
+        _ormdantic.compile_joined_find_many(
+            dialect,
+            table,
+            columns,
+            joins,
+            filter_columns,
+            order_columns,
+            order_direction,
+            limit,
+            offset,
+        ),
+    )
+
+
 def compile_count(
     *,
     dialect: str,

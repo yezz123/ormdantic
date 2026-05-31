@@ -2,7 +2,8 @@ use ormdantic_dialects::AnyDialect;
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::{SchemaRegistry, TableDef};
 use ormdantic_sql::{
-    CompiledQuery, Filter, OrderBy, QueryAst, QueryOperation, SelectColumn, SortDirection, TableRef,
+    CompiledQuery, Filter, JoinSpec, JoinedSelectColumn, OrderBy, QueryAst, QueryOperation,
+    SelectColumn, SortDirection, TableRef,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -137,6 +138,64 @@ fn compile_find_many(
     let query = QueryAst::Select {
         table: TableRef::new(table),
         columns: select_columns(columns, aliases)?,
+        filters: equality_filters(filter_columns),
+        order_by: order_columns
+            .into_iter()
+            .map(|column| OrderBy::new(column, direction.clone()))
+            .collect(),
+        limit,
+        offset,
+    };
+    compile_to_python(py, dialect, query)
+}
+
+#[pyfunction(signature = (
+    dialect,
+    table,
+    columns,
+    joins,
+    filter_columns,
+    order_columns,
+    order_direction,
+    limit=None,
+    offset=None
+))]
+fn compile_joined_find_many(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    columns: Vec<(String, String, String)>,
+    joins: Vec<(String, String, String, String, String, String)>,
+    filter_columns: Vec<String>,
+    order_columns: Vec<String>,
+    order_direction: &str,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> PyResult<Py<PyAny>> {
+    let direction = parse_sort_direction(order_direction)?;
+    let query = QueryAst::JoinedSelect {
+        table: TableRef::new(table),
+        columns: columns
+            .into_iter()
+            .map(|(table_alias, column, alias)| {
+                JoinedSelectColumn::aliased(table_alias, column, alias)
+            })
+            .collect(),
+        joins: joins
+            .into_iter()
+            .map(
+                |(table, alias, left_alias, left_column, right_alias, right_column)| {
+                    JoinSpec::left_join(
+                        table,
+                        alias,
+                        left_alias,
+                        left_column,
+                        right_alias,
+                        right_column,
+                    )
+                },
+            )
+            .collect(),
         filters: equality_filters(filter_columns),
         order_by: order_columns
             .into_iter()
@@ -329,6 +388,7 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(validate_schema_tables, m)?)?;
     m.add_function(wrap_pyfunction!(compile_select_pk, m)?)?;
     m.add_function(wrap_pyfunction!(compile_find_many, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_joined_find_many, m)?)?;
     m.add_function(wrap_pyfunction!(compile_count, m)?)?;
     m.add_function(wrap_pyfunction!(compile_insert, m)?)?;
     m.add_function(wrap_pyfunction!(compile_update, m)?)?;

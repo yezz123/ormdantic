@@ -120,10 +120,106 @@ impl OrderBy {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinSpec {
+    table: String,
+    alias: String,
+    left_alias: String,
+    left_column: String,
+    right_alias: String,
+    right_column: String,
+}
+
+impl JoinSpec {
+    pub fn left_join(
+        table: impl Into<String>,
+        alias: impl Into<String>,
+        left_alias: impl Into<String>,
+        left_column: impl Into<String>,
+        right_alias: impl Into<String>,
+        right_column: impl Into<String>,
+    ) -> Self {
+        Self {
+            table: table.into(),
+            alias: alias.into(),
+            left_alias: left_alias.into(),
+            left_column: left_column.into(),
+            right_alias: right_alias.into(),
+            right_column: right_column.into(),
+        }
+    }
+
+    pub fn table(&self) -> &str {
+        &self.table
+    }
+
+    pub fn alias(&self) -> &str {
+        &self.alias
+    }
+
+    pub fn left_alias(&self) -> &str {
+        &self.left_alias
+    }
+
+    pub fn left_column(&self) -> &str {
+        &self.left_column
+    }
+
+    pub fn right_alias(&self) -> &str {
+        &self.right_alias
+    }
+
+    pub fn right_column(&self) -> &str {
+        &self.right_column
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinedSelectColumn {
+    table_alias: String,
+    column: String,
+    alias: String,
+}
+
+impl JoinedSelectColumn {
+    pub fn aliased(
+        table_alias: impl Into<String>,
+        column: impl Into<String>,
+        alias: impl Into<String>,
+    ) -> Self {
+        Self {
+            table_alias: table_alias.into(),
+            column: column.into(),
+            alias: alias.into(),
+        }
+    }
+
+    pub fn table_alias(&self) -> &str {
+        &self.table_alias
+    }
+
+    pub fn column(&self) -> &str {
+        &self.column
+    }
+
+    pub fn alias(&self) -> &str {
+        &self.alias
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryAst {
     Select {
         table: TableRef,
         columns: Vec<SelectColumn>,
+        filters: Vec<Filter>,
+        order_by: Vec<OrderBy>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    },
+    JoinedSelect {
+        table: TableRef,
+        columns: Vec<JoinedSelectColumn>,
+        joins: Vec<JoinSpec>,
         filters: Vec<Filter>,
         order_by: Vec<OrderBy>,
         limit: Option<usize>,
@@ -164,6 +260,17 @@ impl QueryAst {
                 limit,
                 offset,
             } => compile_select(dialect, table, columns, filters, order_by, *limit, *offset),
+            Self::JoinedSelect {
+                table,
+                columns,
+                joins,
+                filters,
+                order_by,
+                limit,
+                offset,
+            } => compile_joined_select(
+                dialect, table, columns, joins, filters, order_by, *limit, *offset,
+            ),
             Self::Count { table, filters } => compile_count(dialect, table, filters),
             Self::Insert { table, columns } => compile_insert(dialect, table, columns),
             Self::Update { table, columns, pk } => compile_update(dialect, table, columns, pk),
@@ -171,6 +278,56 @@ impl QueryAst {
             Self::Delete { table, pk } => compile_delete(dialect, table, pk),
         }
     }
+}
+
+fn compile_joined_select(
+    dialect: &impl Dialect,
+    table: &TableRef,
+    columns: &[JoinedSelectColumn],
+    joins: &[JoinSpec],
+    filters: &[Filter],
+    order_by: &[OrderBy],
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> OrmdanticResult<CompiledQuery> {
+    require_joined_select_columns(columns)?;
+    let mut bind_index = 1;
+    let selected = columns
+        .iter()
+        .map(|column| joined_selected_column(dialect, column))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut sql = format!(
+        "SELECT {selected} FROM {}",
+        dialect.quote_ident(table.name())
+    );
+    for join in joins {
+        sql.push_str(" LEFT JOIN ");
+        sql.push_str(&dialect.quote_ident(join.table()));
+        sql.push_str(" AS ");
+        sql.push_str(&dialect.quote_ident(join.alias()));
+        sql.push_str(" ON ");
+        sql.push_str(&qualified_alias_column(
+            dialect,
+            join.left_alias(),
+            join.left_column(),
+        ));
+        sql.push_str(" = ");
+        sql.push_str(&qualified_alias_column(
+            dialect,
+            join.right_alias(),
+            join.right_column(),
+        ));
+    }
+    let params = append_filters(dialect, &mut sql, filters, &mut bind_index);
+    append_ordering(dialect, &mut sql, order_by);
+    if let Some(limit) = limit {
+        sql.push_str(&format!(" LIMIT {limit}"));
+    }
+    if let Some(offset) = offset {
+        sql.push_str(&format!(" OFFSET {offset}"));
+    }
+    Ok(CompiledQuery::new(sql, params, QueryOperation::Select))
 }
 
 fn compile_select(
@@ -373,6 +530,15 @@ fn require_select_columns(columns: &[SelectColumn]) -> OrmdanticResult<()> {
     Ok(())
 }
 
+fn require_joined_select_columns(columns: &[JoinedSelectColumn]) -> OrmdanticResult<()> {
+    if columns.is_empty() {
+        return Err(OrmdanticError::SqlCompile {
+            message: "joined select query requires at least one column".to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn selected_column(dialect: &impl Dialect, table: &TableRef, column: &SelectColumn) -> String {
     let rendered = qualified_column(dialect, table, column.name());
     match column.alias() {
@@ -386,6 +552,22 @@ fn qualified_column(dialect: &impl Dialect, table: &TableRef, column: &str) -> S
         "{}.{}",
         dialect.quote_ident(table.name()),
         dialect.quote_ident(column)
+    )
+}
+
+fn qualified_alias_column(dialect: &impl Dialect, table_alias: &str, column: &str) -> String {
+    format!(
+        "{}.{}",
+        dialect.quote_ident(table_alias),
+        dialect.quote_ident(column)
+    )
+}
+
+fn joined_selected_column(dialect: &impl Dialect, column: &JoinedSelectColumn) -> String {
+    format!(
+        "{} AS {}",
+        qualified_alias_column(dialect, column.table_alias(), column.column()),
+        dialect.quote_ident(column.alias())
     )
 }
 
@@ -406,7 +588,10 @@ fn placeholders(dialect: &impl Dialect, start: usize, count: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Filter, OrderBy, QueryAst, QueryOperation, SelectColumn, SortDirection, TableRef};
+    use super::{
+        Filter, JoinSpec, JoinedSelectColumn, OrderBy, QueryAst, QueryOperation, SelectColumn,
+        SortDirection, TableRef,
+    };
     use ormdantic_dialects::{PostgresDialect, SqliteDialect};
 
     #[test]
@@ -457,6 +642,41 @@ mod tests {
             "SELECT \"flavors\".\"id\" AS \"flavors\\id\", \"flavors\".\"name\" AS \"flavors\\name\" FROM \"flavors\" WHERE \"name\" = $1 ORDER BY \"name\" DESC LIMIT 5"
         );
         assert_eq!(query.params(), &["name".to_string()]);
+    }
+
+    #[test]
+    fn compiles_joined_select_for_relationships() {
+        let query = QueryAst::JoinedSelect {
+            table: TableRef::new("coffee"),
+            columns: vec![
+                JoinedSelectColumn::aliased("coffee", "id", "coffee\\id"),
+                JoinedSelectColumn::aliased("coffee/flavor", "id", "coffee/flavor\\id"),
+                JoinedSelectColumn::aliased("coffee/flavor", "name", "coffee/flavor\\name"),
+            ],
+            joins: vec![JoinSpec::left_join(
+                "flavors",
+                "coffee/flavor",
+                "coffee",
+                "flavor",
+                "coffee/flavor",
+                "id",
+            )],
+            filters: vec![Filter::Eq {
+                column: "id".to_string(),
+                param: "id".to_string(),
+            }],
+            order_by: Vec::new(),
+            limit: None,
+            offset: None,
+        }
+        .compile(&SqliteDialect)
+        .expect("joined select should compile");
+
+        assert_eq!(
+            query.sql(),
+            "SELECT \"coffee\".\"id\" AS \"coffee\\id\", \"coffee/flavor\".\"id\" AS \"coffee/flavor\\id\", \"coffee/flavor\".\"name\" AS \"coffee/flavor\\name\" FROM \"coffee\" LEFT JOIN \"flavors\" AS \"coffee/flavor\" ON \"coffee\".\"flavor\" = \"coffee/flavor\".\"id\" WHERE \"id\" = ?"
+        );
+        assert_eq!(query.params(), &["id".to_string()]);
     }
 
     #[test]
