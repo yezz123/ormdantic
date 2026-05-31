@@ -1442,6 +1442,7 @@ dependencies = [
  "ormdantic-schema",
  "ormdantic-sql",
  "pyo3",
+ "pyo3-build-config",
 ]
 
 [[package]]
