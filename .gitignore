@@ -133,3 +133,6 @@ dmypy.json
 
 # Local reference repositories
 .references/
+
+# skills
+.skills/
