@@ -12,8 +12,19 @@ description = "Native database execution for Ormdantic"
 name = "ormdantic_engine"
 path = "src/lib.rs"
 
+[features]
+default = ["sqlite", "postgres", "mysql"]
+sqlite = []
+postgres = []
+mysql = []
+mariadb = ["mysql"]
+mssql = []
+oracle = []
+all-engines = ["sqlite", "postgres", "mysql", "mariadb", "mssql", "oracle"]
+
 [dependencies]
 ormdantic-core.workspace = true
 ormdantic-dialects.workspace = true
+mysql = "25"
 postgres = "0.19"
 rusqlite = { version = "0.32", features = ["bundled"] }
