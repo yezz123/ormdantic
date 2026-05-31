@@ -49,6 +49,13 @@ name = "ormdantic-core"
 version = "1.7.0"
 
 [[package]]
+name = "ormdantic-dialects"
+version = "1.7.0"
+dependencies = [
+ "ormdantic-core",
+]
+
+[[package]]
 name = "ormdantic-hydrate"
 version = "1.7.0"
 dependencies = [
@@ -71,6 +78,14 @@ name = "ormdantic-schema"
 version = "1.7.0"
 dependencies = [
  "ormdantic-core",
+]
+
+[[package]]
+name = "ormdantic-sql"
+version = "1.7.0"
+dependencies = [
+ "ormdantic-core",
+ "ormdantic-dialects",
 ]
 
 [[package]]

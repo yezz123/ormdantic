@@ -3,6 +3,8 @@ members = [
     "rust/crates/ormdantic-core",
     "rust/crates/ormdantic-schema",
     "rust/crates/ormdantic-hydrate",
+    "rust/crates/ormdantic-dialects",
+    "rust/crates/ormdantic-sql",
     "rust/crates/ormdantic-py",
 ]
 resolver = "2"
@@ -19,6 +21,8 @@ rust-version = "1.75"
 ormdantic-core = { path = "rust/crates/ormdantic-core" }
 ormdantic-schema = { path = "rust/crates/ormdantic-schema" }
 ormdantic-hydrate = { path = "rust/crates/ormdantic-hydrate" }
+ormdantic-dialects = { path = "rust/crates/ormdantic-dialects" }
+ormdantic-sql = { path = "rust/crates/ormdantic-sql" }
 pyo3 = "0.26"
 
 [profile.release]

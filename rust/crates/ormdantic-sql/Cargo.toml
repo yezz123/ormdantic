@@ -1,0 +1,17 @@
+[package]
+name = "ormdantic-sql"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "SQL AST and query compiler for Ormdantic"
+
+[lib]
+name = "ormdantic_sql"
+path = "src/lib.rs"
+
+[dependencies]
+ormdantic-core.workspace = true
+ormdantic-dialects.workspace = true
