@@ -7,6 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "PyO3 bindings for Ormdantic Rust internals"
+readme = "README.md"
 
 [lib]
 name = "_ormdantic"
@@ -21,3 +22,6 @@ ormdantic-dialects.workspace = true
 ormdantic-engine.workspace = true
 ormdantic-sql.workspace = true
 pyo3 = { workspace = true, features = ["extension-module"] }
+
+[build-dependencies]
+pyo3-build-config = "0.26"

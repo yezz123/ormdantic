@@ -7,6 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Schema metadata structures for Ormdantic"
+readme = "README.md"
 
 [lib]
 name = "ormdantic_schema"
