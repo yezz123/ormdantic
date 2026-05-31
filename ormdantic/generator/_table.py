@@ -82,7 +82,7 @@ class OrmTableGenerator:
     ) -> Column[Any] | None:
         outer_origin = get_origin(field.outer_type_)
         origin = get_origin(field.type_)
-        if outer_origin and outer_origin == list:
+        if outer_origin is list:
             return self._get_column_from_type_args(
                 field_name, field, **kwargs
             )  # pragma: no cover
@@ -91,13 +91,13 @@ class OrmTableGenerator:
                 return self._get_column_from_type_args(field_name, field, **kwargs)
             else:
                 raise TypeConversionError(field.type_)  # pragma: no cover
-        if get_origin(field.outer_type_) == dict:
+        if get_origin(field.outer_type_) is dict:
             return Column(field_name, JSON, **kwargs)
         if field.type_ is uuid.UUID:
             col_type = (
                 postgresql.UUID if self._engine.name == "postgres" else String(36)
             )
-            return Column(field_name, col_type, **kwargs)  # type: ignore
+            return Column(field_name, col_type, **kwargs)
         if issubclass(field.type_, BaseModel):
             return Column(field_name, JSON, **kwargs)
         if issubclass(field.type_, str):

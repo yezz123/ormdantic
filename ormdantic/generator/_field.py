@@ -21,8 +21,8 @@ from ormdantic.models import Map, OrmTable
 class OrmField:
     """Build SQL queries from field information."""
 
-    def __init__(  # type: ignore
-        self, table_data: OrmTable, table_map: Map, dialect: str
+    def __init__(
+        self, table_data: OrmTable[Any], table_map: Map, dialect: str
     ) -> None:
         """Build CRUD queries from tablename and field info.
 

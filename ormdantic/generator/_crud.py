@@ -128,6 +128,7 @@ class OrmCrud(Generic[ModelType]):
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
         async with async_session() as session:
+            result: Any
             async with session.begin():
                 if isinstance(query, RustQuery):
                     connection = await session.connection()
