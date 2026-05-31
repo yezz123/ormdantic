@@ -19,12 +19,13 @@ class OrmCrud(Generic[ModelType]):
         table_data: OrmTable,  # type: ignore
         table_map: Map,
         connection: str,
+        native_engine: NativeEngine,
     ) -> None:
         """Initialize OrmCrud."""
         self._connection = connection
         self._table_map = table_map
         self._table_data = table_data
-        self._native_engine = NativeEngine(connection)
+        self._native_engine = native_engine
         self.tablename = table_data.tablename
         self.columns = table_data.columns
 

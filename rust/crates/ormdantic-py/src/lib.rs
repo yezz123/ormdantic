@@ -1,5 +1,5 @@
 use ormdantic_dialects::{AnyDialect, Dialect};
-use ormdantic_engine::{execute_url, DbValue};
+use ormdantic_engine::{execute_url, DbValue, NativeConnection};
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::{SchemaRegistry, TableDef};
 use ormdantic_sql::{
@@ -11,8 +11,65 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 
 type FilterSpec = (String, String, Vec<String>);
+
+#[pyclass]
+struct PyNativeConnection {
+    inner: Mutex<NativeConnection>,
+}
+
+#[pymethods]
+impl PyNativeConnection {
+    #[new]
+    fn new(url: &str) -> PyResult<Self> {
+        Ok(Self {
+            inner: Mutex::new(
+                NativeConnection::open(url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            ),
+        })
+    }
+
+    fn execute(&self, py: Python<'_>, sql: &str, params: Vec<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+        let values = params
+            .into_iter()
+            .map(|value| py_to_db_value(py, value))
+            .collect::<PyResult<Vec<_>>>()?;
+        let result = self
+            .inner
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .execute(sql, &values)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        query_result_to_python(py, result)
+    }
+
+    fn begin(&self) -> PyResult<()> {
+        self.inner
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .begin()
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn commit(&self) -> PyResult<()> {
+        self.inner
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .commit()
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn rollback(&self) -> PyResult<()> {
+        self.inner
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .rollback()
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+}
 
 #[pyfunction]
 fn hydrate_flat(
@@ -409,6 +466,13 @@ fn execute_native(
         .collect::<PyResult<Vec<_>>>()?;
     let result =
         execute_url(url, sql, &values).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    query_result_to_python(py, result)
+}
+
+fn query_result_to_python(
+    py: Python<'_>,
+    result: ormdantic_engine::QueryResult,
+) -> PyResult<Py<PyAny>> {
     let output = PyDict::new(py);
     output.set_item("columns", result.columns())?;
     let rows = PyList::empty(py);
@@ -747,6 +811,7 @@ fn row_to_dict<'py>(
 
 #[pymodule]
 fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyNativeConnection>()?;
     m.add_function(wrap_pyfunction!(hydrate_flat, m)?)?;
     m.add_function(wrap_pyfunction!(hydrate_joined, m)?)?;
     m.add_function(wrap_pyfunction!(plan_result_shape, m)?)?;

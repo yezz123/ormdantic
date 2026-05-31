@@ -32,12 +32,13 @@ class NativeResult:
 
 class NativeEngine:
     def __init__(self, url: str) -> None:
-        if _ormdantic is None or not hasattr(_ormdantic, "execute_native"):
+        if _ormdantic is None or not hasattr(_ormdantic, "PyNativeConnection"):
             raise RuntimeError(
                 "Ormdantic vNext requires the Rust extension for native execution. "
                 "Install the package with maturin or reinstall the wheel."
             )
         self.url = url
+        self._connection = _ormdantic.PyNativeConnection(url)
 
     async def execute(self, sql: str, values: tuple[Any, ...]) -> NativeResult:
         loop = asyncio.get_running_loop()
@@ -51,4 +52,34 @@ class NativeEngine:
 
     def _execute_sync(self, sql: str, values: list[Any]) -> dict[str, Any]:
         assert _ormdantic is not None
-        return _ormdantic.execute_native(self.url, sql, values)
+        return self._connection.execute(sql, values)
+
+    def transaction(self) -> NativeTransaction:
+        return NativeTransaction(self)
+
+    async def begin(self) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._connection.begin)
+
+    async def commit(self) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._connection.commit)
+
+    async def rollback(self) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._connection.rollback)
+
+
+class NativeTransaction:
+    def __init__(self, engine: NativeEngine) -> None:
+        self._engine = engine
+
+    async def __aenter__(self) -> NativeTransaction:
+        await self._engine.begin()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is None:
+            await self._engine.commit()
+        else:
+            await self._engine.rollback()

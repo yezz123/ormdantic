@@ -62,9 +62,56 @@ pub fn execute_url(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<
     }
 }
 
+pub enum NativeConnection {
+    Sqlite(Connection),
+}
+
+impl NativeConnection {
+    pub fn open(url: &str) -> OrmdanticResult<Self> {
+        match DialectKind::parse(url)? {
+            DialectKind::Sqlite => Ok(Self::Sqlite(
+                Connection::open(sqlite_path(url)).map_err(sql_error)?,
+            )),
+            other => Err(OrmdanticError::UnsupportedDialect {
+                dialect: format!("{other:?}"),
+            }),
+        }
+    }
+
+    pub fn execute(&mut self, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
+        match self {
+            Self::Sqlite(connection) => execute_sqlite_connection(connection, sql, params),
+        }
+    }
+
+    pub fn begin(&mut self) -> OrmdanticResult<()> {
+        self.execute("BEGIN", &[]).map(|_| ())
+    }
+
+    pub fn commit(&mut self) -> OrmdanticResult<()> {
+        self.execute("COMMIT", &[]).map(|_| ())
+    }
+
+    pub fn rollback(&mut self) -> OrmdanticResult<()> {
+        self.execute("ROLLBACK", &[]).map(|_| ())
+    }
+
+    pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+        self.execute(&format!("SAVEPOINT {name}"), &[]).map(|_| ())
+    }
+}
+
 fn execute_sqlite(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
     let path = sqlite_path(url);
-    let connection = Connection::open(path).map_err(sql_error)?;
+    let mut connection = Connection::open(path).map_err(sql_error)?;
+    execute_sqlite_connection(&mut connection, sql, params)
+}
+
+fn execute_sqlite_connection(
+    connection: &mut Connection,
+    sql: &str,
+    params: &[DbValue],
+) -> OrmdanticResult<QueryResult> {
     if returns_rows(sql) {
         let mut statement = connection.prepare(sql).map_err(sql_error)?;
         let columns = statement

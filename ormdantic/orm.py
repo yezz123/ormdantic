@@ -1,7 +1,7 @@
 """Module providing a way to create ORM models and schemas"""
 
 from types import UnionType
-from typing import Callable, ForwardRef, Type, Union, get_args, get_origin
+from typing import Any, Callable, ForwardRef, Type, Union, get_args, get_origin
 
 from ormdantic._introspect import (
     FieldMetadata,
@@ -89,6 +89,7 @@ class Ormdantic:
                 table_data,
                 self._table_map,
                 self._connection,
+                self._native_engine,
             )
         await self.create_all()
 
@@ -101,6 +102,10 @@ class Ormdantic:
         for tablename in reversed(list(self._table_map.name_to_data)):
             sql = compile_drop_table_sql(tablename, self._connection)
             await self._native_engine.execute(sql, ())
+
+    def transaction(self) -> Any:
+        """Open a native transaction context."""
+        return self._native_engine.transaction()
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         """Get relationships for a given table."""
