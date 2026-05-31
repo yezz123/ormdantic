@@ -12,6 +12,8 @@ use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use std::collections::{HashMap, HashSet};
 
+type FilterSpec = (String, String, Vec<String>);
+
 #[pyfunction]
 fn hydrate_flat(
     py: Python<'_>,
@@ -225,7 +227,7 @@ fn compile_find_many(
     dialect: &str,
     table: &str,
     columns: Vec<String>,
-    filter_columns: Vec<String>,
+    filter_columns: Vec<FilterSpec>,
     order_columns: Vec<String>,
     order_direction: &str,
     limit: Option<usize>,
@@ -236,7 +238,7 @@ fn compile_find_many(
     let query = QueryAst::Select {
         table: TableRef::new(table),
         columns: select_columns(columns, aliases)?,
-        filters: equality_filters(filter_columns),
+        filters: filter_specs(filter_columns)?,
         order_by: order_columns
             .into_iter()
             .map(|column| OrderBy::new(column, direction.clone()))
@@ -264,7 +266,7 @@ fn compile_joined_find_many(
     table: &str,
     columns: Vec<(String, String, String)>,
     joins: Vec<(String, String, String, String, String, String)>,
-    filter_columns: Vec<String>,
+    filter_columns: Vec<FilterSpec>,
     order_columns: Vec<String>,
     order_direction: &str,
     limit: Option<usize>,
@@ -294,7 +296,7 @@ fn compile_joined_find_many(
                 },
             )
             .collect(),
-        filters: equality_filters(filter_columns),
+        filters: filter_specs(filter_columns)?,
         order_by: order_columns
             .into_iter()
             .map(|column| OrderBy::new(column, direction.clone()))
@@ -310,14 +312,14 @@ fn compile_count(
     py: Python<'_>,
     dialect: &str,
     table: &str,
-    filter_columns: Vec<String>,
+    filter_columns: Vec<FilterSpec>,
 ) -> PyResult<Py<PyAny>> {
     compile_to_python(
         py,
         dialect,
         QueryAst::Count {
             table: TableRef::new(table),
-            filters: equality_filters(filter_columns),
+            filters: filter_specs(filter_columns)?,
         },
     )
 }
@@ -552,12 +554,52 @@ fn select_columns(
         .collect())
 }
 
-fn equality_filters(columns: Vec<String>) -> Vec<Filter> {
-    columns
+fn filter_specs(filters: Vec<FilterSpec>) -> PyResult<Vec<Filter>> {
+    filters
         .into_iter()
-        .map(|column| Filter::Eq {
-            param: column.clone(),
-            column,
+        .map(|(column, operator, params)| {
+            let first = params.first().cloned().unwrap_or_else(|| column.clone());
+            match operator.as_str() {
+                "eq" => Ok(Filter::Eq {
+                    column,
+                    param: first,
+                }),
+                "ne" => Ok(Filter::Ne {
+                    column,
+                    param: first,
+                }),
+                "lt" => Ok(Filter::Lt {
+                    column,
+                    param: first,
+                }),
+                "le" => Ok(Filter::Le {
+                    column,
+                    param: first,
+                }),
+                "gt" => Ok(Filter::Gt {
+                    column,
+                    param: first,
+                }),
+                "ge" => Ok(Filter::Ge {
+                    column,
+                    param: first,
+                }),
+                "like" => Ok(Filter::Like {
+                    column,
+                    param: first,
+                }),
+                "ilike" => Ok(Filter::ILike {
+                    column,
+                    param: first,
+                }),
+                "in" => Ok(Filter::In { column, params }),
+                "not_in" => Ok(Filter::NotIn { column, params }),
+                "is_null" => Ok(Filter::IsNull { column }),
+                "is_not_null" => Ok(Filter::IsNotNull { column }),
+                other => Err(PyValueError::new_err(format!(
+                    "unsupported filter operator '{other}'"
+                ))),
+            }
         })
         .collect()
 }

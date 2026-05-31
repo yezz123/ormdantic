@@ -5,13 +5,13 @@ from typing import Any
 
 from ormdantic.generator._rust_query import (
     CompiledQuery,
+    FilterSpec,
     RustQuery,
     bind_compiled_query,
     compile_count,
     compile_delete_pk,
     compile_find_many,
     compile_joined_find_many,
-    compile_select_pk,
 )
 from ormdantic.handler import py_type_to_sql
 from ormdantic.models import Map, OrmTable
@@ -20,6 +20,22 @@ from ormdantic.models import Map, OrmTable
 class Order(Enum):
     asc = "asc"
     desc = "desc"
+
+
+FILTER_OPERATORS = {
+    "eq",
+    "ne",
+    "lt",
+    "le",
+    "gt",
+    "ge",
+    "like",
+    "ilike",
+    "in",
+    "not_in",
+    "is_null",
+    "is_not_null",
+}
 
 
 class OrmField:
@@ -41,7 +57,7 @@ class OrmField:
         """Get query to find one model."""
         return bind_compiled_query(
             self._compile_select(
-                where=[self._table_data.pk],
+                where=[(self._table_data.pk, "eq", [self._table_data.pk])],
                 order_by=[],
                 order=Order.asc,
                 limit=None,
@@ -72,13 +88,10 @@ class OrmField:
         """
         where = where or {}
         order_by = order_by or []
-        filter_values = {
-            field: py_type_to_sql(self._table_map, value)
-            for field, value in where.items()
-        }
+        filters, filter_values = self._parse_where(where)
         return bind_compiled_query(
             self._compile_select(
-                where=list(where),
+                where=filters,
                 order_by=order_by,
                 order=order,
                 limit=limit or None,
@@ -115,22 +128,19 @@ class OrmField:
         :return: Query to count records.
         """
         where = where or {}
-        filter_values = {
-            field: py_type_to_sql(self._table_map, value)
-            for field, value in where.items()
-        }
+        filters, filter_values = self._parse_where(where)
         return bind_compiled_query(
             compile_count(
                 dialect=self._dialect,
                 table=self._table_data.tablename,
-                filter_columns=list(where),
+                filter_columns=filters,
             ),
             filter_values,
         )
 
     def _compile_select(
         self,
-        where: list[str],
+        where: list[FilterSpec],
         order_by: list[str],
         order: Order,
         limit: int | None,
@@ -240,3 +250,35 @@ class OrmField:
             f"{self._table_data.tablename}\\{column}"
             for column in self._flat_column_names(depth)
         ]
+
+    def _parse_where(
+        self, where: dict[str, Any]
+    ) -> tuple[list[FilterSpec], dict[str, Any]]:
+        filters: list[FilterSpec] = []
+        values = {}
+        for key, value in where.items():
+            column, operator = self._split_filter_key(key)
+            if operator in {"is_null", "is_not_null"}:
+                filters.append((column, operator, []))
+                continue
+            if operator in {"in", "not_in"}:
+                param_names = []
+                for idx, item in enumerate(value):
+                    param_name = f"{column}__{operator}_{idx}"
+                    param_names.append(param_name)
+                    values[param_name] = py_type_to_sql(self._table_map, item)
+                filters.append((column, operator, param_names))
+                continue
+            param_name = key
+            filters.append((column, operator, [param_name]))
+            values[param_name] = py_type_to_sql(self._table_map, value)
+        return filters, values
+
+    @staticmethod
+    def _split_filter_key(key: str) -> tuple[str, str]:
+        if "__" not in key:
+            return key, "eq"
+        column, operator = key.rsplit("__", 1)
+        if operator not in FILTER_OPERATORS:
+            return key, "eq"
+        return column, operator

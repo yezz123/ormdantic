@@ -16,6 +16,9 @@ class CompiledQuery(TypedDict):
     operation: str
 
 
+FilterSpec = tuple[str, str, list[str]]
+
+
 @dataclass(frozen=True)
 class RustQuery:
     sql: str
@@ -56,7 +59,7 @@ def compile_find_many(
     dialect: str,
     table: str,
     columns: list[str],
-    filter_columns: list[str],
+    filter_columns: list[FilterSpec],
     order_columns: list[str],
     order_direction: str,
     limit: int | None = None,
@@ -86,7 +89,7 @@ def compile_joined_find_many(
     table: str,
     columns: list[tuple[str, str, str]],
     joins: list[tuple[str, str, str, str, str, str]],
-    filter_columns: list[str],
+    filter_columns: list[FilterSpec],
     order_columns: list[str],
     order_direction: str,
     limit: int | None = None,
@@ -113,7 +116,7 @@ def compile_count(
     *,
     dialect: str,
     table: str,
-    filter_columns: list[str],
+    filter_columns: list[FilterSpec],
 ) -> CompiledQuery:
     rust = _require_extension("compile_count")
     return cast(

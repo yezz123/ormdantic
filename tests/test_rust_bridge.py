@@ -68,7 +68,7 @@ def test_rust_query_bridge_compiles_find_many() -> None:
         dialect="sqlite",
         table="flavors",
         columns=["id", "name"],
-        filter_columns=["name"],
+        filter_columns=[("name", "eq", ["name"])],
         order_columns=["name"],
         order_direction="desc",
         limit=10,
@@ -90,7 +90,7 @@ def test_rust_query_bridge_compiles_count() -> None:
     query = compile_count(
         dialect="postgresql",
         table="flavors",
-        filter_columns=["name"],
+        filter_columns=[("name", "eq", ["name"])],
     )
 
     if query is None:
@@ -122,7 +122,7 @@ def test_rust_query_bridge_compiles_joined_find_many() -> None:
                 "id",
             )
         ],
-        filter_columns=["id"],
+        filter_columns=[("id", "eq", ["id"])],
         order_columns=[],
         order_direction="asc",
     )

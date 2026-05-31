@@ -88,6 +88,19 @@ impl SelectColumn {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Filter {
     Eq { column: String, param: String },
+    Ne { column: String, param: String },
+    Lt { column: String, param: String },
+    Le { column: String, param: String },
+    Gt { column: String, param: String },
+    Ge { column: String, param: String },
+    Like { column: String, param: String },
+    ILike { column: String, param: String },
+    In { column: String, params: Vec<String> },
+    NotIn { column: String, params: Vec<String> },
+    IsNull { column: String },
+    IsNotNull { column: String },
+    And(Vec<Filter>),
+    Or(Vec<Filter>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -475,16 +488,13 @@ fn append_filters(
         return Vec::new();
     }
 
-    let mut params = Vec::with_capacity(filters.len());
+    let mut params = Vec::new();
     let rendered = filters
         .iter()
-        .map(|filter| match filter {
-            Filter::Eq { column, param } => {
-                params.push(param.clone());
-                let placeholder = dialect.placeholder(*bind_index);
-                *bind_index += 1;
-                format!("{} = {placeholder}", dialect.quote_ident(column))
-            }
+        .map(|filter| {
+            render_filter(dialect, filter, bind_index, &mut params, |column| {
+                dialect.quote_ident(column)
+            })
         })
         .collect::<Vec<_>>()
         .join(" AND ");
@@ -524,25 +534,182 @@ fn append_filters_with_alias(
         return Vec::new();
     }
 
-    let mut params = Vec::with_capacity(filters.len());
+    let mut params = Vec::new();
     let rendered = filters
         .iter()
-        .map(|filter| match filter {
-            Filter::Eq { column, param } => {
-                params.push(param.clone());
-                let placeholder = dialect.placeholder(*bind_index);
-                *bind_index += 1;
-                format!(
-                    "{} = {placeholder}",
-                    qualified_alias_column(dialect, table_alias, column)
-                )
-            }
+        .map(|filter| {
+            render_filter(dialect, filter, bind_index, &mut params, |column| {
+                qualified_alias_column(dialect, table_alias, column)
+            })
         })
         .collect::<Vec<_>>()
         .join(" AND ");
     sql.push_str(" WHERE ");
     sql.push_str(&rendered);
     params
+}
+
+fn render_filter(
+    dialect: &impl Dialect,
+    filter: &Filter,
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+    render_column: impl Fn(&str) -> String + Copy,
+) -> String {
+    match filter {
+        Filter::Eq { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            "=",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::Ne { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            "!=",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::Lt { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            "<",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::Le { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            "<=",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::Gt { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            ">",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::Ge { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            ">=",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::Like { column, param } => render_binary_filter(
+            dialect,
+            render_column(column),
+            "LIKE",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::ILike { column, param } => render_binary_filter(
+            dialect,
+            format!("LOWER({})", render_column(column)),
+            "LIKE",
+            param,
+            bind_index,
+            params,
+        ),
+        Filter::In {
+            column,
+            params: names,
+        } => render_in_filter(
+            dialect,
+            render_column(column),
+            "IN",
+            names,
+            bind_index,
+            params,
+        ),
+        Filter::NotIn {
+            column,
+            params: names,
+        } => render_in_filter(
+            dialect,
+            render_column(column),
+            "NOT IN",
+            names,
+            bind_index,
+            params,
+        ),
+        Filter::IsNull { column } => format!("{} IS NULL", render_column(column)),
+        Filter::IsNotNull { column } => format!("{} IS NOT NULL", render_column(column)),
+        Filter::And(filters) => {
+            render_filter_group(dialect, "AND", filters, bind_index, params, render_column)
+        }
+        Filter::Or(filters) => {
+            render_filter_group(dialect, "OR", filters, bind_index, params, render_column)
+        }
+    }
+}
+
+fn render_binary_filter(
+    dialect: &impl Dialect,
+    column: String,
+    operator: &str,
+    param: &str,
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+) -> String {
+    params.push(param.to_string());
+    let placeholder = dialect.placeholder(*bind_index);
+    *bind_index += 1;
+    format!("{column} {operator} {placeholder}")
+}
+
+fn render_in_filter(
+    dialect: &impl Dialect,
+    column: String,
+    operator: &str,
+    names: &[String],
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+) -> String {
+    if names.is_empty() {
+        return if operator == "IN" {
+            "1 = 0".to_string()
+        } else {
+            "1 = 1".to_string()
+        };
+    }
+    let placeholders = names
+        .iter()
+        .map(|name| {
+            params.push(name.clone());
+            let placeholder = dialect.placeholder(*bind_index);
+            *bind_index += 1;
+            placeholder
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{column} {operator} ({placeholders})")
+}
+
+fn render_filter_group(
+    dialect: &impl Dialect,
+    operator: &str,
+    filters: &[Filter],
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+    render_column: impl Fn(&str) -> String + Copy,
+) -> String {
+    let rendered = filters
+        .iter()
+        .map(|filter| render_filter(dialect, filter, bind_index, params, render_column))
+        .collect::<Vec<_>>()
+        .join(&format!(" {operator} "));
+    format!("({rendered})")
 }
 
 fn append_ordering_with_alias(
