@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import importlib
+from collections import OrderedDict
+from typing import Any, cast
+
+try:
+    _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
+except ImportError:  # pragma: no cover - exercised when extension is not built
+    _ormdantic = None
+
+
+def hydrate_flat_payload(
+    *,
+    tablename: str,
+    pk: str,
+    columns: list[str],
+    rows: list[tuple[Any, ...]],
+    is_array: bool,
+) -> dict[str, Any] | list[dict[str, Any]] | None:
+    """Hydrate flat SQL rows into dict payloads.
+
+    The Rust extension owns the fast path when it is available. The Python
+    fallback keeps source checkouts usable before the extension is built.
+    """
+    if _ormdantic is not None:
+        return cast(
+            dict[str, Any] | list[dict[str, Any]] | None,
+            _ormdantic.hydrate_flat(
+                tablename,
+                pk,
+                columns,
+                [list(row) for row in rows],
+                is_array,
+            ),
+        )
+    return _hydrate_flat_payload_python(
+        tablename=tablename,
+        pk=pk,
+        columns=columns,
+        rows=rows,
+        is_array=is_array,
+    )
+
+
+def _hydrate_flat_payload_python(
+    *,
+    tablename: str,
+    pk: str,
+    columns: list[str],
+    rows: list[tuple[Any, ...]],
+    is_array: bool,
+) -> dict[str, Any] | list[dict[str, Any]] | None:
+    parsed_columns = [
+        _parse_column_alias(alias, tablename) for alias in columns
+    ]
+    pk_idx = _get_pk_index(parsed_columns, tablename, pk)
+
+    if not rows:
+        return None
+
+    if not is_array:
+        return _row_to_dict(rows[0], parsed_columns)
+
+    records: OrderedDict[Any, dict[str, Any]] = OrderedDict()
+    for row in rows:
+        pk_value = row[pk_idx]
+        if pk_value not in records:
+            records[pk_value] = _row_to_dict(row, parsed_columns)
+    return list(records.values())
+
+
+def _parse_column_alias(alias: str, tablename: str) -> str | None:
+    column_tree, _, column = alias.partition("\\")
+    if column_tree != tablename or not column:
+        return None
+    return column
+
+
+def _get_pk_index(
+    parsed_columns: list[str | None], tablename: str, pk: str
+) -> int:
+    try:
+        return parsed_columns.index(pk)
+    except ValueError as exc:
+        raise ValueError(
+            f"primary key column '{tablename}\\{pk}' was not found"
+        ) from exc
+
+
+def _row_to_dict(
+    row: tuple[Any, ...], parsed_columns: list[str | None]
+) -> dict[str, Any]:
+    return {
+        column: row[idx]
+        for idx, column in enumerate(parsed_columns)
+        if column is not None
+    }

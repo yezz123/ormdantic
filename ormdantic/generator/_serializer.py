@@ -1,10 +1,11 @@
 import json
 from types import NoneType
-from typing import Any, Generic, get_args
+from typing import Any, Generic, cast, get_args
 
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import CursorResult
 
+from ormdantic.generator._hydration import hydrate_flat_payload
 from ormdantic.models import Map, OrmTable
 from ormdantic.types import ModelType, SerializedType
 
@@ -55,6 +56,8 @@ class OrmSerializer(Generic[SerializedType]):
 
     def deserialize(self) -> SerializedType:
         """Deserialize the result set into Python models."""
+        if self._can_use_flat_hydration():
+            return self._deserialize_flat()
         for row in self._result_set:
             row_schema = {}
             for column_idx, column_tree in enumerate(self._columns):
@@ -109,6 +112,37 @@ class OrmSerializer(Generic[SerializedType]):
                 self._table_data.tablename
             ]
         )
+
+    def _can_use_flat_hydration(self) -> bool:
+        return self._depth <= 0
+
+    def _deserialize_flat(self) -> SerializedType:
+        rows = [tuple(row) for row in self._result_set]
+        payload = hydrate_flat_payload(
+            tablename=self._table_data.tablename,
+            pk=self._table_data.pk,
+            columns=self._columns,
+            rows=rows,
+            is_array=self._is_array,
+        )
+        if payload is None:
+            return None  # type: ignore
+        if self._is_array:
+            records = cast(list[dict[str, Any]], payload)
+            return [
+                self._table_data.model(**self._prep_flat_result(record))
+                for record in records
+            ]  # type: ignore
+        record = cast(dict[str, Any], payload)
+        return self._table_data.model(
+            **self._prep_flat_result(record)
+        )
+
+    def _prep_flat_result(self, record: dict[str, Any]) -> dict[str, Any]:
+        return {
+            column: self._sql_type_to_py(self._table_data.model, column, value)
+            for column, value in record.items()
+        }
 
     def _prep_result(
         self, node: dict[Any, Any], schema: ResultSchema
