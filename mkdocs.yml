@@ -9,26 +9,26 @@ theme:
       primary: amber
       accent: orange
       toggle:
-          icon: material/lightbulb
-          name: Switch to dark mode
+        icon: material/lightbulb
+        name: Switch to dark mode
     - scheme: slate
       primary: amber
       accent: orange
       toggle:
-          icon: material/lightbulb-outline
-          name: Switch to light mode
+        icon: material/lightbulb-outline
+        name: Switch to light mode
   favicon: favicon.png
   features:
-  - search.suggest
-  - search.highlight
-  - content.tabs.link
-  - navigation.indexes
-  - content.tooltips
-  - navigation.path
-  - content.code.annotate
-  - content.code.copy
-  - content.code.select
-  - navigation.tabs
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - navigation.indexes
+    - content.tooltips
+    - navigation.path
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+    - navigation.tabs
   icon:
     repo: fontawesome/brands/github-alt
     logo: fontawesome/solid/database
@@ -41,13 +41,13 @@ plugins:
   - search: null
   - social:
       cards_layout_options:
-        background_color: "#FFDE59"
+        background_color: '#FFDE59'
   - mkdocstrings:
       handlers:
         python:
           options:
             extensions:
-            - griffe_typingdoc
+              - griffe_typingdoc
             show_root_heading: true
             show_if_no_docstring: true
             inherited_members: true
@@ -55,7 +55,7 @@ plugins:
             separate_signature: true
             unwrap_annotated: true
             filters:
-            - '!^_'
+              - '!^_'
             heading_level: 3
             merge_init_into_class: true
             docstring_section_style: spacy
@@ -89,57 +89,57 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
 
 extra_javascript:
-    - js/termynal.js
-    - js/custom.js
+  - js/termynal.js
+  - js/custom.js
 extra_css:
-    - css/termynal.css
-    - css/custom.css
+  - css/termynal.css
+  - css/custom.css
 
 nav:
   - About: index.md
   - Installation: installation.md
   - Usage:
-    - Getting Started: usage/usage.md
-    - Connections And Dialects: usage/connections.md
-    - Query Expressions: usage/query-expressions.md
-    - Transactions And Sessions: usage/transactions-sessions.md
-    - Relationship Loading: usage/relationship-loading.md
-    - Events: usage/events.md
+      - Getting Started: usage/usage.md
+      - Connections And Dialects: usage/connections.md
+      - Query Expressions: usage/query-expressions.md
+      - Transactions And Sessions: usage/transactions-sessions.md
+      - Relationship Loading: usage/relationship-loading.md
+      - Events: usage/events.md
   - Architecture:
-    - Rust Core: architecture/rust-core.md
-    - Dialect Support: architecture/dialect-support.md
-    - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
-    - vNext Migration: architecture/vnext-migration.md
-    - Migration History: architecture/migration-history.md
+      - Rust Core: architecture/rust-core.md
+      - Dialect Support: architecture/dialect-support.md
+      - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
+      - vNext Migration: architecture/vnext-migration.md
+      - Migration History: architecture/migration-history.md
   - Reference - API:
-    - Overview: api/reference.md
-    - Ormdantic: api/ormdantic.md
-    - Native Engine: api/engine.md
-    - Session: api/session.md
-    - Events: api/events.md
-    - Loaders: api/loaders.md
-    - Errors:
-      - api/errors.md
-    - ORM Internals:
-      - api/crud.md
-      - api/table.md
-      - api/field.md
-      - api/query.md
-      - api/serializer.md
-      - api/internals.md
+      - Overview: api/reference.md
+      - Ormdantic: api/ormdantic.md
+      - Native Engine: api/engine.md
+      - Session: api/session.md
+      - Events: api/events.md
+      - Loaders: api/loaders.md
+      - Errors:
+          - api/errors.md
+      - ORM Internals:
+          - api/crud.md
+          - api/table.md
+          - api/field.md
+          - api/query.md
+          - api/serializer.md
+          - api/internals.md
   - Development:
-    - Contributing: development/contributing.md
+      - Contributing: development/contributing.md
   - FAQ:
-    - Frequently Asked Questions: faq/faq.md
-    - Code of Conduct: faq/code_of_conduct.md
-    - License: faq/license.md
+      - Frequently Asked Questions: faq/faq.md
+      - Code of Conduct: faq/code_of_conduct.md
+      - License: faq/license.md
   - Changelog: release.md
 
 extra:
   social:
-  - icon: fontawesome/brands/github-alt
-    link: https://github.com/yezz123/ormdantic
-  - icon: fontawesome/brands/x-twitter
-    link: https://x.com/yezz123
-  - icon: fontawesome/solid/globe
-    link: https://ormdantic.yezz.me
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/yezz123/ormdantic
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/yezz123
+    - icon: fontawesome/solid/globe
+      link: https://ormdantic.yezz.me
