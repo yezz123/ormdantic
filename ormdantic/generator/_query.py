@@ -2,6 +2,13 @@ from pypika import PostgreSQLQuery, Query, Table
 from pypika.dialects import PostgreSQLQueryBuilder
 from pypika.queries import QueryBuilder
 
+from ormdantic.generator._rust_query import (
+    RustQuery,
+    bind_compiled_query,
+    compile_insert,
+    compile_update,
+    compile_upsert,
+)
 from ormdantic.handler import py_type_to_sql
 from ormdantic.models import Map
 from ormdantic.types import ModelType
@@ -16,6 +23,7 @@ class OrmQuery:
         table_map: Map,
         processed_models: list[ModelType] | None = None,
         query: Query | PostgreSQLQuery | None = None,
+        dialect: str = "sqlite",
     ) -> None:
         self._model = model
         # PostgreSQLQuery works for SQLite and PostgreSQL.
@@ -26,19 +34,55 @@ class OrmQuery:
         self._processed_models = processed_models or []
         self._table_data = self._table_map.model_to_data[type(self._model)]
         self._table = Table(self._table_data.tablename)
+        self._dialect = dialect
 
-    def get_insert_query(self) -> QueryBuilder | PostgreSQLQueryBuilder:
+    def get_insert_query(self) -> QueryBuilder | PostgreSQLQueryBuilder | RustQuery:
         """Get queries to insert model tree."""
+        columns_and_values = self._get_columns_and_values()
+        rust_query = bind_compiled_query(
+            compile_insert(
+                dialect=self._dialect,
+                table=self._table_data.tablename,
+                columns=list(columns_and_values),
+            ),
+            columns_and_values,
+        )
+        if rust_query is not None:
+            return rust_query
         return self._get_inserts_or_upserts(is_upsert=False)
 
-    def get_upsert_query(self) -> QueryBuilder | PostgreSQLQueryBuilder:
+    def get_upsert_query(self) -> QueryBuilder | PostgreSQLQueryBuilder | RustQuery:
         """Get queries to upsert model tree."""
+        columns_and_values = self._get_columns_and_values()
+        rust_query = bind_compiled_query(
+            compile_upsert(
+                dialect=self._dialect,
+                table=self._table_data.tablename,
+                primary_key=self._table_data.pk,
+                columns=list(columns_and_values),
+            ),
+            columns_and_values,
+        )
+        if rust_query is not None:
+            return rust_query
         return self._get_inserts_or_upserts(is_upsert=True)
 
-    def get_update_queries(self) -> QueryBuilder | PostgreSQLQueryBuilder:
+    def get_update_queries(self) -> QueryBuilder | PostgreSQLQueryBuilder | RustQuery:
         """Get queries to update model tree."""
+        columns_and_values = self._get_columns_and_values()
+        rust_query = bind_compiled_query(
+            compile_update(
+                dialect=self._dialect,
+                table=self._table_data.tablename,
+                primary_key=self._table_data.pk,
+                columns=list(columns_and_values),
+            ),
+            columns_and_values,
+        )
+        if rust_query is not None:
+            return rust_query
         self._query = self._query.update(self._table)
-        for column, value in self._get_columns_and_values().items():
+        for column, value in columns_and_values.items():
             self._query = self._query.set(column, value)
         self._query = self._query.where(
             self._table.field(self._table_data.pk)

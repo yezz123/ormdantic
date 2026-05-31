@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from ormdantic.generator._field import OrmField
 from ormdantic.generator._query import OrmQuery
+from ormdantic.generator._rust_query import RustQuery
 from ormdantic.generator._serializer import OrmSerializer
 from ormdantic.models import Map, OrmTable, Result
 from ormdantic.types import ModelType
@@ -33,7 +34,9 @@ class OrmCrud(Generic[ModelType]):
     async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
         """Find a model instance by primary key."""
         result = await self._execute_query(
-            OrmField(self._table_data, self._table_map).get_find_one_query(pk, depth)
+            OrmField(
+                self._table_data, self._table_map, self._engine.name
+            ).get_find_one_query(pk, depth)
         )
         return OrmSerializer[ModelType | None](
             table_data=self._table_data,
@@ -54,7 +57,9 @@ class OrmCrud(Generic[ModelType]):
     ) -> Result[ModelType]:
         """Find many model instances."""
         result = await self._execute_query(
-            OrmField(self._table_data, self._table_map).get_find_many_query(
+            OrmField(
+                self._table_data, self._table_map, self._engine.name
+            ).get_find_many_query(
                 where, order_by, order, limit, offset, depth
             )
         )
@@ -74,14 +79,18 @@ class OrmCrud(Generic[ModelType]):
     async def insert(self, model_instance: ModelType) -> ModelType:
         """Insert a model instance."""
         await self._execute_query(
-            OrmQuery(model_instance, self._table_map).get_insert_query()
+            OrmQuery(
+                model_instance, self._table_map, dialect=self._engine.name
+            ).get_insert_query()
         )
         return model_instance
 
     async def update(self, model_instance: ModelType) -> ModelType:
         """Update a record."""
         await self._execute_query(
-            OrmQuery(model_instance, self._table_map).get_update_queries()
+            OrmQuery(
+                model_instance, self._table_map, dialect=self._engine.name
+            ).get_update_queries()
         )
         return model_instance
 
@@ -89,32 +98,44 @@ class OrmCrud(Generic[ModelType]):
         """Insert a record if it does not exist, else update it."""
 
         await self._execute_query(
-            OrmQuery(model_instance, self._table_map).get_upsert_query()
+            OrmQuery(
+                model_instance, self._table_map, dialect=self._engine.name
+            ).get_upsert_query()
         )
         return model_instance
 
     async def delete(self, pk: Any) -> bool:
         """Delete a model instance by primary key."""
         await self._execute_query(
-            OrmField(self._table_data, self._table_map).get_delete_query(pk)
+            OrmField(
+                self._table_data, self._table_map, self._engine.name
+            ).get_delete_query(pk)
         )
         return True
 
     async def count(self, where: dict[str, Any] | None = None, depth: int = 0) -> int:
         """Count records."""
         result = await self._execute_query(
-            OrmField(self._table_data, self._table_map).get_count_query(where, depth)
+            OrmField(
+                self._table_data, self._table_map, self._engine.name
+            ).get_count_query(where, depth)
         )
         return result.scalar()
 
-    async def _execute_query(self, query: QueryBuilder) -> Any:
+    async def _execute_query(self, query: QueryBuilder | RustQuery) -> Any:
         """Execute a query."""
         async_session = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
         async with async_session() as session:
             async with session.begin():
-                result = await session.execute(text(str(query)))
+                if isinstance(query, RustQuery):
+                    connection = await session.connection()
+                    result = await connection.exec_driver_sql(
+                        query.sql, query.values
+                    )
+                else:
+                    result = await session.execute(text(str(query)))
             await session.commit()
         await self._engine.dispose()
         return result

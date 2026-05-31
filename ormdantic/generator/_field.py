@@ -6,6 +6,14 @@ from pypika import Field, Order
 from pypika.functions import Count
 from pypika.queries import Query, QueryBuilder, Table
 
+from ormdantic.generator._rust_query import (
+    RustQuery,
+    bind_compiled_query,
+    compile_count,
+    compile_delete_pk,
+    compile_find_many,
+    compile_select_pk,
+)
 from ormdantic.handler import py_type_to_sql
 from ormdantic.models import Map, OrmTable
 
@@ -13,7 +21,9 @@ from ormdantic.models import Map, OrmTable
 class OrmField:
     """Build SQL queries from field information."""
 
-    def __init__(self, table_data: OrmTable, table_map: Map) -> None:  # type: ignore
+    def __init__(  # type: ignore
+        self, table_data: OrmTable, table_map: Map, dialect: str
+    ) -> None:
         """Build CRUD queries from tablename and field info.
 
         :param table_data: Meta data of target table for SQL script.
@@ -21,11 +31,26 @@ class OrmField:
         """
         self._table_data = table_data
         self._table_map = table_map
+        self._dialect = dialect
         self._table = Table(table_data.tablename)
         self._query = Query.from_(self._table)
 
-    def get_find_one_query(self, pk: Any, depth: int = 1) -> QueryBuilder:
+    def get_find_one_query(self, pk: Any, depth: int = 1) -> QueryBuilder | RustQuery:
         """Get query to find one model."""
+        if depth <= 0:
+            rust_query = bind_compiled_query(
+                compile_select_pk(
+                    dialect=self._dialect,
+                    table=self._table_data.tablename,
+                    primary_key=self._table_data.pk,
+                    columns=self._flat_column_names(depth),
+                    aliases=self._flat_column_aliases(depth),
+                ),
+                {self._table_data.pk: py_type_to_sql(self._table_map, pk)},
+            )
+            if rust_query is not None:
+                return rust_query
+
         query, columns = self._build_joins(
             Query.from_(self._table),
             self._table_data,
@@ -46,7 +71,7 @@ class OrmField:
         limit: int,
         offset: int,
         depth: int,
-    ) -> QueryBuilder:
+    ) -> QueryBuilder | RustQuery:
         """Get find query for many records.
 
         :param where: Dictionary of column name to desired value.
@@ -59,6 +84,28 @@ class OrmField:
         """
         where = where or {}
         order_by = order_by or []
+        if depth <= 0:
+            filter_values = {
+                field: py_type_to_sql(self._table_map, value)
+                for field, value in where.items()
+            }
+            rust_query = bind_compiled_query(
+                compile_find_many(
+                    dialect=self._dialect,
+                    table=self._table_data.tablename,
+                    columns=self._flat_column_names(depth),
+                    filter_columns=list(where),
+                    order_columns=order_by,
+                    order_direction="desc" if order == Order.desc else "asc",
+                    limit=limit or None,
+                    offset=offset or None,
+                    aliases=self._flat_column_aliases(depth),
+                ),
+                filter_values,
+            )
+            if rust_query is not None:
+                return rust_query
+
         query, columns = self._build_joins(
             Query.from_(self._table),
             self._table_data,
@@ -74,19 +121,29 @@ class OrmField:
             query = query.offset(offset)
         return query
 
-    def get_delete_query(self, pk: Any) -> QueryBuilder:
+    def get_delete_query(self, pk: Any) -> QueryBuilder | RustQuery:
         """Get a `delete` query.
 
         :param pk: Primary key of the record to delete.
         :return: Query to delete a record.
         """
+        rust_query = bind_compiled_query(
+            compile_delete_pk(
+                dialect=self._dialect,
+                table=self._table_data.tablename,
+                primary_key=self._table_data.pk,
+            ),
+            {self._table_data.pk: py_type_to_sql(self._table_map, pk)},
+        )
+        if rust_query is not None:
+            return rust_query
         return self._query.where(self._table.field(self._table_data.pk) == pk).delete()
 
     def get_count_query(
         self,
         where: dict[str, Any] | None,
         depth: int,
-    ) -> QueryBuilder:
+    ) -> QueryBuilder | RustQuery:
         """Get a `count` query.
 
         :param where: Dictionary of column name to desired value.
@@ -94,6 +151,22 @@ class OrmField:
         :return: Query to count records.
         """
         where = where or {}
+        if depth <= 0:
+            filter_values = {
+                field: py_type_to_sql(self._table_map, value)
+                for field, value in where.items()
+            }
+            rust_query = bind_compiled_query(
+                compile_count(
+                    dialect=self._dialect,
+                    table=self._table_data.tablename,
+                    filter_columns=list(where),
+                ),
+                filter_values,
+            )
+            if rust_query is not None:
+                return rust_query
+
         query, columns = self._build_joins(
             Query.from_(self._table),
             self._table_data,
@@ -170,4 +243,17 @@ class OrmField:
             table.field(c).as_(f"{self._table_data.tablename}\\{c}")
             for c in self._table_data.columns
             if depth <= 0 or c not in self._table_data.relationships
+        ]
+
+    def _flat_column_names(self, depth: int) -> list[str]:
+        return [
+            column
+            for column in self._table_data.columns
+            if depth <= 0 or column not in self._table_data.relationships
+        ]
+
+    def _flat_column_aliases(self, depth: int) -> list[str]:
+        return [
+            f"{self._table_data.tablename}\\{column}"
+            for column in self._flat_column_names(depth)
         ]
