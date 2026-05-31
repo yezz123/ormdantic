@@ -68,8 +68,10 @@ name = "ormdantic-py"
 version = "1.7.0"
 dependencies = [
  "ormdantic-core",
+ "ormdantic-dialects",
  "ormdantic-hydrate",
  "ormdantic-schema",
+ "ormdantic-sql",
  "pyo3",
 ]
 

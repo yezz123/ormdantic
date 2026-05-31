@@ -1,5 +1,7 @@
+use ormdantic_dialects::AnyDialect;
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
-use ormdantic_schema::TableDef;
+use ormdantic_schema::{SchemaRegistry, TableDef};
+use ormdantic_sql::{CompiledQuery, Filter, QueryAst, QueryOperation, TableRef};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -69,6 +71,103 @@ fn plan_result_shape(
     Ok(result.into_any().unbind())
 }
 
+#[pyfunction]
+fn validate_schema_tables(tables: Vec<(String, String, Vec<String>)>) -> PyResult<usize> {
+    let mut registry = SchemaRegistry::new();
+    for (tablename, primary_key, columns) in tables {
+        registry
+            .register_table(TableDef::new(tablename, primary_key, columns))
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    }
+    registry
+        .validate_relationships()
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    Ok(registry.tables().len())
+}
+
+#[pyfunction]
+fn compile_select_pk(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    primary_key: &str,
+    columns: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    let query = QueryAst::Select {
+        table: TableRef::new(table),
+        columns,
+        filters: vec![Filter::Eq {
+            column: primary_key.to_string(),
+            param: primary_key.to_string(),
+        }],
+        limit: None,
+        offset: None,
+    };
+    compile_to_python(py, dialect, query)
+}
+
+#[pyfunction]
+fn compile_insert(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    columns: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    compile_to_python(
+        py,
+        dialect,
+        QueryAst::Insert {
+            table: TableRef::new(table),
+            columns,
+        },
+    )
+}
+
+#[pyfunction]
+fn compile_delete_pk(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    primary_key: &str,
+) -> PyResult<Py<PyAny>> {
+    compile_to_python(
+        py,
+        dialect,
+        QueryAst::Delete {
+            table: TableRef::new(table),
+            pk: primary_key.to_string(),
+        },
+    )
+}
+
+fn compile_to_python(py: Python<'_>, dialect: &str, query: QueryAst) -> PyResult<Py<PyAny>> {
+    let dialect =
+        AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let compiled = query
+        .compile(&dialect)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    compiled_query_to_dict(py, compiled)
+}
+
+fn compiled_query_to_dict(py: Python<'_>, query: CompiledQuery) -> PyResult<Py<PyAny>> {
+    let result = PyDict::new(py);
+    result.set_item("sql", query.sql())?;
+    result.set_item("params", query.params())?;
+    result.set_item("operation", operation_name(query.operation()))?;
+    Ok(result.into_any().unbind())
+}
+
+fn operation_name(operation: &QueryOperation) -> &'static str {
+    match operation {
+        QueryOperation::Select => "select",
+        QueryOperation::Insert => "insert",
+        QueryOperation::Update => "update",
+        QueryOperation::Upsert => "upsert",
+        QueryOperation::Delete => "delete",
+        QueryOperation::Count => "count",
+    }
+}
+
 fn row_to_dict<'py>(
     py: Python<'py>,
     row: &[Py<PyAny>],
@@ -91,5 +190,9 @@ fn row_to_dict<'py>(
 fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hydrate_flat, m)?)?;
     m.add_function(wrap_pyfunction!(plan_result_shape, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_schema_tables, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_select_pk, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_insert, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_delete_pk, m)?)?;
     Ok(())
 }

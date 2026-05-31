@@ -43,6 +43,22 @@ def hydrate_flat_payload(
     )
 
 
+def plan_result_shape(
+    *,
+    root_table: str,
+    columns: list[str],
+    array_paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """Describe joined result aliases with Rust when available."""
+    array_paths = array_paths or []
+    if _ormdantic is not None and hasattr(_ormdantic, "plan_result_shape"):
+        return cast(
+            dict[str, Any],
+            _ormdantic.plan_result_shape(root_table, columns, array_paths),
+        )
+    return _plan_result_shape_python(root_table, columns, array_paths)
+
+
 def _hydrate_flat_payload_python(
     *,
     tablename: str,
@@ -68,6 +84,33 @@ def _hydrate_flat_payload_python(
         if pk_value not in records:
             records[pk_value] = _row_to_dict(row, parsed_columns)
     return list(records.values())
+
+
+def _plan_result_shape_python(
+    root_table: str, columns: list[str], array_paths: list[str]
+) -> dict[str, Any]:
+    parsed_columns = []
+    relationship_paths = set()
+    for alias in columns:
+        table_path, _, column = alias.partition("\\")
+        if not column:
+            continue
+        parsed_columns.append(
+            {"alias": alias, "table_path": table_path, "column": column}
+        )
+        if table_path == root_table:
+            continue
+        current = ""
+        for idx, branch in enumerate(table_path.split("/")):
+            current = branch if idx == 0 else f"{current}/{branch}"
+            if idx > 0:
+                relationship_paths.add(current)
+    return {
+        "root_table": root_table,
+        "columns": parsed_columns,
+        "relationship_paths": sorted(relationship_paths),
+        "array_paths": array_paths,
+    }
 
 
 def _parse_column_alias(alias: str, tablename: str) -> str | None:
