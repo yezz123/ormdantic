@@ -15,6 +15,9 @@ keywords = [
     "orm",
     "pydantic",
     "asyncio",
+    "rust",
+    "sql",
+    "sqlalchemy",
 ]
 
 classifiers = [
