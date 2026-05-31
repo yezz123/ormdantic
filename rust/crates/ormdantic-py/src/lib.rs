@@ -1,4 +1,4 @@
-use ormdantic_dialects::AnyDialect;
+use ormdantic_dialects::{AnyDialect, Dialect};
 use ormdantic_engine::{execute_url, DbValue};
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::{SchemaRegistry, TableDef};
@@ -325,6 +325,75 @@ fn execute_native(
     Ok(output.into_any().unbind())
 }
 
+type ColumnDdl = (
+    String,
+    String,
+    bool,
+    bool,
+    Option<String>,
+    Option<String>,
+    Option<usize>,
+);
+
+#[pyfunction]
+fn compile_create_table_sql(
+    dialect: &str,
+    table: &str,
+    columns: Vec<ColumnDdl>,
+    unique_constraints: Vec<Vec<String>>,
+) -> PyResult<Vec<String>> {
+    let dialect =
+        AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let column_sql = columns
+        .into_iter()
+        .map(
+            |(name, kind, nullable, primary_key, foreign_table, foreign_column, max_length)| {
+                let mut sql = format!(
+                    "{} {}",
+                    dialect.quote_ident(&name),
+                    ddl_type(&kind, max_length)
+                );
+                if primary_key {
+                    sql.push_str(" PRIMARY KEY");
+                }
+                if !nullable || primary_key {
+                    sql.push_str(" NOT NULL");
+                }
+                if let (Some(foreign_table), Some(foreign_column)) = (foreign_table, foreign_column)
+                {
+                    sql.push_str(&format!(
+                        " REFERENCES {}({})",
+                        dialect.quote_ident(&foreign_table),
+                        dialect.quote_ident(&foreign_column)
+                    ));
+                }
+                sql
+            },
+        )
+        .collect::<Vec<_>>();
+    let mut table_parts = column_sql;
+    for columns in unique_constraints {
+        let rendered = columns
+            .iter()
+            .map(|column| dialect.quote_ident(column))
+            .collect::<Vec<_>>()
+            .join(", ");
+        table_parts.push(format!("UNIQUE ({rendered})"));
+    }
+    Ok(vec![format!(
+        "CREATE TABLE IF NOT EXISTS {} ({})",
+        dialect.quote_ident(table),
+        table_parts.join(", ")
+    )])
+}
+
+#[pyfunction]
+fn compile_drop_table_sql(dialect: &str, table: &str) -> PyResult<String> {
+    let dialect =
+        AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    Ok(format!("DROP TABLE IF EXISTS {}", dialect.quote_ident(table)))
+}
+
 fn select_columns(
     columns: Vec<String>,
     aliases: Option<Vec<String>>,
@@ -419,6 +488,22 @@ fn db_value_to_py(py: Python<'_>, value: &DbValue) -> PyResult<Py<PyAny>> {
     }
 }
 
+fn ddl_type(kind: &str, max_length: Option<usize>) -> String {
+    match kind {
+        "uuid" => "TEXT".to_string(),
+        "str" => max_length
+            .map(|max_length| format!("VARCHAR({max_length})"))
+            .unwrap_or_else(|| "TEXT".to_string()),
+        "int" => "INTEGER".to_string(),
+        "float" => "REAL".to_string(),
+        "bool" => "BOOLEAN".to_string(),
+        "date" => "DATE".to_string(),
+        "datetime" => "DATETIME".to_string(),
+        "json" | "model_json" | "list" | "dict" => "JSON".to_string(),
+        _ => "TEXT".to_string(),
+    }
+}
+
 fn row_to_dict<'py>(
     py: Python<'py>,
     row: &[Py<PyAny>],
@@ -451,5 +536,7 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile_upsert, m)?)?;
     m.add_function(wrap_pyfunction!(compile_delete_pk, m)?)?;
     m.add_function(wrap_pyfunction!(execute_native, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_create_table_sql, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_drop_table_sql, m)?)?;
     Ok(())
 }

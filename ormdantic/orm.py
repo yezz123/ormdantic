@@ -15,6 +15,8 @@ from ormdantic._introspect import (
     model_fields,
 )
 from ormdantic.generator import CRUD, Table
+from ormdantic.engine import NativeEngine
+from ormdantic.generator._rust_schema import compile_drop_table_sql
 from ormdantic.handler import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
@@ -35,6 +37,7 @@ class Ormdantic:
         self._metadata: MetaData | None = None
         self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
         self._engine = create_async_engine(connection)
+        self._native_engine = NativeEngine(connection)
         self._table_map: Map = Map()
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
@@ -93,8 +96,16 @@ class Ormdantic:
                 self._engine,
             )
         await Table(self._engine, self._metadata, self._table_map).init()
-        async with self._engine.begin() as conn:
-            await conn.run_sync(self._metadata.create_all)
+
+    async def create_all(self) -> None:
+        """Create all registered tables."""
+        await Table(self._engine, self._metadata or MetaData(), self._table_map).init()
+
+    async def drop_all(self) -> None:
+        """Drop all registered tables."""
+        for tablename in reversed(list(self._table_map.name_to_data)):
+            sql = compile_drop_table_sql(tablename, self._engine.name)
+            await self._native_engine.execute(sql, ())
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         """Get relationships for a given table."""

@@ -42,10 +42,9 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         """Setup clean sqlite database."""
 
         async def _init() -> None:
-            async with database._engine.begin() as conn:
-                await database.init()
-                await conn.run_sync(database._metadata.drop_all)  # type: ignore
-                await conn.run_sync(database._metadata.create_all)  # type: ignore
+            await database.init()
+            await database.drop_all()
+            await database.create_all()
 
         asyncio.run(_init())
 
