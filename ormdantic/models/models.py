@@ -1,3 +1,5 @@
+"""Internal Pydantic models for ORM metadata and result wrappers."""
+
 from typing import Generic, Type
 
 from pydantic import BaseModel, Field

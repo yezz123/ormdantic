@@ -1,3 +1,5 @@
+"""Snake-case naming helpers backed by the Rust extension."""
+
 import importlib
 import re
 from typing import Union

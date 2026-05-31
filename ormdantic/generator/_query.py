@@ -1,3 +1,5 @@
+"""Build Rust-backed write queries from Pydantic model instances."""
+
 from ormdantic.generator._rust_query import (
     RustQuery,
     bind_compiled_query,

@@ -1,3 +1,5 @@
+"""Private hydration bridge with Rust fast paths and Python fallbacks."""
+
 from __future__ import annotations
 
 import importlib

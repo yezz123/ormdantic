@@ -81,11 +81,9 @@ class Ormdantic:
 
     async def init(self) -> None:
         """Initialize ORM models."""
-        # Populate relation information.
         for table_data in self._table_map.name_to_data.values():
             rels = self.get(table_data)
             table_data.relationships = rels
-        # Now that relation information is populated generate tables.
         for table_data in self._table_map.name_to_data.values():
             self._crud_generators[table_data.model] = CRUD(
                 table_data,
@@ -194,7 +192,6 @@ class Ormdantic:
                 field_name,
                 back_reference,
             )
-        # TODO: Check if back-reference is present but mismatched in type.
         if (
             table_data.model not in get_args(back_referenced_field.annotation)
             and table_data.model != back_referenced_field.annotation
@@ -205,7 +202,6 @@ class Ormdantic:
                 field_name,
                 back_reference,
             )
-        # Is the back referenced field also a list?
         return Relationship(
             foreign_table=related_table.tablename, back_references=back_reference
         )

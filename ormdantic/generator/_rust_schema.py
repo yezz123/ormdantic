@@ -1,3 +1,5 @@
+"""Private bridge from Python table metadata to Rust schema/DDL compilation."""
+
 from __future__ import annotations
 
 import importlib
@@ -36,6 +38,7 @@ def validate_table_map(table_map: Map) -> int | None:
 
 
 def compile_create_table_sql(table_map: Map, tablename: str, dialect: str) -> list[str]:
+    """Compile create-table DDL statements for a registered table."""
     rust = _require_schema_symbol("compile_create_table_sql")
     table = table_map.name_to_data[tablename]
     columns = [
@@ -55,6 +58,7 @@ def compile_create_table_sql(table_map: Map, tablename: str, dialect: str) -> li
 
 
 def compile_drop_table_sql(tablename: str, dialect: str) -> str:
+    """Compile a drop-table DDL statement for a table name."""
     rust = _require_schema_symbol("compile_drop_table_sql")
     return str(rust.compile_drop_table_sql(dialect, tablename))
 

@@ -1,3 +1,5 @@
+"""Private bridge from Python query builders to Rust SQL compilation."""
+
 from __future__ import annotations
 
 import importlib
@@ -11,6 +13,8 @@ except ImportError:  # pragma: no cover - exercised when extension is not built
 
 
 class CompiledQuery(TypedDict):
+    """Dictionary returned by Rust query compiler functions."""
+
     sql: str
     params: list[str]
     operation: str
@@ -21,12 +25,15 @@ FilterSpec = tuple[str, str, list[str]]
 
 @dataclass(frozen=True)
 class RustQuery:
+    """SQL plus ordered bind values ready for native execution."""
+
     sql: str
     values: tuple[Any, ...]
     operation: str
 
 
 def rust_available() -> bool:
+    """Return whether the Rust extension exposes query compilation."""
     return _ormdantic is not None and hasattr(_ormdantic, "compile_select_pk")
 
 
@@ -47,6 +54,7 @@ def compile_select_pk(
     columns: list[str],
     aliases: list[str] | None = None,
 ) -> CompiledQuery:
+    """Compile a primary-key select query through Rust."""
     rust = _require_extension("compile_select_pk")
     return cast(
         CompiledQuery,
@@ -66,6 +74,7 @@ def compile_find_many(
     offset: int | None = None,
     aliases: list[str] | None = None,
 ) -> CompiledQuery:
+    """Compile a filtered select query through Rust."""
     rust = _require_extension("compile_find_many")
     return cast(
         CompiledQuery,
@@ -95,6 +104,7 @@ def compile_joined_find_many(
     limit: int | None = None,
     offset: int | None = None,
 ) -> CompiledQuery:
+    """Compile a joined relationship select query through Rust."""
     rust = _require_extension("compile_joined_find_many")
     return cast(
         CompiledQuery,
@@ -118,6 +128,7 @@ def compile_count(
     table: str,
     filter_columns: list[FilterSpec],
 ) -> CompiledQuery:
+    """Compile a count query through Rust."""
     rust = _require_extension("compile_count")
     return cast(
         CompiledQuery,
@@ -131,6 +142,7 @@ def compile_insert(
     table: str,
     columns: list[str],
 ) -> CompiledQuery:
+    """Compile an insert query through Rust."""
     rust = _require_extension("compile_insert")
     return cast(CompiledQuery, rust.compile_insert(dialect, table, columns))
 
@@ -142,6 +154,7 @@ def compile_update(
     primary_key: str,
     columns: list[str],
 ) -> CompiledQuery:
+    """Compile an update query through Rust."""
     rust = _require_extension("compile_update")
     return cast(
         CompiledQuery,
@@ -156,6 +169,7 @@ def compile_upsert(
     primary_key: str,
     columns: list[str],
 ) -> CompiledQuery:
+    """Compile an upsert query through Rust."""
     rust = _require_extension("compile_upsert")
     return cast(
         CompiledQuery,
@@ -169,6 +183,7 @@ def compile_delete_pk(
     table: str,
     primary_key: str,
 ) -> CompiledQuery:
+    """Compile a primary-key delete query through Rust."""
     rust = _require_extension("compile_delete_pk")
     return cast(
         CompiledQuery,
@@ -180,6 +195,7 @@ def bind_compiled_query(
     compiled: CompiledQuery,
     values_by_param: Mapping[str, Any],
 ) -> RustQuery:
+    """Bind a compiled query using the parameter order returned by Rust."""
     return RustQuery(
         sql=compiled["sql"],
         values=tuple(values_by_param[param] for param in compiled["params"]),
