@@ -2,8 +2,9 @@
 
 from typing import Any, Generic
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ormdantic.engine import NativeEngine
 from ormdantic.generator._field import Order, OrmField
 from ormdantic.generator._query import OrmQuery
 from ormdantic.generator._rust_query import RustQuery
@@ -25,6 +26,7 @@ class OrmCrud(Generic[ModelType]):
         self._engine = engine
         self._table_map = table_map
         self._table_data = table_data
+        self._native_engine = NativeEngine(str(engine.url))
         self.tablename = table_data.tablename
         self.columns = table_data.columns
 
@@ -121,14 +123,4 @@ class OrmCrud(Generic[ModelType]):
 
     async def _execute_query(self, query: RustQuery) -> Any:
         """Execute a query."""
-        async_session = async_sessionmaker(
-            self._engine, expire_on_commit=False, class_=AsyncSession
-        )
-        async with async_session() as session:
-            result: Any
-            async with session.begin():
-                connection = await session.connection()
-                result = await connection.exec_driver_sql(query.sql, query.values)
-            await session.commit()
-        await self._engine.dispose()
-        return result
+        return await self._native_engine.execute(query.sql, query.values)
