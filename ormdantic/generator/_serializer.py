@@ -5,6 +5,7 @@ from typing import Any, Generic, cast, get_args
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import CursorResult
 
+from ormdantic._introspect import is_dict_annotation, is_list_annotation, model_field
 from ormdantic.generator._hydration import hydrate_flat_payload
 from ormdantic.models import Map, OrmTable
 from ormdantic.types import ModelType, SerializedType
@@ -148,8 +149,6 @@ class OrmSerializer(Generic[SerializedType]):
         self, node: dict[Any, Any], schema: ResultSchema
     ) -> dict[str, Any]:
         for key, val in node.items():
-            if td := schema.table_data:
-                node[key] = self._sql_type_to_py(td.model, key, val)
             if key in schema.references:
                 ref_schema = schema.references[key]
                 if ref_schema.is_array:
@@ -158,6 +157,9 @@ class OrmSerializer(Generic[SerializedType]):
                     ]
                 else:
                     node[key] = self._prep_result(node[key], ref_schema)
+                continue
+            if td := schema.table_data:
+                node[key] = self._sql_type_to_py(td.model, key, val)
         return node
 
     def _get_result_schema(
@@ -187,14 +189,16 @@ class OrmSerializer(Generic[SerializedType]):
 
     @staticmethod
     def _sql_type_to_py(model_type: type[ModelType], column: str, value: Any) -> Any:
-        if model_type.__fields__[column].type_ == dict:
+        field = model_field(model_type, column)
+        annotation = field.annotation
+        if is_dict_annotation(annotation):
             return {} if value is None else json.loads(value)
-        if model_type.__fields__[column].type_ == list:
+        if is_list_annotation(annotation) or annotation is list:
             return [] if value is None else json.loads(value)
         if value is None:
             return None
-        if get_args(model_type.__fields__[column].type_):
-            for arg in get_args(model_type.__fields__[column].type_):
+        if get_args(annotation):
+            for arg in get_args(annotation):
                 if arg is NoneType:
                     continue
                 try:
@@ -202,7 +206,7 @@ class OrmSerializer(Generic[SerializedType]):
                 except (AttributeError, TypeError):
                     continue
         try:
-            if issubclass(model_type.__fields__[column].type_, BaseModel):
+            if issubclass(annotation, BaseModel):
                 return json.loads(value)
         except TypeError:
             return value

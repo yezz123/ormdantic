@@ -2,11 +2,10 @@
 
 import uuid
 from datetime import date, datetime
-from types import UnionType
-from typing import Any, get_args, get_origin
+from types import NoneType, UnionType
+from typing import Any, Union, get_args, get_origin
 
 from pydantic import BaseModel
-from pydantic.fields import ModelField
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -24,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ormdantic._introspect import FieldMetadata, is_dict_annotation, is_list_annotation, model_fields
 from ormdantic.handler import TableName_From_Model, TypeConversionError
 from ormdantic.models import Map, OrmTable
 
@@ -63,7 +63,7 @@ class OrmTableGenerator:
         table_data: OrmTable,  # type: ignore
     ) -> tuple[Column[Any] | Column[Any], ...]:
         columns = []
-        for field_name, field in table_data.model.__fields__.items():
+        for field_name, field in model_fields(table_data.model).items():
             kwargs = {
                 "primary_key": field_name == table_data.pk,
                 "index": field_name in table_data.indexed,
@@ -78,50 +78,78 @@ class OrmTableGenerator:
         return tuple(columns)
 
     def _get_column(
-        self, field_name: str, field: ModelField, **kwargs: Any
+        self, field_name: str, field: FieldMetadata, **kwargs: Any
     ) -> Column[Any] | None:
-        outer_origin = get_origin(field.outer_type_)
-        origin = get_origin(field.type_)
-        if outer_origin is list:
+        annotation = field.annotation
+        origin = get_origin(annotation)
+        if is_dict_annotation(annotation):
+            return Column(field_name, JSON, **kwargs)
+        if is_list_annotation(annotation):
             return self._get_column_from_type_args(
                 field_name, field, **kwargs
-            )  # pragma: no cover
+            ) or Column(field_name, JSON, **kwargs)
         if origin:
-            if origin == UnionType:
-                return self._get_column_from_type_args(field_name, field, **kwargs)
+            if origin in {UnionType, Union}:
+                column = self._get_column_from_type_args(
+                    field_name, field, **kwargs
+                )
+                if column is not None:
+                    return column
+                args = [
+                    arg for arg in get_args(annotation) if arg is not NoneType
+                ]
+                if len(args) == 1:
+                    return self._get_column_for_annotation(
+                        field_name, args[0], field, **kwargs
+                    )
+                return Column(field_name, JSON, **kwargs)
             else:
-                raise TypeConversionError(field.type_)  # pragma: no cover
-        if get_origin(field.outer_type_) is dict:
+                raise TypeConversionError(annotation)  # pragma: no cover
+        return self._get_column_for_annotation(field_name, annotation, field, **kwargs)
+
+    def _get_column_for_annotation(
+        self,
+        field_name: str,
+        annotation: Any,
+        field: FieldMetadata,
+        **kwargs: Any,
+    ) -> Column[Any] | None:
+        if is_dict_annotation(annotation):
             return Column(field_name, JSON, **kwargs)
-        if field.type_ is uuid.UUID:
+        if is_list_annotation(annotation):
+            return Column(field_name, JSON, **kwargs)
+        if annotation is uuid.UUID:
             col_type = (
                 postgresql.UUID if self._engine.name == "postgres" else String(36)
             )
             return Column(field_name, col_type, **kwargs)  # type: ignore[arg-type]
-        if issubclass(field.type_, BaseModel):
-            return Column(field_name, JSON, **kwargs)
-        if issubclass(field.type_, str):
-            return Column(field_name, String(field.field_info.max_length), **kwargs)
-        if issubclass(field.type_, float):
-            return Column(field_name, Float, **kwargs)
-        if issubclass(field.type_, int):
-            # bool is a subclass of int -> nested check
-            if issubclass(field.type_, bool):
-                return Column(field_name, Boolean, **kwargs)
-            return Column(field_name, Integer, **kwargs)
-        if issubclass(field.type_, date):
-            # datetime is a subclass of date -> nested check
-            if issubclass(field.type_, datetime):
-                return Column(field_name, DateTime, **kwargs)
-            return Column(field_name, Date, **kwargs)
+        try:
+            if issubclass(annotation, BaseModel):
+                return Column(field_name, JSON, **kwargs)
+            if issubclass(annotation, str):
+                return Column(field_name, String(field.max_length), **kwargs)
+            if issubclass(annotation, float):
+                return Column(field_name, Float, **kwargs)
+            if issubclass(annotation, int):
+                # bool is a subclass of int -> nested check
+                if issubclass(annotation, bool):
+                    return Column(field_name, Boolean, **kwargs)
+                return Column(field_name, Integer, **kwargs)
+            if issubclass(annotation, date):
+                # datetime is a subclass of date -> nested check
+                if issubclass(annotation, datetime):
+                    return Column(field_name, DateTime, **kwargs)
+                return Column(field_name, Date, **kwargs)
+        except TypeError as exc:
+            raise TypeConversionError(annotation) from exc
 
         # Catchall for dict/list or any other.
         return Column(field_name, JSON, **kwargs)
 
     def _get_column_from_type_args(
-        self, field_name: str, field: ModelField, **kwargs: Any
+        self, field_name: str, field: FieldMetadata, **kwargs: Any
     ) -> Column[Any] | None:
-        for arg in get_args(field.type_):
+        for arg in get_args(field.annotation):
             if arg in [it.model for it in self._table_map.name_to_data.values()]:
                 foreign_table = TableName_From_Model(arg, self._table_map)
                 foreign_data = self._table_map.name_to_data[foreign_table]

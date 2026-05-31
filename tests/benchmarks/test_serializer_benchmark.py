@@ -36,8 +36,8 @@ class _BenchMany(BaseModel):
     one: _BenchOne | UUID
 
 
-_BenchOne.update_forward_refs()
-_BenchMany.update_forward_refs()
+_BenchOne.model_rebuild()
+_BenchMany.model_rebuild()
 
 
 @dataclass

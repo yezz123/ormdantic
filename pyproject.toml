@@ -26,7 +26,7 @@ classifiers = [
     "Intended Audience :: Information Technology",
     "Framework :: AsyncIO",
     "Framework :: Pydantic",
-    "Framework :: Pydantic :: 1",
+    "Framework :: Pydantic :: 2",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -38,7 +38,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pydantic >=1.6.2,!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0",
+    "pydantic>=2.0.0",
     "sqlalchemy[asyncio]>=2.0.0"
 ]
 

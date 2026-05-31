@@ -61,7 +61,7 @@ class ForwardRefClass(BaseModel):
     str_field: str
 
 
-Coffee.update_forward_refs()
+Coffee.model_rebuild()
 
 
 def test_validate() -> None:

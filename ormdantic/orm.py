@@ -1,12 +1,19 @@
 """Module providing a way to create ORM models and schemas"""
 
 from types import UnionType
-from typing import Callable, ForwardRef, Type, get_args, get_origin
+from typing import Callable, ForwardRef, Type, Union, get_args, get_origin
 
-from pydantic.fields import ModelField
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ormdantic._introspect import (
+    FieldMetadata,
+    contains_list_annotation,
+    first_model_arg,
+    is_list_annotation,
+    model_field,
+    model_fields,
+)
 from ormdantic.generator import CRUD, Table
 from ormdantic.handler import (
     MismatchingBackReferenceError,
@@ -59,7 +66,7 @@ class Ormdantic:
                 unique_constraints=unique_constraints or [],
                 columns=[
                     field
-                    for field in cls.__fields__
+                    for field in model_fields(cls)
                     if field not in cls_back_references
                 ],
                 relationships={},
@@ -92,7 +99,7 @@ class Ormdantic:
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         """Get relationships for a given table."""
         relationships = {}
-        for field_name, field in table_data.model.__fields__.items():
+        for field_name, field in model_fields(table_data.model).items():
             related_table = self._get_related_table(field)
             if related_table is None:
                 continue
@@ -102,25 +109,27 @@ class Ormdantic:
                 )
 
                 continue
-            if get_origin(field.outer_type_) == list or field.type_ == ForwardRef(
+            if contains_list_annotation(field.annotation) or field.annotation == ForwardRef(
                 f"{related_table.model.__name__}"
             ):
                 raise UndefinedBackReferenceError(
                     table_data.tablename, related_table.tablename, field_name
                 )
 
-            args = get_args(field.type_)
+            args = get_args(field.annotation)
             correct_type = (
-                related_table.model.__fields__[related_table.pk].type_ in args
+                model_field(related_table.model, related_table.pk).annotation in args
             )
-            origin = get_origin(field.type_)
-            if not args or origin != UnionType or not correct_type:
+            origin = get_origin(field.annotation)
+            if not args or origin not in {UnionType, Union} or not correct_type:
                 raise MustUnionForeignKeyError(
                     table_data.tablename,
                     related_table.tablename,
                     field_name,
                     related_table.model,
-                    related_table.model.__fields__[related_table.pk].type_.__name__,
+                    model_field(
+                        related_table.model, related_table.pk
+                    ).annotation.__name__,
                 )
 
             relationships[field_name] = Relationship(
@@ -129,20 +138,12 @@ class Ormdantic:
 
         return relationships
 
-    def _get_related_table(self, field: ModelField) -> OrmTable | None:  # type: ignore
+    def _get_related_table(self, field: FieldMetadata) -> OrmTable | None:  # type: ignore
         """Get related table for a given field."""
-        related_table: OrmTable | None = None  # type: ignore
-        # Try to get foreign model from union.
-        if args := get_args(field.type_):
-            for arg in args:
-                try:
-                    related_table = self._table_map.model_to_data.get(arg)
-                except TypeError:
-                    break
-                if related_table is not None:
-                    break
-        # Try to get foreign table from type.
-        return related_table or self._table_map.model_to_data.get(field.type_)
+        model = first_model_arg(
+            field.annotation, set(self._table_map.model_to_data.keys())
+        )
+        return self._table_map.model_to_data.get(model) if model else None
 
     @staticmethod
     def _get_many_relationship(
@@ -152,11 +153,18 @@ class Ormdantic:
         related_table: OrmTable,  # type: ignore
     ) -> Relationship:
         """Get many-to-many relationship."""
-        back_referenced_field = related_table.model.__fields__.get(back_reference)
+        back_referenced_field = model_fields(related_table.model).get(back_reference)
+        if back_referenced_field is None:  # pragma: no cover
+            raise MismatchingBackReferenceError(
+                table_data.tablename,
+                related_table.tablename,
+                field_name,
+                back_reference,
+            )
         # TODO: Check if back-reference is present but mismatched in type.
         if (
-            table_data.model not in get_args(back_referenced_field.type_)
-            and table_data.model != back_referenced_field.type_
+            table_data.model not in get_args(back_referenced_field.annotation)
+            and table_data.model != back_referenced_field.annotation
         ):
             raise MismatchingBackReferenceError(
                 table_data.tablename,

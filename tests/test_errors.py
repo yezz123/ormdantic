@@ -91,9 +91,9 @@ class Table_5(BaseModel):
     table: Callable[[], int]
 
 
-MismatchedBackreferenceA.update_forward_refs()
-MismatchedBackreferenceB.update_forward_refs()
-UndefinedBackreference.update_forward_refs()
+MismatchedBackreferenceA.model_rebuild()
+MismatchedBackreferenceB.model_rebuild()
+UndefinedBackreference.model_rebuild()
 
 
 class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):

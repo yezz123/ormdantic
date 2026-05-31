@@ -37,4 +37,4 @@ def py_type_to_sql(table_map: Map, value: Any) -> Any:
         return py_type_to_sql(
             table_map, value.__dict__[table_map.name_to_data[tablename].pk]
         )
-    return value.json() if isinstance(value, BaseModel) else value
+    return value.model_dump_json() if isinstance(value, BaseModel) else value

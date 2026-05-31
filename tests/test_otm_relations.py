@@ -33,8 +33,8 @@ class Many(BaseModel):
     one_b: One | UUID | None = None
 
 
-One.update_forward_refs()
-Many.update_forward_refs()
+One.model_rebuild()
+Many.model_rebuild()
 
 
 class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
@@ -76,6 +76,6 @@ class ormdanticOneToManyRelationTesting(unittest.IsolatedAsyncioTestCase):
         many_a_idx_zero = await database[Many].find_one(many_a[0].id, depth=3)
         many_a_idx_zero.one_a.many_a.sort(key=lambda x: x.id)  # type: ignore
         self.assertDictEqual(
-            find_one_a.dict(),
-            many_a_idx_zero.one_a.dict(),  # type: ignore
+            find_one_a.model_dump(),
+            many_a_idx_zero.one_a.model_dump(),  # type: ignore
         )

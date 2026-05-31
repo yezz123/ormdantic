@@ -67,7 +67,7 @@ class Table(BaseModel):
     id: UUID = Field(default_factory=uuid4)
 
 
-Flavor.update_forward_refs()
+Flavor.model_rebuild()
 
 
 class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
@@ -92,8 +92,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         find = await database[Table].insert(record)
         # Find new record and compare.
         self.assertDictEqual(
-            find.dict(),
-            (await database[Table].find_one(find.id, 1)).dict(),  # type: ignore
+            find.model_dump(),
+            (await database[Table].find_one(find.id, 1)).model_dump(),  # type: ignore
         )
 
     async def test_insert_and_find_one(self) -> None:
@@ -102,8 +102,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         mocha = await database[Flavor].insert(flavor)
         # Find new record and compare.
         self.assertDictEqual(
-            mocha.dict(),
-            (await database[Flavor].find_one(mocha.id)).dict(),  # type: ignore
+            mocha.model_dump(),
+            (await database[Flavor].find_one(mocha.id)).model_dump(),  # type: ignore
         )
 
     async def test_insert_and_find_one_date(self) -> None:
@@ -112,8 +112,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         mocha = await database[Flavor].insert(flavor)
         # Find new record and compare.
         self.assertDictEqual(
-            mocha.dict(),
-            (await database[Flavor].find_one(mocha.id)).dict(),  # type: ignore
+            mocha.model_dump(),
+            (await database[Flavor].find_one(mocha.id)).model_dump(),  # type: ignore
         )
 
     async def test_insert_and_find_one_bool(self) -> None:
@@ -122,8 +122,8 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         mocha = await database[Flavor].insert(flavor)
         # Find new record and compare.
         self.assertDictEqual(
-            mocha.dict(),
-            (await database[Flavor].find_one(mocha.id)).dict(),  # type: ignore
+            mocha.model_dump(),
+            (await database[Flavor].find_one(mocha.id)).model_dump(),  # type: ignore
         )
 
     async def test_count(self) -> None:
@@ -206,7 +206,7 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         # Find one record.
         flavors = await database[Flavor].find_many(where={"id": flavor.id})
         self.assertEqual(1, len(flavors.data))
-        self.assertDictEqual(flavor.dict(), flavors.data[0].dict())
+        self.assertDictEqual(flavor.model_dump(), flavors.data[0].model_dump())
 
     async def test_delete(self) -> None:
         # Insert record.
@@ -233,12 +233,12 @@ class ormdanticTesting(unittest.IsolatedAsyncioTestCase):
         )
         await database[Coffee].insert(coffee)
         # Find record and compare.
-        coffee_dict = coffee.dict()
+        coffee_dict = coffee.model_dump()
         find_coffee = await database[Coffee].find_one(coffee.id, depth=1)
-        self.assertDictEqual(coffee_dict, find_coffee.dict())  # type: ignore
+        self.assertDictEqual(coffee_dict, find_coffee.model_dump())  # type: ignore
         coffee_dict["primary_flavor"] = coffee_dict["primary_flavor"]["id"]
         coffee_dict["secondary_flavor"] = coffee_dict["secondary_flavor"]["id"]
         self.assertDictEqual(
             coffee_dict,
-            (await database[Coffee].find_one(coffee.id)).dict(),  # type: ignore
+            (await database[Coffee].find_one(coffee.id)).model_dump(),  # type: ignore
         )
