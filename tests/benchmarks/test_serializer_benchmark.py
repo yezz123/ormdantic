@@ -135,7 +135,7 @@ def _one_to_many_rows(
     rows = []
     for parent_index in range(parent_count):
         parent_id = str(uuid4())
-        for child_index in range(children_per_parent):
+        for _ in range(children_per_parent):
             rows.append(
                 (
                     parent_id,
