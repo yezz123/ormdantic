@@ -13,7 +13,6 @@ authors = [
 ]
 keywords = [
     "orm",
-    "sqlalchemy",
     "pydantic",
     "asyncio",
 ]
@@ -38,8 +37,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pydantic>=2.0.0",
-    "sqlalchemy[asyncio]>=2.0.0"
+    "pydantic>=2.0.0"
 ]
 
 dynamic = ["version"]
@@ -54,11 +52,8 @@ Funding = 'https://github.com/sponsors/yezz123'
 
 [project.optional-dependencies]
 sqlite = [
-    "aiosqlite",
 ]
 postgresql = [
-    "psycopg2-binary",
-    "asyncpg"
 ]
 
 [tool.hatch.version]
@@ -72,7 +67,7 @@ bindings = "pyo3"
 
 [tool.isort]
 profile = "black"
-known_third_party = ["pydantic", "sqlalchemy", "typing_extensions"]
+known_third_party = ["pydantic", "typing_extensions"]
 
 [tool.ruff.lint]
 mccabe = { max-complexity = 14 }
@@ -94,7 +89,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-third-party = ["pydantic", "typing_extensions", "sqlalchemy"]
+known-third-party = ["pydantic", "typing_extensions"]
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

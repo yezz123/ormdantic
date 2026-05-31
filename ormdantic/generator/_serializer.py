@@ -3,7 +3,6 @@ from types import NoneType
 from typing import Any, Generic, cast, get_args
 
 from pydantic import BaseModel, Field
-from sqlalchemy.engine import CursorResult
 
 from ormdantic._introspect import is_dict_annotation, is_list_annotation, model_field
 from ormdantic.generator._hydration import hydrate_flat_payload, hydrate_joined_payload
@@ -26,8 +25,7 @@ class OrmSerializer(Generic[SerializedType]):
         self,
         table_data: OrmTable,  # type: ignore
         table_map: Map,
-        # TODO: Missing type parameters for generic type "CursorResult".
-        result_set: CursorResult[Any],
+        result_set: Any,
         is_array: bool,
         depth: int,
     ) -> None:

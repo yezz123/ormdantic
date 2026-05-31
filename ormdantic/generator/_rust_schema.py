@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from collections.abc import Callable
+from typing import Any, get_origin
 
 from pydantic import BaseModel
 
 from ormdantic._introspect import FieldMetadata, is_dict_annotation, is_list_annotation, model_fields
+from ormdantic.handler import TypeConversionError
 from ormdantic.models import Map
 
 try:
@@ -77,6 +79,8 @@ def _column_descriptor(
 
 def _field_kind(field: FieldMetadata) -> str:
     annotation = field.annotation
+    if get_origin(annotation) is Callable or annotation is Callable:
+        raise TypeConversionError(annotation)
     if is_dict_annotation(annotation):
         return "dict"
     if is_list_annotation(annotation):

@@ -1,5 +1,1 @@
-# PostgreSQL driver
-asyncpg
-psycopg2-binary
-# SQLite Driver
-aiosqlite
+# Database drivers are provided by Ormdantic's Rust extension.

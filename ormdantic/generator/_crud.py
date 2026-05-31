@@ -2,8 +2,6 @@
 
 from typing import Any, Generic
 
-from sqlalchemy.ext.asyncio import AsyncEngine
-
 from ormdantic.engine import NativeEngine
 from ormdantic.generator._field import Order, OrmField
 from ormdantic.generator._query import OrmQuery
@@ -20,13 +18,13 @@ class OrmCrud(Generic[ModelType]):
         self,
         table_data: OrmTable,  # type: ignore
         table_map: Map,
-        engine: AsyncEngine,
+        connection: str,
     ) -> None:
         """Initialize OrmCrud."""
-        self._engine = engine
+        self._connection = connection
         self._table_map = table_map
         self._table_data = table_data
-        self._native_engine = NativeEngine(str(engine.url))
+        self._native_engine = NativeEngine(connection)
         self.tablename = table_data.tablename
         self.columns = table_data.columns
 
@@ -34,7 +32,7 @@ class OrmCrud(Generic[ModelType]):
         """Find a model instance by primary key."""
         result = await self._execute_query(
             OrmField(
-                self._table_data, self._table_map, self._engine.name
+                self._table_data, self._table_map, self._connection
             ).get_find_one_query(pk, depth)
         )
         return OrmSerializer[ModelType | None](
@@ -57,7 +55,7 @@ class OrmCrud(Generic[ModelType]):
         """Find many model instances."""
         result = await self._execute_query(
             OrmField(
-                self._table_data, self._table_map, self._engine.name
+                self._table_data, self._table_map, self._connection
             ).get_find_many_query(
                 where, order_by, order, limit, offset, depth
             )
@@ -79,7 +77,7 @@ class OrmCrud(Generic[ModelType]):
         """Insert a model instance."""
         await self._execute_query(
             OrmQuery(
-                model_instance, self._table_map, dialect=self._engine.name
+                model_instance, self._table_map, dialect=self._connection
             ).get_insert_query()
         )
         return model_instance
@@ -88,7 +86,7 @@ class OrmCrud(Generic[ModelType]):
         """Update a record."""
         await self._execute_query(
             OrmQuery(
-                model_instance, self._table_map, dialect=self._engine.name
+                model_instance, self._table_map, dialect=self._connection
             ).get_update_queries()
         )
         return model_instance
@@ -98,7 +96,7 @@ class OrmCrud(Generic[ModelType]):
 
         await self._execute_query(
             OrmQuery(
-                model_instance, self._table_map, dialect=self._engine.name
+                model_instance, self._table_map, dialect=self._connection
             ).get_upsert_query()
         )
         return model_instance
@@ -107,7 +105,7 @@ class OrmCrud(Generic[ModelType]):
         """Delete a model instance by primary key."""
         await self._execute_query(
             OrmField(
-                self._table_data, self._table_map, self._engine.name
+                self._table_data, self._table_map, self._connection
             ).get_delete_query(pk)
         )
         return True
@@ -116,7 +114,7 @@ class OrmCrud(Generic[ModelType]):
         """Count records."""
         result = await self._execute_query(
             OrmField(
-                self._table_data, self._table_map, self._engine.name
+                self._table_data, self._table_map, self._connection
             ).get_count_query(where, depth)
         )
         return result.scalar()

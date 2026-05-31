@@ -6,10 +6,8 @@ from typing import Callable
 from uuid import UUID, uuid4
 
 import pytest
-import sqlalchemy
 from decouple import config
 from pydantic import BaseModel, Field
-from sqlalchemy import MetaData
 
 from ormdantic import Ormdantic
 from ormdantic.handler import (
@@ -101,9 +99,7 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
         """Setup clean sqlite database."""
 
         async def _init(db: Ormdantic) -> None:
-            metadata = MetaData()
-            async with db._engine.begin() as conn:
-                await conn.run_sync(metadata.drop_all)
+            await db.drop_all()
 
         asyncio.run(_init(db_1))
         asyncio.run(_init(db_2))
@@ -156,5 +152,5 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
             await db_5.init()
         assert (
             e.value.args[0]
-            == f"Type typing.Callable[[], int] is not supported by SQLAlchemy {sqlalchemy.__version__}."
+            == "Type typing.Callable[[], int] is not supported by Ormdantic."
         )

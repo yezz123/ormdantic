@@ -21,20 +21,20 @@
 
 Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
 
-**Ormdantic** is powered by a Rust SQL compiler, <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a>, and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a> async execution, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+**Ormdantic** is powered by Rust SQL compilation and native Rust database execution, uses <a href="https://docs.pydantic.dev/" class="external-link" target="_blank">Pydantic</a> models, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
 
 The key features are:
 
 * **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-* **Compatible**: It combines SQLAlchemy async execution, Pydantic models, and Rust query compilation to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-* **Extensible**: You have SQLAlchemy's async execution layer and Ormdantic's Rust internals underneath.
+* **Compatible**: It combines Pydantic models and Rust query compilation/execution to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
+* **Extensible**: You have Ormdantic's Rust internals underneath.
 * **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
 
 ## Requirements
 
 A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
 
-As **Ormdantic** is based on **Pydantic**, **SQLAlchemy**, and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
+As **Ormdantic** is based on **Pydantic** and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
 
 ## Installation
 
@@ -48,15 +48,7 @@ $ pip install ormdantic
 Successfully installed Ormdantic
 ```
 
-* Install The specific Asynchronous ORM library for your database.
-
-```shell
-# PostgreSQL
-$ pip install ormdantic[postgres]
-
-# SQLite
-$ pip install ormdantic[sqlite]
-```
+Database drivers are provided by Ormdantic's Rust extension.
 
 ## Example
 
@@ -66,11 +58,9 @@ Check out the [documentation](https://sqlmodel.tiangolo.com/).
 
 But let's see how to use Ormdantic.
 
-### Create SQLAlchemy engine
+### Create a database
 
-Ormdantic uses SQLAlchemy under hood to run different queries, which is why we need to initialize by creating an asynchronous engine.
-
-> **Note**: You will use the `connection` parameter to pass the connection to the engine directly.
+Ormdantic uses a native Rust execution layer. Initialize it with a database connection string.
 
 ```python
 from ormdantic import Ormdantic
@@ -79,8 +69,6 @@ connection = "sqlite+aiosqlite:///db.sqlite3"
 
 database = Ormdantic(connection)
 ```
-
-**Note**: You can use any asynchronous engine, check out the [documentation](https://docs.sqlalchemy.org/en/14/core/engines.html) for more information.
 
 ### Create a table
 
@@ -117,10 +105,9 @@ We use `database.init` will Populate relations information and create the tables
 ```python
 async def demo() -> None:
     async def _init() -> None:
-        async with db._engine.begin() as conn:
-            await db.init()
-            await conn.run_sync(db._metadata.drop_all)
-            await conn.run_sync(db._metadata.create_all)
+        await db.init()
+        await db.drop_all()
+        await db.create_all()
     await _init()
 ```
 

@@ -1,10 +1,8 @@
 # Ormdantic Usage
 
-## Create SQLAlchemy engine
+## Create a database
 
-Ormdantic uses SQLAlchemy under hood to run different queries, which is why we need to initialize by creating an asynchronous engine.
-
-> **Note**: You will use the `connection` parameter to pass the connection to the engine directly.
+Ormdantic uses a native Rust execution layer. Initialize it with a database connection string.
 
 ```python
 from ormdantic import Ormdantic
@@ -13,8 +11,6 @@ connection = "sqlite+aiosqlite:///db.sqlite3"
 
 database = Ormdantic(connection)
 ```
-
-**Note**: You can use any asynchronous engine, check out the [documentation](https://docs.sqlalchemy.org/en/14/core/engines.html) for more information.
 
 ## Create a table
 
@@ -51,10 +47,9 @@ We use `database.init` will Populate relations information and create the tables
 ```python
 async def demo() -> None:
     async def _init() -> None:
-        async with db._engine.begin() as conn:
-            await db.init()
-            await conn.run_sync(db._metadata.drop_all)
-            await conn.run_sync(db._metadata.create_all)
+        await db.init()
+        await db.drop_all()
+        await db.create_all()
     await _init()
 ```
 

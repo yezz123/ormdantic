@@ -3,9 +3,6 @@
 from types import UnionType
 from typing import Callable, ForwardRef, Type, Union, get_args, get_origin
 
-from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from ormdantic._introspect import (
     FieldMetadata,
     contains_list_annotation,
@@ -34,9 +31,8 @@ class Ormdantic:
 
     def __init__(self, connection: str) -> None:
         """Register models as ORM models and create schemas"""
-        self._metadata: MetaData | None = None
         self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
-        self._engine = create_async_engine(connection)
+        self._connection = connection
         self._native_engine = NativeEngine(connection)
         self._table_map: Map = Map()
 
@@ -88,23 +84,22 @@ class Ormdantic:
             rels = self.get(table_data)
             table_data.relationships = rels
         # Now that relation information is populated generate tables.
-        self._metadata = MetaData()
         for table_data in self._table_map.name_to_data.values():
             self._crud_generators[table_data.model] = CRUD(
                 table_data,
                 self._table_map,
-                self._engine,
+                self._connection,
             )
-        await Table(self._engine, self._metadata, self._table_map).init()
+        await self.create_all()
 
     async def create_all(self) -> None:
         """Create all registered tables."""
-        await Table(self._engine, self._metadata or MetaData(), self._table_map).init()
+        await Table(self._connection, self._table_map).init()
 
     async def drop_all(self) -> None:
         """Drop all registered tables."""
         for tablename in reversed(list(self._table_map.name_to_data)):
-            sql = compile_drop_table_sql(tablename, self._engine.name)
+            sql = compile_drop_table_sql(tablename, self._connection)
             await self._native_engine.execute(sql, ())
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:

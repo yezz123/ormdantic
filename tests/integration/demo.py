@@ -47,10 +47,9 @@ class CoffeeDemo:
     @sleep_after
     async def init_db(self):
         """Initialize the database."""
-        async with self.db._engine.begin() as conn:
-            await self.db.init()
-            await conn.run_sync(self.db._metadata.drop_all)  # type: ignore
-            await conn.run_sync(self.db._metadata.create_all)  # type: ignore
+        await self.db.init()
+        await self.db.drop_all()
+        await self.db.create_all()
 
     @sleep_after
     async def insert_flavor(self, name):

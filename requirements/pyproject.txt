@@ -2,14 +2,9 @@
 #    uv pip compile pyproject.toml -o requirements/pyproject.txt
 annotated-types==0.7.0
     # via pydantic
-greenlet==3.0.3
-    # via sqlalchemy
 pydantic==2.12.4
 pydantic-core==2.41.5
-sqlalchemy==2.0.31
 typing-extensions==4.15.0
-    # via
-    #   pydantic
-    #   sqlalchemy
+    # via pydantic
 typing-inspection==0.4.2
     # via pydantic

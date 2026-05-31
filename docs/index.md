@@ -26,13 +26,13 @@ hide:
 
 Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
 
-**Ormdantic** is powered by a Rust SQL compiler, <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a>, and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a> async execution, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+**Ormdantic** is powered by Rust SQL compilation and native Rust database execution, uses <a href="https://docs.pydantic.dev/" class="external-link" target="_blank">Pydantic</a> models, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
 
 The key features are:
 
 * **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-* **Compatible**: It combines SQLAlchemy async execution, Pydantic models, and Rust query compilation to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-* **Extensible**: You have SQLAlchemy's async execution layer and Ormdantic's Rust internals underneath.
+* **Compatible**: It combines Pydantic models and Rust query compilation/execution to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
+* **Extensible**: You have Ormdantic's Rust internals underneath.
 * **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
 
 ## License

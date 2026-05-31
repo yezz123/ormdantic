@@ -50,4 +50,5 @@ class NativeEngine:
         )
 
     def _execute_sync(self, sql: str, values: list[Any]) -> dict[str, Any]:
+        assert _ormdantic is not None
         return _ormdantic.execute_native(self.url, sql, values)

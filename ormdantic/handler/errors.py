@@ -1,7 +1,5 @@
 from typing import Type
 
-import sqlalchemy
-
 
 class ConfigurationError(Exception):
     """Raised for mal-configured database models or schemas."""
@@ -54,6 +52,4 @@ class TypeConversionError(ConfigurationError):
     """Raised when a Python type fails to convert to SQL."""
 
     def __init__(self, type: Type) -> None:  # type: ignore
-        super().__init__(
-            f"Type {type} is not supported by SQLAlchemy {sqlalchemy.__version__}."
-        )
+        super().__init__(f"Type {type} is not supported by Ormdantic.")
