@@ -105,7 +105,7 @@ After activating the environment as described above, Now lets install all the pa
 <div class="termy">
 
 ```console
-$ uv pip install -r requirements/all.txt
+$ uv sync --all-groups
 
 ---> 100%
 ```
@@ -116,8 +116,8 @@ It will install all the dependencies in your local environment.
 
 #### Including
 
-The Dependencies file contains all the dependencies that you need to develop
-ormdantic, which are:
+The dependency groups in `pyproject.toml` contain all the dependencies that you need to develop
+Ormdantic, including:
 
 - The Base Dependencies - the ones that are needed to run ormdantic.
   [See Installation](../installation.md).

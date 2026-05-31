@@ -21,7 +21,7 @@ jobs:
           uv-venv: ".venv"
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/linting.txt
+      - run: uv sync --group linting
       - run: bash scripts/lint.sh
 
   tests:
@@ -43,7 +43,7 @@ jobs:
           uv-version: "0.9.28"
           uv-venv: ".venv"
       - run: cargo test --workspace --exclude ormdantic-py
-      - run: uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/testing.txt
+      - run: uv sync --group testing
       - run: uv pip install maturin
       - run: maturin develop
       - run: bash scripts/test.sh

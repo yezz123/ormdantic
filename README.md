@@ -242,7 +242,7 @@ And then install the development dependencies:
 
 ```bash
 # Install dependencies
-pip install -r requirements/all.txt
+uv sync --all-groups
 ```
 
 ### Run tests 🌝
