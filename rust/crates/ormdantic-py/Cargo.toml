@@ -18,5 +18,6 @@ ormdantic-core.workspace = true
 ormdantic-schema.workspace = true
 ormdantic-hydrate.workspace = true
 ormdantic-dialects.workspace = true
+ormdantic-engine.workspace = true
 ormdantic-sql.workspace = true
 pyo3 = { workspace = true, features = ["extension-module"] }

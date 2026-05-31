@@ -1,4 +1,5 @@
 use ormdantic_dialects::AnyDialect;
+use ormdantic_engine::{execute_url, DbValue};
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::{SchemaRegistry, TableDef};
 use ormdantic_sql::{
@@ -8,6 +9,7 @@ use ormdantic_sql::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use pyo3::IntoPyObjectExt;
 
 #[pyfunction]
 fn hydrate_flat(
@@ -296,6 +298,33 @@ fn compile_delete_pk(
     )
 }
 
+#[pyfunction]
+fn execute_native(
+    py: Python<'_>,
+    url: &str,
+    sql: &str,
+    params: Vec<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    let values = params
+        .into_iter()
+        .map(|value| py_to_db_value(py, value))
+        .collect::<PyResult<Vec<_>>>()?;
+    let result =
+        execute_url(url, sql, &values).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let output = PyDict::new(py);
+    output.set_item("columns", result.columns())?;
+    let rows = PyList::empty(py);
+    for row in result.rows() {
+        let py_row = PyList::empty(py);
+        for value in row {
+            py_row.append(db_value_to_py(py, value)?)?;
+        }
+        rows.append(py_row)?;
+    }
+    output.set_item("rows", rows)?;
+    Ok(output.into_any().unbind())
+}
+
 fn select_columns(
     columns: Vec<String>,
     aliases: Option<Vec<String>>,
@@ -363,6 +392,33 @@ fn operation_name(operation: &QueryOperation) -> &'static str {
     }
 }
 
+fn py_to_db_value(py: Python<'_>, value: Py<PyAny>) -> PyResult<DbValue> {
+    let value = value.bind(py);
+    if value.is_none() {
+        return Ok(DbValue::Null);
+    }
+    if let Ok(value) = value.extract::<bool>() {
+        return Ok(DbValue::Bool(value));
+    }
+    if let Ok(value) = value.extract::<i64>() {
+        return Ok(DbValue::Integer(value));
+    }
+    if let Ok(value) = value.extract::<f64>() {
+        return Ok(DbValue::Real(value));
+    }
+    Ok(DbValue::Text(value.str()?.to_string()))
+}
+
+fn db_value_to_py(py: Python<'_>, value: &DbValue) -> PyResult<Py<PyAny>> {
+    match value {
+        DbValue::Null => Ok(py.None()),
+        DbValue::Integer(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::Real(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::Text(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::Bool(value) => Ok((*value).into_py_any(py)?),
+    }
+}
+
 fn row_to_dict<'py>(
     py: Python<'py>,
     row: &[Py<PyAny>],
@@ -394,5 +450,6 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile_update, m)?)?;
     m.add_function(wrap_pyfunction!(compile_upsert, m)?)?;
     m.add_function(wrap_pyfunction!(compile_delete_pk, m)?)?;
+    m.add_function(wrap_pyfunction!(execute_native, m)?)?;
     Ok(())
 }

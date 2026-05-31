@@ -1,0 +1,19 @@
+[package]
+name = "ormdantic-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Native database execution for Ormdantic"
+
+[lib]
+name = "ormdantic_engine"
+path = "src/lib.rs"
+
+[dependencies]
+ormdantic-core.workspace = true
+ormdantic-dialects.workspace = true
+postgres = "0.19"
+rusqlite = { version = "0.32", features = ["bundled"] }
