@@ -84,14 +84,12 @@ fn rows_to_result(rows: &[Row]) -> QueryResult {
 fn pg_value(row: &Row, idx: usize, ty: &Type) -> DbValue {
     if *ty == Type::BOOL {
         nullable::<bool>(row, idx).map_or(DbValue::Null, DbValue::Bool)
-    } else if *ty == Type::INT2 || *ty == Type::INT4 || *ty == Type::INT8 {
-        nullable::<i64>(row, idx).map_or_else(
-            || {
-                nullable::<i32>(row, idx)
-                    .map_or(DbValue::Null, |value| DbValue::Integer(value.into()))
-            },
-            DbValue::Integer,
-        )
+    } else if *ty == Type::INT2 {
+        nullable::<i16>(row, idx).map_or(DbValue::Null, |value| DbValue::Integer(value.into()))
+    } else if *ty == Type::INT4 {
+        nullable::<i32>(row, idx).map_or(DbValue::Null, |value| DbValue::Integer(value.into()))
+    } else if *ty == Type::INT8 {
+        nullable::<i64>(row, idx).map_or(DbValue::Null, DbValue::Integer)
     } else if *ty == Type::FLOAT4 || *ty == Type::FLOAT8 {
         nullable::<f64>(row, idx).map_or_else(
             || nullable::<f32>(row, idx).map_or(DbValue::Null, |value| DbValue::Real(value.into())),
