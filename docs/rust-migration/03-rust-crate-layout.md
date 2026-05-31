@@ -15,6 +15,8 @@ rust/
     ormdantic-core/
     ormdantic-schema/
     ormdantic-hydrate/
+    ormdantic-dialects/
+    ormdantic-sql/
     ormdantic-py/
 ```
 
