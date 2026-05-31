@@ -100,7 +100,6 @@ nav:
   - Installation: installation.md
   - Usage:
     - Getting Started: usage/usage.md
-    - Generator: usage/generator.md
     - Query Expressions: usage/query-expressions.md
     - Transactions And Sessions: usage/transactions-sessions.md
     - Relationship Loading: usage/relationship-loading.md
@@ -114,7 +113,7 @@ nav:
     - api/ormdantic.md
     - Errors:
       - api/errors.md
-    - Generator:
+    - ORM Internals:
       - api/crud.md
       - api/table.md
       - api/field.md
@@ -129,7 +128,6 @@ nav:
   - Changelog: release.md
 
 extra:
-  generator: true
   social:
   - icon: fontawesome/brands/github-alt
     link: https://github.com/yezz123/ormdantic

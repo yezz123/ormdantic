@@ -1,5 +1,4 @@
 from ormdantic.generator._crud import OrmCrud as CRUD
-from ormdantic.generator._lazy import generate as Generator
 from ormdantic.generator._table import OrmTableGenerator as Table
 
-__all__ = ["Table", "CRUD", "Generator"]
+__all__ = ["Table", "CRUD"]
