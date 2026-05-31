@@ -13,6 +13,7 @@ from ormdantic._introspect import (
 )
 from ormdantic.generator import CRUD, Table
 from ormdantic.engine import NativeEngine
+from ormdantic.events import EventHandler, EventRegistry
 from ormdantic.generator._rust_schema import compile_drop_table_sql
 from ormdantic.handler import (
     MismatchingBackReferenceError,
@@ -35,6 +36,7 @@ class Ormdantic:
         self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
         self._connection = connection
         self._native_engine = NativeEngine(connection)
+        self._events = EventRegistry()
         self._table_map: Map = Map()
 
     def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
@@ -91,6 +93,7 @@ class Ormdantic:
                 self._table_map,
                 self._connection,
                 self._native_engine,
+                self._events,
             )
         await self.create_all()
 
@@ -111,6 +114,10 @@ class Ormdantic:
     def session(self) -> Session:
         """Open an async unit-of-work session."""
         return Session(self)
+
+    def on(self, event: str, handler: EventHandler) -> EventHandler:
+        """Register an event handler."""
+        return self._events.on(event, handler)
 
     async def load(self, model: ModelType, path: str) -> Any:
         """Explicitly load a relationship path for a model instance."""

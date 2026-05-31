@@ -33,6 +33,7 @@ class Session:
             self._dirty.append(model)
 
     async def flush(self) -> None:
+        await self._database._events.dispatch("before_flush", session=self)
         for model in list(self._new):
             stored = await self._database[type(model)].insert(model)
             self._remember(stored)
@@ -42,6 +43,7 @@ class Session:
             stored = await self._database[type(model)].update(model)
             self._remember(stored)
         self._dirty.clear()
+        await self._database._events.dispatch("after_flush", session=self)
 
     async def commit(self) -> None:
         await self.flush()

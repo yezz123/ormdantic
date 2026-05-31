@@ -3,6 +3,7 @@
 from typing import Any, Generic
 
 from ormdantic.engine import NativeEngine
+from ormdantic.events import EventRegistry
 from ormdantic.generator._field import Order, OrmField
 from ormdantic.generator._query import OrmQuery
 from ormdantic.generator._rust_query import RustQuery
@@ -21,12 +22,14 @@ class OrmCrud(Generic[ModelType]):
         table_map: Map,
         connection: str,
         native_engine: NativeEngine,
+        events: EventRegistry,
     ) -> None:
         """Initialize OrmCrud."""
         self._connection = connection
         self._table_map = table_map
         self._table_data = table_data
         self._native_engine = native_engine
+        self._events = events
         self.tablename = table_data.tablename
         self.columns = table_data.columns
 
@@ -85,20 +88,24 @@ class OrmCrud(Generic[ModelType]):
 
     async def insert(self, model_instance: ModelType) -> ModelType:
         """Insert a model instance."""
+        await self._events.dispatch("before_insert", model=model_instance, table=self._table_data)
         await self._execute_query(
             OrmQuery(
                 model_instance, self._table_map, dialect=self._connection
             ).get_insert_query()
         )
+        await self._events.dispatch("after_insert", model=model_instance, table=self._table_data)
         return model_instance
 
     async def update(self, model_instance: ModelType) -> ModelType:
         """Update a record."""
+        await self._events.dispatch("before_update", model=model_instance, table=self._table_data)
         await self._execute_query(
             OrmQuery(
                 model_instance, self._table_map, dialect=self._connection
             ).get_update_queries()
         )
+        await self._events.dispatch("after_update", model=model_instance, table=self._table_data)
         return model_instance
 
     async def upsert(self, model_instance: ModelType) -> ModelType:
@@ -113,11 +120,13 @@ class OrmCrud(Generic[ModelType]):
 
     async def delete(self, pk: Any) -> bool:
         """Delete a model instance by primary key."""
+        await self._events.dispatch("before_delete", pk=pk, table=self._table_data)
         await self._execute_query(
             OrmField(
                 self._table_data, self._table_map, self._connection
             ).get_delete_query(pk)
         )
+        await self._events.dispatch("after_delete", pk=pk, table=self._table_data)
         return True
 
     async def count(self, where: dict[str, Any] | None = None, depth: int = 0) -> int:
