@@ -6,4 +6,5 @@ set -x
 echo "ENV=${ENV}"
 
 export PYTHONPATH=.
-python3 tests/integration/demo.py
+export DATABASE_URL="${DATABASE_URL:-sqlite:///db.sqlite3}"
+uv run --group testing pytest tests/integration
