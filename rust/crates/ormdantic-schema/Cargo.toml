@@ -1,0 +1,16 @@
+[package]
+name = "ormdantic-schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Schema metadata structures for Ormdantic"
+
+[lib]
+name = "ormdantic_schema"
+path = "src/lib.rs"
+
+[dependencies]
+ormdantic-core.workspace = true

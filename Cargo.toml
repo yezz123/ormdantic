@@ -1,0 +1,27 @@
+[workspace]
+members = [
+    "rust/crates/ormdantic-core",
+    "rust/crates/ormdantic-schema",
+    "rust/crates/ormdantic-hydrate",
+    "rust/crates/ormdantic-py",
+]
+resolver = "2"
+
+[workspace.package]
+version = "1.7.0"
+edition = "2021"
+license = "MIT"
+homepage = "https://github.com/yezz123/ormdantic"
+repository = "https://github.com/yezz123/ormdantic"
+rust-version = "1.75"
+
+[workspace.dependencies]
+ormdantic-core = { path = "rust/crates/ormdantic-core" }
+ormdantic-schema = { path = "rust/crates/ormdantic-schema" }
+ormdantic-hydrate = { path = "rust/crates/ormdantic-hydrate" }
+pyo3 = "0.26"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true

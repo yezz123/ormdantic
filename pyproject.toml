@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1,<2"]
+build-backend = "maturin"
 
 [project]
 name = "ormdantic"
@@ -64,6 +64,12 @@ postgresql = [
 
 [tool.hatch.version]
 path = "ormdantic/__init__.py"
+
+[tool.maturin]
+manifest-path = "rust/crates/ormdantic-py/Cargo.toml"
+python-source = "."
+module-name = "ormdantic._ormdantic"
+bindings = "pyo3"
 
 [tool.isort]
 profile = "black"
@@ -135,9 +141,9 @@ exclude_lines = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = 'tests'
-log_cli = "1"
+testpaths = ["tests"]
+log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
-log_cli_date_format= "%Y-%m-%d %H:%M:%S"
-asyncio_mode= "auto"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+asyncio_mode = "auto"

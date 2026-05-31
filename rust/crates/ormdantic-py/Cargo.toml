@@ -1,0 +1,20 @@
+[package]
+name = "ormdantic-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "PyO3 bindings for Ormdantic Rust internals"
+
+[lib]
+name = "_ormdantic"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ormdantic-core.workspace = true
+ormdantic-schema.workspace = true
+ormdantic-hydrate.workspace = true
+pyo3 = { workspace = true, features = ["extension-module"] }

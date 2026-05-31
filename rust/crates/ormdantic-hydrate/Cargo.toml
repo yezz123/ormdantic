@@ -1,0 +1,17 @@
+[package]
+name = "ormdantic-hydrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Row hydration planning for Ormdantic"
+
+[lib]
+name = "ormdantic_hydrate"
+path = "src/lib.rs"
+
+[dependencies]
+ormdantic-core.workspace = true
+ormdantic-schema.workspace = true
