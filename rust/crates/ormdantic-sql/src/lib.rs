@@ -56,16 +56,76 @@ impl TableRef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectColumn {
+    name: String,
+    alias: Option<String>,
+}
+
+impl SelectColumn {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            alias: None,
+        }
+    }
+
+    pub fn aliased(name: impl Into<String>, alias: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            alias: Some(alias.into()),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn alias(&self) -> Option<&str> {
+        self.alias.as_deref()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Filter {
     Eq { column: String, param: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderBy {
+    column: String,
+    direction: SortDirection,
+}
+
+impl OrderBy {
+    pub fn new(column: impl Into<String>, direction: SortDirection) -> Self {
+        Self {
+            column: column.into(),
+            direction,
+        }
+    }
+
+    pub fn column(&self) -> &str {
+        &self.column
+    }
+
+    pub fn direction(&self) -> &SortDirection {
+        &self.direction
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryAst {
     Select {
         table: TableRef,
-        columns: Vec<String>,
+        columns: Vec<SelectColumn>,
         filters: Vec<Filter>,
+        order_by: Vec<OrderBy>,
         limit: Option<usize>,
         offset: Option<usize>,
     },
@@ -100,9 +160,10 @@ impl QueryAst {
                 table,
                 columns,
                 filters,
+                order_by,
                 limit,
                 offset,
-            } => compile_select(dialect, table, columns, filters, *limit, *offset),
+            } => compile_select(dialect, table, columns, filters, order_by, *limit, *offset),
             Self::Count { table, filters } => compile_count(dialect, table, filters),
             Self::Insert { table, columns } => compile_insert(dialect, table, columns),
             Self::Update { table, columns, pk } => compile_update(dialect, table, columns, pk),
@@ -115,16 +176,17 @@ impl QueryAst {
 fn compile_select(
     dialect: &impl Dialect,
     table: &TableRef,
-    columns: &[String],
+    columns: &[SelectColumn],
     filters: &[Filter],
+    order_by: &[OrderBy],
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> OrmdanticResult<CompiledQuery> {
-    require_columns(columns, "select")?;
+    require_select_columns(columns)?;
     let mut bind_index = 1;
     let selected = columns
         .iter()
-        .map(|column| qualified_column(dialect, table, column))
+        .map(|column| selected_column(dialect, table, column))
         .collect::<Vec<_>>()
         .join(", ");
     let mut sql = format!(
@@ -132,6 +194,7 @@ fn compile_select(
         dialect.quote_ident(table.name())
     );
     let params = append_filters(dialect, &mut sql, filters, &mut bind_index);
+    append_ordering(dialect, &mut sql, order_by);
     if let Some(limit) = limit {
         sql.push_str(&format!(" LIMIT {limit}"));
     }
@@ -211,23 +274,16 @@ fn compile_upsert(
 ) -> OrmdanticResult<CompiledQuery> {
     require_columns(columns, "upsert")?;
     let insert = compile_insert(dialect, table, columns)?;
-    let assignments = columns
+    let update_columns = columns
         .iter()
         .filter(|column| column.as_str() != pk)
-        .map(|column| {
-            format!(
-                "{} = excluded.{}",
-                dialect.quote_ident(column),
-                dialect.quote_ident(column)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+        .cloned()
+        .collect::<Vec<_>>();
     Ok(CompiledQuery::new(
         format!(
-            "{} ON CONFLICT ({}) DO UPDATE SET {assignments}",
+            "{} {}",
             insert.sql(),
-            dialect.quote_ident(pk)
+            dialect.upsert_conflict_clause(pk, &update_columns)
         ),
         columns.to_vec(),
         QueryOperation::Upsert,
@@ -279,6 +335,26 @@ fn append_filters(
     params
 }
 
+fn append_ordering(dialect: &impl Dialect, sql: &mut String, order_by: &[OrderBy]) {
+    if order_by.is_empty() {
+        return;
+    }
+
+    let rendered = order_by
+        .iter()
+        .map(|order| {
+            let direction = match order.direction() {
+                SortDirection::Asc => "ASC",
+                SortDirection::Desc => "DESC",
+            };
+            format!("{} {direction}", dialect.quote_ident(order.column()))
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    sql.push_str(" ORDER BY ");
+    sql.push_str(&rendered);
+}
+
 fn require_columns(columns: &[String], operation: &str) -> OrmdanticResult<()> {
     if columns.is_empty() {
         return Err(OrmdanticError::SqlCompile {
@@ -286,6 +362,23 @@ fn require_columns(columns: &[String], operation: &str) -> OrmdanticResult<()> {
         });
     }
     Ok(())
+}
+
+fn require_select_columns(columns: &[SelectColumn]) -> OrmdanticResult<()> {
+    if columns.is_empty() {
+        return Err(OrmdanticError::SqlCompile {
+            message: "select query requires at least one column".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn selected_column(dialect: &impl Dialect, table: &TableRef, column: &SelectColumn) -> String {
+    let rendered = qualified_column(dialect, table, column.name());
+    match column.alias() {
+        Some(alias) => format!("{rendered} AS {}", dialect.quote_ident(alias)),
+        None => rendered,
+    }
 }
 
 fn qualified_column(dialect: &impl Dialect, table: &TableRef, column: &str) -> String {
@@ -313,18 +406,19 @@ fn placeholders(dialect: &impl Dialect, start: usize, count: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Filter, QueryAst, QueryOperation, TableRef};
+    use super::{Filter, OrderBy, QueryAst, QueryOperation, SelectColumn, SortDirection, TableRef};
     use ormdantic_dialects::{PostgresDialect, SqliteDialect};
 
     #[test]
     fn compiles_select_for_sqlite() {
         let query = QueryAst::Select {
             table: TableRef::new("flavors"),
-            columns: vec!["id".to_string(), "name".to_string()],
+            columns: vec![SelectColumn::new("id"), SelectColumn::new("name")],
             filters: vec![Filter::Eq {
                 column: "id".to_string(),
                 param: "id".to_string(),
             }],
+            order_by: vec![],
             limit: Some(10),
             offset: Some(20),
         }
@@ -337,6 +431,52 @@ mod tests {
         );
         assert_eq!(query.params(), &["id".to_string()]);
         assert_eq!(query.operation(), &QueryOperation::Select);
+    }
+
+    #[test]
+    fn compiles_select_with_aliases_and_ordering_for_postgres() {
+        let query = QueryAst::Select {
+            table: TableRef::new("flavors"),
+            columns: vec![
+                SelectColumn::aliased("id", "flavors\\id"),
+                SelectColumn::aliased("name", "flavors\\name"),
+            ],
+            filters: vec![Filter::Eq {
+                column: "name".to_string(),
+                param: "name".to_string(),
+            }],
+            order_by: vec![OrderBy::new("name", SortDirection::Desc)],
+            limit: Some(5),
+            offset: None,
+        }
+        .compile(&PostgresDialect)
+        .expect("query should compile");
+
+        assert_eq!(
+            query.sql(),
+            "SELECT \"flavors\".\"id\" AS \"flavors\\id\", \"flavors\".\"name\" AS \"flavors\\name\" FROM \"flavors\" WHERE \"name\" = $1 ORDER BY \"name\" DESC LIMIT 5"
+        );
+        assert_eq!(query.params(), &["name".to_string()]);
+    }
+
+    #[test]
+    fn compiles_count_for_sqlite() {
+        let query = QueryAst::Count {
+            table: TableRef::new("flavors"),
+            filters: vec![Filter::Eq {
+                column: "name".to_string(),
+                param: "name".to_string(),
+            }],
+        }
+        .compile(&SqliteDialect)
+        .expect("query should compile");
+
+        assert_eq!(
+            query.sql(),
+            "SELECT COUNT(*) FROM \"flavors\" WHERE \"name\" = ?"
+        );
+        assert_eq!(query.params(), &["name".to_string()]);
+        assert_eq!(query.operation(), &QueryOperation::Count);
     }
 
     #[test]
@@ -368,6 +508,42 @@ mod tests {
         assert_eq!(
             query.sql(),
             "INSERT INTO \"flavors\" (\"id\", \"name\") VALUES ($1, $2) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = excluded.\"name\""
+        );
+    }
+
+    #[test]
+    fn compiles_pk_only_upsert_as_do_nothing() {
+        let query = QueryAst::Upsert {
+            table: TableRef::new("flavors"),
+            columns: vec!["id".to_string()],
+            pk: "id".to_string(),
+        }
+        .compile(&SqliteDialect)
+        .expect("query should compile");
+
+        assert_eq!(
+            query.sql(),
+            "INSERT INTO \"flavors\" (\"id\") VALUES (?) ON CONFLICT (\"id\") DO NOTHING"
+        );
+    }
+
+    #[test]
+    fn compiles_update_for_postgres() {
+        let query = QueryAst::Update {
+            table: TableRef::new("flavors"),
+            columns: vec!["name".to_string(), "strength".to_string()],
+            pk: "id".to_string(),
+        }
+        .compile(&PostgresDialect)
+        .expect("query should compile");
+
+        assert_eq!(
+            query.sql(),
+            "UPDATE \"flavors\" SET \"name\" = $1, \"strength\" = $2 WHERE \"id\" = $3"
+        );
+        assert_eq!(
+            query.params(),
+            &["name".to_string(), "strength".to_string(), "id".to_string()]
         );
     }
 

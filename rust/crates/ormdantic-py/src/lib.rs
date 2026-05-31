@@ -1,7 +1,9 @@
 use ormdantic_dialects::AnyDialect;
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::{SchemaRegistry, TableDef};
-use ormdantic_sql::{CompiledQuery, Filter, QueryAst, QueryOperation, TableRef};
+use ormdantic_sql::{
+    CompiledQuery, Filter, OrderBy, QueryAst, QueryOperation, SelectColumn, SortDirection, TableRef,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -85,25 +87,82 @@ fn validate_schema_tables(tables: Vec<(String, String, Vec<String>)>) -> PyResul
     Ok(registry.tables().len())
 }
 
-#[pyfunction]
+#[pyfunction(signature = (dialect, table, primary_key, columns, aliases=None))]
 fn compile_select_pk(
     py: Python<'_>,
     dialect: &str,
     table: &str,
     primary_key: &str,
     columns: Vec<String>,
+    aliases: Option<Vec<String>>,
 ) -> PyResult<Py<PyAny>> {
     let query = QueryAst::Select {
         table: TableRef::new(table),
-        columns,
+        columns: select_columns(columns, aliases)?,
         filters: vec![Filter::Eq {
             column: primary_key.to_string(),
             param: primary_key.to_string(),
         }],
+        order_by: Vec::new(),
         limit: None,
         offset: None,
     };
     compile_to_python(py, dialect, query)
+}
+
+#[pyfunction(signature = (
+    dialect,
+    table,
+    columns,
+    filter_columns,
+    order_columns,
+    order_direction,
+    limit=None,
+    offset=None,
+    aliases=None
+))]
+fn compile_find_many(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    columns: Vec<String>,
+    filter_columns: Vec<String>,
+    order_columns: Vec<String>,
+    order_direction: &str,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    aliases: Option<Vec<String>>,
+) -> PyResult<Py<PyAny>> {
+    let direction = parse_sort_direction(order_direction)?;
+    let query = QueryAst::Select {
+        table: TableRef::new(table),
+        columns: select_columns(columns, aliases)?,
+        filters: equality_filters(filter_columns),
+        order_by: order_columns
+            .into_iter()
+            .map(|column| OrderBy::new(column, direction.clone()))
+            .collect(),
+        limit,
+        offset,
+    };
+    compile_to_python(py, dialect, query)
+}
+
+#[pyfunction]
+fn compile_count(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    filter_columns: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    compile_to_python(
+        py,
+        dialect,
+        QueryAst::Count {
+            table: TableRef::new(table),
+            filters: equality_filters(filter_columns),
+        },
+    )
 }
 
 #[pyfunction]
@@ -124,6 +183,44 @@ fn compile_insert(
 }
 
 #[pyfunction]
+fn compile_update(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    primary_key: &str,
+    columns: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    compile_to_python(
+        py,
+        dialect,
+        QueryAst::Update {
+            table: TableRef::new(table),
+            columns,
+            pk: primary_key.to_string(),
+        },
+    )
+}
+
+#[pyfunction]
+fn compile_upsert(
+    py: Python<'_>,
+    dialect: &str,
+    table: &str,
+    primary_key: &str,
+    columns: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    compile_to_python(
+        py,
+        dialect,
+        QueryAst::Upsert {
+            table: TableRef::new(table),
+            columns,
+            pk: primary_key.to_string(),
+        },
+    )
+}
+
+#[pyfunction]
 fn compile_delete_pk(
     py: Python<'_>,
     dialect: &str,
@@ -138,6 +235,45 @@ fn compile_delete_pk(
             pk: primary_key.to_string(),
         },
     )
+}
+
+fn select_columns(
+    columns: Vec<String>,
+    aliases: Option<Vec<String>>,
+) -> PyResult<Vec<SelectColumn>> {
+    let Some(aliases) = aliases else {
+        return Ok(columns.into_iter().map(SelectColumn::new).collect());
+    };
+    if columns.len() != aliases.len() {
+        return Err(PyValueError::new_err(
+            "select column aliases must match selected columns",
+        ));
+    }
+    Ok(columns
+        .into_iter()
+        .zip(aliases)
+        .map(|(column, alias)| SelectColumn::aliased(column, alias))
+        .collect())
+}
+
+fn equality_filters(columns: Vec<String>) -> Vec<Filter> {
+    columns
+        .into_iter()
+        .map(|column| Filter::Eq {
+            param: column.clone(),
+            column,
+        })
+        .collect()
+}
+
+fn parse_sort_direction(direction: &str) -> PyResult<SortDirection> {
+    match direction {
+        "asc" | "ASC" => Ok(SortDirection::Asc),
+        "desc" | "DESC" => Ok(SortDirection::Desc),
+        other => Err(PyValueError::new_err(format!(
+            "unsupported sort direction '{other}'"
+        ))),
+    }
 }
 
 fn compile_to_python(py: Python<'_>, dialect: &str, query: QueryAst) -> PyResult<Py<PyAny>> {
@@ -192,7 +328,11 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(plan_result_shape, m)?)?;
     m.add_function(wrap_pyfunction!(validate_schema_tables, m)?)?;
     m.add_function(wrap_pyfunction!(compile_select_pk, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_find_many, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_count, m)?)?;
     m.add_function(wrap_pyfunction!(compile_insert, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_update, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_upsert, m)?)?;
     m.add_function(wrap_pyfunction!(compile_delete_pk, m)?)?;
     Ok(())
 }

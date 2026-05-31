@@ -26,6 +26,26 @@ pub trait Dialect {
     fn supports_returning(&self) -> bool;
     fn supports_native_uuid(&self) -> bool;
     fn supports_json(&self) -> bool;
+
+    fn upsert_conflict_clause(&self, conflict_column: &str, update_columns: &[String]) -> String {
+        let target = self.quote_ident(conflict_column);
+        if update_columns.is_empty() {
+            return format!("ON CONFLICT ({target}) DO NOTHING");
+        }
+
+        let assignments = update_columns
+            .iter()
+            .map(|column| {
+                format!(
+                    "{} = excluded.{}",
+                    self.quote_ident(column),
+                    self.quote_ident(column)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("ON CONFLICT ({target}) DO UPDATE SET {assignments}")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +178,17 @@ impl Dialect for AnyDialect {
             Self::Postgres(dialect) => dialect.supports_json(),
         }
     }
+
+    fn upsert_conflict_clause(&self, conflict_column: &str, update_columns: &[String]) -> String {
+        match self {
+            Self::Sqlite(dialect) => {
+                dialect.upsert_conflict_clause(conflict_column, update_columns)
+            }
+            Self::Postgres(dialect) => {
+                dialect.upsert_conflict_clause(conflict_column, update_columns)
+            }
+        }
+    }
 }
 
 fn quote_double(ident: &str) -> String {
@@ -197,5 +228,17 @@ mod tests {
         let error = AnyDialect::parse("oracle").expect_err("dialect should fail");
 
         assert_eq!(error.to_string(), "dialect 'oracle' is not supported");
+    }
+
+    #[test]
+    fn renders_upsert_conflict_clauses() {
+        assert_eq!(
+            SqliteDialect.upsert_conflict_clause("id", &["name".to_string()]),
+            "ON CONFLICT (\"id\") DO UPDATE SET \"name\" = excluded.\"name\""
+        );
+        assert_eq!(
+            PostgresDialect.upsert_conflict_clause("id", &[]),
+            "ON CONFLICT (\"id\") DO NOTHING"
+        );
     }
 }
