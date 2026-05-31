@@ -7,6 +7,7 @@ from ormdantic.generator._field import Order, OrmField
 from ormdantic.generator._query import OrmQuery
 from ormdantic.generator._rust_query import RustQuery
 from ormdantic.generator._serializer import OrmSerializer
+from ormdantic.loaders import LoaderOption, loader_depth
 from ormdantic.models import Map, OrmTable, Result
 from ormdantic.types import ModelType
 
@@ -29,8 +30,14 @@ class OrmCrud(Generic[ModelType]):
         self.tablename = table_data.tablename
         self.columns = table_data.columns
 
-    async def find_one(self, pk: Any, depth: int = 0) -> ModelType | None:
+    async def find_one(
+        self,
+        pk: Any,
+        depth: int = 0,
+        load: list[LoaderOption] | None = None,
+    ) -> ModelType | None:
         """Find a model instance by primary key."""
+        depth = max(depth, loader_depth(load))
         result = await self._execute_query(
             OrmField(
                 self._table_data, self._table_map, self._connection
@@ -52,8 +59,10 @@ class OrmCrud(Generic[ModelType]):
         limit: int = 0,
         offset: int = 0,
         depth: int = 0,
+        load: list[LoaderOption] | None = None,
     ) -> Result[ModelType]:
         """Find many model instances."""
+        depth = max(depth, loader_depth(load))
         result = await self._execute_query(
             OrmField(
                 self._table_data, self._table_map, self._connection

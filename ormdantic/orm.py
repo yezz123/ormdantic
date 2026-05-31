@@ -112,6 +112,17 @@ class Ormdantic:
         """Open an async unit-of-work session."""
         return Session(self)
 
+    async def load(self, model: ModelType, path: str) -> Any:
+        """Explicitly load a relationship path for a model instance."""
+        table = self._table_map.model_to_data[type(model)]
+        loaded = await self[type(model)].find_one(getattr(model, table.pk), depth=1)
+        if loaded is None:
+            return None
+        value: Any = loaded
+        for part in path.split("."):
+            value = getattr(value, part)
+        return value
+
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         """Get relationships for a given table."""
         relationships = {}
