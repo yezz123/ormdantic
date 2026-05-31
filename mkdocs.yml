@@ -100,12 +100,14 @@ nav:
   - Installation: installation.md
   - Usage:
     - Getting Started: usage/usage.md
+    - Connections And Dialects: usage/connections.md
     - Query Expressions: usage/query-expressions.md
     - Transactions And Sessions: usage/transactions-sessions.md
     - Relationship Loading: usage/relationship-loading.md
     - Events: usage/events.md
   - Architecture:
     - Rust Core: architecture/rust-core.md
+    - Dialect Support: architecture/dialect-support.md
     - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
     - vNext Migration: architecture/vnext-migration.md
   - Reference - API:

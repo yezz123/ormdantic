@@ -24,3 +24,11 @@ Crates:
 - `ormdantic-py`: PyO3 bindings exposed as `ormdantic._ormdantic`.
 
 Python still owns Pydantic model declarations, decorators, and final model construction.
+
+`ormdantic-engine` is organized by driver modules:
+
+- `sqlite`
+- `postgres`
+- `mysql` / `mariadb`
+- `mssql` (optional gate)
+- `oracle` (optional gate)

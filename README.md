@@ -65,10 +65,12 @@ Ormdantic uses a native Rust execution layer. Initialize it with a database conn
 ```python
 from ormdantic import Ormdantic
 
-connection = "sqlite+aiosqlite:///db.sqlite3"
+connection = "sqlite:///db.sqlite3"
 
 database = Ormdantic(connection)
 ```
+
+PostgreSQL, MySQL, and MariaDB URLs are also supported by the Rust runtime. SQL Server and Oracle dialects are recognized and kept behind optional native-runtime gates.
 
 ### Create a table
 

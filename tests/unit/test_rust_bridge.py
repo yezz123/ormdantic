@@ -162,7 +162,7 @@ def test_rust_query_bridge_compiles_mysql_connection_url() -> None:
         return
 
     assert query == {
-        "sql": "INSERT INTO `flavors` (`id`, `name`) VALUES (%s, %s)",
+        "sql": "INSERT INTO `flavors` (`id`, `name`) VALUES (?, ?)",
         "params": ["id", "name"],
         "operation": "insert",
     }
