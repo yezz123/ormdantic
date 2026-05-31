@@ -142,7 +142,7 @@ impl Dialect for MySqlDialect {
     }
 
     fn placeholder(&self, _index: usize) -> String {
-        "%s".to_string()
+        "?".to_string()
     }
 
     fn supports_returning(&self) -> bool {
@@ -193,7 +193,7 @@ impl Dialect for MariaDbDialect {
     }
 
     fn placeholder(&self, _index: usize) -> String {
-        "%s".to_string()
+        "?".to_string()
     }
 
     fn supports_returning(&self) -> bool {
@@ -519,8 +519,8 @@ mod tests {
 
     #[test]
     fn renders_additional_dialect_placeholders() {
-        assert_eq!(MySqlDialect.placeholder(1), "%s");
-        assert_eq!(MariaDbDialect.placeholder(1), "%s");
+        assert_eq!(MySqlDialect.placeholder(1), "?");
+        assert_eq!(MariaDbDialect.placeholder(1), "?");
         assert_eq!(MsSqlDialect.placeholder(1), "?");
         assert_eq!(OracleDialect.placeholder(3), ":3");
     }

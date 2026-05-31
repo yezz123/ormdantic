@@ -38,7 +38,7 @@ fn compiles_mysql_insert_for_driver_sql() {
 
     assert_eq!(
         query.sql(),
-        "INSERT INTO `flavors` (`id`, `name`) VALUES (%s, %s)"
+        "INSERT INTO `flavors` (`id`, `name`) VALUES (?, ?)"
     );
 }
 

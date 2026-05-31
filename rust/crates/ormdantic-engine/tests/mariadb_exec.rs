@@ -20,7 +20,7 @@ fn mariadb_executes_mysql_protocol_queries_when_url_is_available() {
     .unwrap();
     execute_url(
         &url,
-        "INSERT INTO ormdantic_mariadb_flavors (id, name) VALUES (%s, %s)",
+        "INSERT INTO ormdantic_mariadb_flavors (id, name) VALUES (?, ?)",
         &[
             DbValue::Text("1".to_string()),
             DbValue::Text("mocha".to_string()),
@@ -29,7 +29,7 @@ fn mariadb_executes_mysql_protocol_queries_when_url_is_available() {
     .unwrap();
     let result = execute_url(
         &url,
-        "SELECT name FROM ormdantic_mariadb_flavors WHERE id = %s",
+        "SELECT name FROM ormdantic_mariadb_flavors WHERE id = ?",
         &[DbValue::Text("1".to_string())],
     )
     .unwrap();

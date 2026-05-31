@@ -32,10 +32,9 @@ fn execute_conn(
     sql: &str,
     params: &[DbValue],
 ) -> OrmdanticResult<QueryResult> {
-    let adapted_sql = sql.replace("%s", "?");
-    if crate::returns_rows(&adapted_sql) {
+    if crate::returns_rows(sql) {
         let result = conn
-            .exec_iter(&adapted_sql, Params::Positional(mysql_params(params)))
+            .exec_iter(sql, Params::Positional(mysql_params(params)))
             .map_err(sql_error)?;
         let columns = result
             .columns()
@@ -48,7 +47,7 @@ fn execute_conn(
             .collect::<OrmdanticResult<Vec<_>>>()?;
         Ok(QueryResult::new(columns, rows))
     } else {
-        conn.exec_drop(&adapted_sql, Params::Positional(mysql_params(params)))
+        conn.exec_drop(sql, Params::Positional(mysql_params(params)))
             .map_err(sql_error)?;
         Ok(QueryResult::empty())
     }

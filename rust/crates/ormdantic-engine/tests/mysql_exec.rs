@@ -20,7 +20,7 @@ fn mysql_executes_parameterized_queries_when_url_is_available() {
     .unwrap();
     execute_url(
         &url,
-        "INSERT INTO ormdantic_mysql_flavors (id, name, strength) VALUES (%s, %s, %s)",
+        "INSERT INTO ormdantic_mysql_flavors (id, name, strength) VALUES (?, ?, ?)",
         &[
             DbValue::Text("1".to_string()),
             DbValue::Text("mocha".to_string()),
@@ -30,7 +30,7 @@ fn mysql_executes_parameterized_queries_when_url_is_available() {
     .unwrap();
     let result = execute_url(
         &url,
-        "SELECT name, strength FROM ormdantic_mysql_flavors WHERE id = %s",
+        "SELECT name, strength FROM ormdantic_mysql_flavors WHERE id = ?",
         &[DbValue::Text("1".to_string())],
     )
     .unwrap();
@@ -66,7 +66,7 @@ fn mysql_connection_supports_transactions_when_url_is_available() {
     connection.begin().unwrap();
     connection
         .execute(
-            "INSERT INTO ormdantic_mysql_tx (id) VALUES (%s)",
+            "INSERT INTO ormdantic_mysql_tx (id) VALUES (?)",
             &[DbValue::Text("1".to_string())],
         )
         .unwrap();
