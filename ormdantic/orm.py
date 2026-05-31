@@ -21,6 +21,7 @@ from ormdantic.handler import (
     snake_case,
 )
 from ormdantic.models import Map, OrmTable, Relationship
+from ormdantic.session import Session
 from ormdantic.types import ModelType
 
 
@@ -106,6 +107,10 @@ class Ormdantic:
     def transaction(self) -> Any:
         """Open a native transaction context."""
         return self._native_engine.transaction()
+
+    def session(self) -> Session:
+        """Open an async unit-of-work session."""
+        return Session(self)
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         """Get relationships for a given table."""
