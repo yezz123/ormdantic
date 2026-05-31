@@ -1,0 +1,22 @@
+name: Rust
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --exclude ormdantic-py
+      - run: cargo build --release --workspace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-target-release
+          path: target/release
