@@ -383,6 +383,14 @@ impl ColumnAlias {
             None
         }
     }
+
+    pub fn table_path(&self) -> &str {
+        &self.table_path
+    }
+
+    pub fn column(&self) -> &str {
+        &self.column
+    }
 }
 
 #[cfg(test)]

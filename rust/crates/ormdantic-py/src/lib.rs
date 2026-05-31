@@ -1,4 +1,4 @@
-use ormdantic_hydrate::FlatHydrationPlan;
+use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::TableDef;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -45,6 +45,30 @@ fn hydrate_flat(
     Ok(PyList::new(py, records)?.into_any().unbind())
 }
 
+#[pyfunction]
+fn plan_result_shape(
+    py: Python<'_>,
+    root_table: &str,
+    columns: Vec<String>,
+    array_paths: Vec<String>,
+) -> PyResult<Py<PyAny>> {
+    let shape = ResultShape::new(root_table, &columns, array_paths);
+    let result = PyDict::new(py);
+    let columns = PyList::empty(py);
+    for column in shape.columns() {
+        let item = PyDict::new(py);
+        item.set_item("alias", column.alias())?;
+        item.set_item("table_path", column.table_path())?;
+        item.set_item("column", column.column())?;
+        columns.append(item)?;
+    }
+    result.set_item("root_table", shape.root_table())?;
+    result.set_item("columns", columns)?;
+    result.set_item("relationship_paths", shape.relationship_paths())?;
+    result.set_item("array_paths", shape.array_paths())?;
+    Ok(result.into_any().unbind())
+}
+
 fn row_to_dict<'py>(
     py: Python<'py>,
     row: &[Py<PyAny>],
@@ -66,5 +90,6 @@ fn row_to_dict<'py>(
 #[pymodule]
 fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hydrate_flat, m)?)?;
+    m.add_function(wrap_pyfunction!(plan_result_shape, m)?)?;
     Ok(())
 }
