@@ -21,7 +21,6 @@ class OrmQuery:
         self,
         model: ModelType,
         table_map: Map,
-        processed_models: list[ModelType] | None = None,
         query: Query | PostgreSQLQuery | None = None,
         dialect: str = "sqlite",
     ) -> None:
@@ -31,7 +30,6 @@ class OrmQuery:
             query or PostgreSQLQuery
         )
         self._table_map = table_map
-        self._processed_models = processed_models or []
         self._table_data = self._table_map.model_to_data[type(self._model)]
         self._table = Table(self._table_data.tablename)
         self._dialect = dialect
@@ -89,11 +87,6 @@ class OrmQuery:
             == self._model.__dict__[self._table_data.pk]
         )
         return self._query
-
-    def get_patch_queries(  # type: ignore
-        self,
-    ) -> list[QueryBuilder | PostgreSQLQueryBuilder]:
-        """Get queries to patch model tree."""
 
     def _get_inserts_or_upserts(
         self, is_upsert: bool

@@ -97,7 +97,7 @@ class OrmTableGenerator:
             col_type = (
                 postgresql.UUID if self._engine.name == "postgres" else String(36)
             )
-            return Column(field_name, col_type, **kwargs)
+            return Column(field_name, col_type, **kwargs)  # type: ignore[arg-type]
         if issubclass(field.type_, BaseModel):
             return Column(field_name, JSON, **kwargs)
         if issubclass(field.type_, str):
