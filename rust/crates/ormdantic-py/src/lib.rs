@@ -471,6 +471,8 @@ type ColumnDdl = (
     Option<String>,
     Option<String>,
     Option<usize>,
+    bool,
+    Vec<String>,
 );
 
 #[pyfunction]
@@ -478,6 +480,7 @@ fn compile_create_table_sql(
     dialect: &str,
     table: &str,
     columns: Vec<ColumnDdl>,
+    indexes: Vec<(String, Vec<String>, bool)>,
     unique_constraints: Vec<Vec<String>>,
 ) -> PyResult<Vec<String>> {
     let dialect =
@@ -485,7 +488,17 @@ fn compile_create_table_sql(
     let column_sql = columns
         .into_iter()
         .map(
-            |(name, kind, nullable, primary_key, foreign_table, foreign_column, max_length)| {
+            |(
+                name,
+                kind,
+                nullable,
+                primary_key,
+                foreign_table,
+                foreign_column,
+                max_length,
+                unique,
+                checks,
+            )| {
                 let mut sql = format!(
                     "{} {}",
                     dialect.quote_ident(&name),
@@ -497,6 +510,9 @@ fn compile_create_table_sql(
                 if !nullable || primary_key {
                     sql.push_str(" NOT NULL");
                 }
+                if unique {
+                    sql.push_str(" UNIQUE");
+                }
                 if let (Some(foreign_table), Some(foreign_column)) = (foreign_table, foreign_column)
                 {
                     sql.push_str(&format!(
@@ -504,6 +520,9 @@ fn compile_create_table_sql(
                         dialect.quote_ident(&foreign_table),
                         dialect.quote_ident(&foreign_column)
                     ));
+                }
+                for check in checks {
+                    sql.push_str(&format!(" CHECK ({check})"));
                 }
                 sql
             },
@@ -518,11 +537,25 @@ fn compile_create_table_sql(
             .join(", ");
         table_parts.push(format!("UNIQUE ({rendered})"));
     }
-    Ok(vec![format!(
+    let mut statements = vec![format!(
         "CREATE TABLE IF NOT EXISTS {} ({})",
         dialect.quote_ident(table),
         table_parts.join(", ")
-    )])
+    )];
+    for (name, columns, unique) in indexes {
+        let rendered = columns
+            .iter()
+            .map(|column| dialect.quote_ident(column))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let uniqueness = if unique { "UNIQUE " } else { "" };
+        statements.push(format!(
+            "CREATE {uniqueness}INDEX IF NOT EXISTS {} ON {} ({rendered})",
+            dialect.quote_ident(&name),
+            dialect.quote_ident(table)
+        ));
+    }
+    Ok(statements)
 }
 
 #[pyfunction]
@@ -686,6 +719,9 @@ fn ddl_type(kind: &str, max_length: Option<usize>) -> String {
         "bool" => "BOOLEAN".to_string(),
         "date" => "DATE".to_string(),
         "datetime" => "DATETIME".to_string(),
+        "decimal" => "NUMERIC".to_string(),
+        "bytes" => "BLOB".to_string(),
+        "enum" => "TEXT".to_string(),
         "json" | "model_json" | "list" | "dict" => "JSON".to_string(),
         _ => "TEXT".to_string(),
     }
