@@ -1,5 +1,5 @@
 site_name: Ormdantic
-site_description: A fast, async, and type-safe ORM for Python 3.10+ based on SQLAlchemy and Pydantic.
+site_description: A Rust-backed async ORM for Python 3.10+ using Pydantic v2 models.
 site_url: https://ormdantic.yezz.me/
 
 theme:
@@ -101,6 +101,14 @@ nav:
   - Usage:
     - Getting Started: usage/usage.md
     - Generator: usage/generator.md
+    - Query Expressions: usage/query-expressions.md
+    - Transactions And Sessions: usage/transactions-sessions.md
+    - Relationship Loading: usage/relationship-loading.md
+    - Events: usage/events.md
+  - Architecture:
+    - Rust Core: architecture/rust-core.md
+    - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
+    - vNext Migration: architecture/vnext-migration.md
   - Reference - API:
     - api/reference.md
     - api/ormdantic.md
