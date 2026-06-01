@@ -16,3 +16,10 @@ path = "src/lib.rs"
 [dependencies]
 ormdantic-core.workspace = true
 ormdantic-dialects.workspace = true
+
+[dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "sql_compiler"
+harness = false
