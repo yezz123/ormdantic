@@ -614,16 +614,18 @@ fn render_filter(
             bind_index,
             params,
         ),
-        Filter::ILike { column, param } => render_binary_filter(
-            dialect,
-            format!("LOWER({})", render_column(column)),
-            "LIKE",
-            param,
-            bind_index,
-            params,
-        )
-        .replace(" LIKE ", " LIKE LOWER(")
-        + ")",
+        Filter::ILike { column, param } => {
+            render_binary_filter(
+                dialect,
+                format!("LOWER({})", render_column(column)),
+                "LIKE",
+                param,
+                bind_index,
+                params,
+            )
+            .replace(" LIKE ", " LIKE LOWER(")
+                + ")"
+        }
         Filter::In {
             column,
             params: names,
