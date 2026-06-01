@@ -13,13 +13,514 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 use std::collections::{HashMap, HashSet};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 type FilterSpec = (String, String, Vec<String>);
+type RuntimeColumn = (
+    String,
+    String,
+    bool,
+    bool,
+    Option<String>,
+    Option<String>,
+    Option<usize>,
+    bool,
+    Vec<String>,
+);
+type RuntimeIndex = (String, Vec<String>, bool);
+type RuntimeRelationship = (String, String, String, Option<String>);
+type RuntimeTableSpec = (
+    String,
+    String,
+    String,
+    Vec<RuntimeColumn>,
+    Vec<RuntimeIndex>,
+    Vec<Vec<String>>,
+    Vec<RuntimeRelationship>,
+);
 
 #[pyclass]
 struct PyNativeConnection {
     inner: Mutex<NativeConnection>,
+}
+
+#[derive(Clone)]
+struct RuntimeTable {
+    table: String,
+    primary_key: String,
+    columns: Vec<RuntimeColumn>,
+    indexes: Vec<RuntimeIndex>,
+    unique_constraints: Vec<Vec<String>>,
+    relationships: Vec<RuntimeRelationship>,
+}
+
+impl RuntimeTable {
+    fn persisted_columns(&self) -> Vec<String> {
+        self.columns
+            .iter()
+            .map(|(name, ..)| name.clone())
+            .collect::<Vec<_>>()
+    }
+}
+
+#[pyclass]
+struct PyDatabase {
+    url: String,
+    connection: Arc<Mutex<NativeConnection>>,
+    tables: Arc<HashMap<String, RuntimeTable>>,
+    table_order: Arc<Vec<String>>,
+}
+
+#[pyclass]
+struct PyTableHandle {
+    url: String,
+    connection: Arc<Mutex<NativeConnection>>,
+    tables: Arc<HashMap<String, RuntimeTable>>,
+    table: RuntimeTable,
+}
+
+#[pymethods]
+impl PyDatabase {
+    #[new]
+    fn new(url: &str, tables: Vec<RuntimeTableSpec>) -> PyResult<Self> {
+        let mut table_order = Vec::new();
+        let tables = tables
+            .into_iter()
+            .map(
+                |(
+                    model_key,
+                    table,
+                    primary_key,
+                    columns,
+                    indexes,
+                    unique_constraints,
+                    relationships,
+                )| {
+                    table_order.push(model_key.clone());
+                    (
+                        model_key.clone(),
+                        RuntimeTable {
+                            table,
+                            primary_key,
+                            columns,
+                            indexes,
+                            unique_constraints,
+                            relationships,
+                        },
+                    )
+                },
+            )
+            .collect::<HashMap<_, _>>();
+        Ok(Self {
+            url: url.to_string(),
+            connection: Arc::new(Mutex::new(
+                NativeConnection::open(url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )),
+            tables: Arc::new(tables),
+            table_order: Arc::new(table_order),
+        })
+    }
+
+    fn table(&self, model_key: &str) -> PyResult<PyTableHandle> {
+        let table = self
+            .tables
+            .get(model_key)
+            .or_else(|| self.tables.values().find(|table| table.table == model_key))
+            .cloned()
+            .ok_or_else(|| PyValueError::new_err(format!("unknown table '{model_key}'")))?;
+        Ok(PyTableHandle {
+            url: self.url.clone(),
+            connection: Arc::clone(&self.connection),
+            tables: Arc::clone(&self.tables),
+            table,
+        })
+    }
+
+    fn create_all(&self) -> PyResult<()> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?;
+        for model_key in self.table_order.iter() {
+            let Some(table) = self.tables.get(model_key) else {
+                continue;
+            };
+            for sql in create_table_sql(
+                &self.url,
+                &table.table,
+                table.columns.clone(),
+                table.indexes.clone(),
+                table.unique_constraints.clone(),
+            )? {
+                connection
+                    .execute(&sql, &[])
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn drop_all(&self) -> PyResult<()> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?;
+        for model_key in self.table_order.iter().rev() {
+            let Some(table) = self.tables.get(model_key) else {
+                continue;
+            };
+            let sql = drop_table_sql(&self.url, &table.table)?;
+            connection
+                .execute(&sql, &[])
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        }
+        Ok(())
+    }
+
+    fn begin(&self) -> PyResult<()> {
+        self.connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .begin()
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn commit(&self) -> PyResult<()> {
+        self.connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .commit()
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn rollback(&self) -> PyResult<()> {
+        self.connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .rollback()
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn savepoint(&self, name: &str) -> PyResult<()> {
+        self.connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .savepoint(name)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+}
+
+#[pymethods]
+impl PyTableHandle {
+    fn insert(&self, py: Python<'_>, payload: &Bound<'_, PyDict>) -> PyResult<Py<PyAny>> {
+        self.execute_write(py, QueryOperation::Insert, payload)
+    }
+
+    fn update(&self, py: Python<'_>, payload: &Bound<'_, PyDict>) -> PyResult<Py<PyAny>> {
+        self.execute_write(py, QueryOperation::Update, payload)
+    }
+
+    fn upsert(&self, py: Python<'_>, payload: &Bound<'_, PyDict>) -> PyResult<Py<PyAny>> {
+        self.execute_write(py, QueryOperation::Upsert, payload)
+    }
+
+    fn delete(&self, py: Python<'_>, primary_key: Py<PyAny>) -> PyResult<Py<PyAny>> {
+        let compiled = QueryAst::Delete {
+            table: TableRef::new(&self.table.table),
+            pk: self.table.primary_key.clone(),
+        }
+        .compile(
+            &AnyDialect::parse(&self.url)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?,
+        )
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        self.execute_compiled(py, compiled, vec![py_to_db_value(py, primary_key)?])
+    }
+
+    #[pyo3(signature = (primary_key, depth=0))]
+    fn find_one(
+        &self,
+        py: Python<'_>,
+        primary_key: Py<PyAny>,
+        depth: usize,
+    ) -> PyResult<Py<PyAny>> {
+        let columns = if depth == 0 {
+            self.flat_select_columns()
+        } else {
+            Vec::new()
+        };
+        let aliases = if depth == 0 {
+            Some(self.flat_aliases())
+        } else {
+            None
+        };
+        let query = if depth == 0 {
+            QueryAst::Select {
+                table: TableRef::new(&self.table.table),
+                columns: select_columns(columns, aliases)?,
+                filters: vec![Filter::Eq {
+                    column: self.table.primary_key.clone(),
+                    param: self.table.primary_key.clone(),
+                }],
+                order_by: Vec::new(),
+                limit: None,
+                offset: None,
+            }
+        } else {
+            self.joined_query(
+                vec![Filter::Eq {
+                    column: self.table.primary_key.clone(),
+                    param: self.table.primary_key.clone(),
+                }],
+                Vec::new(),
+                SortDirection::Asc,
+                None,
+                None,
+                depth,
+            )?
+        };
+        let compiled = query
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        self.execute_compiled(py, compiled, vec![py_to_db_value(py, primary_key)?])
+    }
+
+    #[pyo3(signature = (filters, values, order_by, order_direction, limit=None, offset=None, depth=0))]
+    #[allow(clippy::too_many_arguments)]
+    fn find_many(
+        &self,
+        py: Python<'_>,
+        filters: Vec<FilterSpec>,
+        values: &Bound<'_, PyDict>,
+        order_by: Vec<String>,
+        order_direction: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+        depth: usize,
+    ) -> PyResult<Py<PyAny>> {
+        let direction = parse_sort_direction(order_direction)?;
+        let filter_params = filter_specs(filters.clone())?;
+        let query = if depth == 0 {
+            QueryAst::Select {
+                table: TableRef::new(&self.table.table),
+                columns: select_columns(self.flat_select_columns(), Some(self.flat_aliases()))?,
+                filters: filter_params,
+                order_by: order_by
+                    .into_iter()
+                    .map(|column| OrderBy::new(column, direction.clone()))
+                    .collect(),
+                limit,
+                offset,
+            }
+        } else {
+            self.joined_query(filter_params, order_by, direction, limit, offset, depth)?
+        };
+        let compiled = query
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let params = bind_values(py, compiled.params(), values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
+    fn count(
+        &self,
+        py: Python<'_>,
+        filters: Vec<FilterSpec>,
+        values: &Bound<'_, PyDict>,
+    ) -> PyResult<Py<PyAny>> {
+        let compiled = QueryAst::Count {
+            table: TableRef::new(&self.table.table),
+            filters: filter_specs(filters)?,
+        }
+        .compile(
+            &AnyDialect::parse(&self.url)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?,
+        )
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let params = bind_values(py, compiled.params(), values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+}
+
+impl PyTableHandle {
+    fn execute_write(
+        &self,
+        py: Python<'_>,
+        operation: QueryOperation,
+        payload: &Bound<'_, PyDict>,
+    ) -> PyResult<Py<PyAny>> {
+        let columns = self.table.persisted_columns();
+        let query = match operation {
+            QueryOperation::Insert => QueryAst::Insert {
+                table: TableRef::new(&self.table.table),
+                columns: columns.clone(),
+            },
+            QueryOperation::Update => QueryAst::Update {
+                table: TableRef::new(&self.table.table),
+                columns: columns.clone(),
+                pk: self.table.primary_key.clone(),
+            },
+            QueryOperation::Upsert => QueryAst::Upsert {
+                table: TableRef::new(&self.table.table),
+                columns: columns.clone(),
+                pk: self.table.primary_key.clone(),
+            },
+            _ => {
+                return Err(PyValueError::new_err(
+                    "unsupported write operation for table handle",
+                ))
+            }
+        };
+        let compiled = query
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let params = bind_values(py, compiled.params(), payload)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
+    fn execute_compiled(
+        &self,
+        py: Python<'_>,
+        compiled: CompiledQuery,
+        values: Vec<DbValue>,
+    ) -> PyResult<Py<PyAny>> {
+        let result = self
+            .connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .execute(compiled.sql(), &values)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        query_result_to_python(py, result)
+    }
+
+    fn flat_select_columns(&self) -> Vec<String> {
+        self.table.persisted_columns()
+    }
+
+    fn flat_aliases(&self) -> Vec<String> {
+        self.flat_select_columns()
+            .into_iter()
+            .map(|column| format!("{}\\{column}", self.table.table))
+            .collect()
+    }
+
+    fn joined_query(
+        &self,
+        filters: Vec<Filter>,
+        order_by: Vec<String>,
+        direction: SortDirection,
+        limit: Option<usize>,
+        offset: Option<usize>,
+        depth: usize,
+    ) -> PyResult<QueryAst> {
+        Ok(QueryAst::JoinedSelect {
+            table: TableRef::new(&self.table.table),
+            columns: self.joined_columns(&self.table, depth, None),
+            joins: self.join_specs(&self.table, depth, None),
+            filters,
+            order_by: order_by
+                .into_iter()
+                .map(|column| OrderBy::new(column, direction.clone()))
+                .collect(),
+            limit,
+            offset,
+        })
+    }
+
+    fn joined_columns(
+        &self,
+        table: &RuntimeTable,
+        depth: usize,
+        table_path: Option<String>,
+    ) -> Vec<JoinedSelectColumn> {
+        let table_path = table_path.unwrap_or_else(|| table.table.clone());
+        let relation_fields = table
+            .relationships
+            .iter()
+            .map(|(field, ..)| field)
+            .collect::<HashSet<_>>();
+        let mut columns = table
+            .persisted_columns()
+            .into_iter()
+            .filter(|column| depth == 0 || !relation_fields.contains(column))
+            .map(|column| {
+                JoinedSelectColumn::aliased(
+                    table_path.clone(),
+                    column.clone(),
+                    format!("{table_path}\\{column}"),
+                )
+            })
+            .collect::<Vec<_>>();
+        if depth == 0 {
+            return columns;
+        }
+        for (field, foreign_table, _, _) in &table.relationships {
+            let Some(related) = self
+                .tables
+                .values()
+                .find(|table| &table.table == foreign_table)
+            else {
+                continue;
+            };
+            let relation_path = format!("{table_path}/{field}");
+            columns.extend(self.joined_columns(related, depth - 1, Some(relation_path)));
+        }
+        columns
+    }
+
+    fn join_specs(
+        &self,
+        table: &RuntimeTable,
+        depth: usize,
+        table_path: Option<String>,
+    ) -> Vec<JoinSpec> {
+        if depth == 0 {
+            return Vec::new();
+        }
+        let table_path = table_path.unwrap_or_else(|| table.table.clone());
+        let mut joins = Vec::new();
+        for (field, foreign_table, foreign_column, back_reference) in &table.relationships {
+            let Some(related) = self
+                .tables
+                .values()
+                .find(|table| &table.table == foreign_table)
+            else {
+                continue;
+            };
+            let relation_path = format!("{table_path}/{field}");
+            if let Some(back_reference) = back_reference {
+                joins.push(JoinSpec::left_join(
+                    foreign_table,
+                    &relation_path,
+                    &table_path,
+                    &table.primary_key,
+                    &relation_path,
+                    back_reference,
+                ));
+            } else {
+                joins.push(JoinSpec::left_join(
+                    foreign_table,
+                    &relation_path,
+                    &table_path,
+                    field,
+                    &relation_path,
+                    foreign_column,
+                ));
+            }
+            joins.extend(self.join_specs(related, depth - 1, Some(relation_path)));
+        }
+        joins
+    }
 }
 
 #[pymethods]
@@ -551,6 +1052,16 @@ fn compile_create_table_sql(
     indexes: Vec<(String, Vec<String>, bool)>,
     unique_constraints: Vec<Vec<String>>,
 ) -> PyResult<Vec<String>> {
+    create_table_sql(dialect, table, columns, indexes, unique_constraints)
+}
+
+fn create_table_sql(
+    dialect: &str,
+    table: &str,
+    columns: Vec<ColumnDdl>,
+    indexes: Vec<(String, Vec<String>, bool)>,
+    unique_constraints: Vec<Vec<String>>,
+) -> PyResult<Vec<String>> {
     let dialect =
         AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
     let column_sql = columns
@@ -628,12 +1139,32 @@ fn compile_create_table_sql(
 
 #[pyfunction]
 fn compile_drop_table_sql(dialect: &str, table: &str) -> PyResult<String> {
+    drop_table_sql(dialect, table)
+}
+
+fn drop_table_sql(dialect: &str, table: &str) -> PyResult<String> {
     let dialect =
         AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
     Ok(format!(
         "DROP TABLE IF EXISTS {}",
         dialect.quote_ident(table)
     ))
+}
+
+fn bind_values(
+    py: Python<'_>,
+    param_names: &[String],
+    values: &Bound<'_, PyDict>,
+) -> PyResult<Vec<DbValue>> {
+    param_names
+        .iter()
+        .map(|param| {
+            let value = values
+                .get_item(param)?
+                .ok_or_else(|| PyValueError::new_err(format!("missing bind value '{param}'")))?;
+            py_to_db_value(py, value.unbind())
+        })
+        .collect()
 }
 
 fn select_columns(
@@ -825,6 +1356,8 @@ fn runtime_capabilities(py: Python<'_>) -> PyResult<Py<PyAny>> {
 #[pymodule]
 fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyNativeConnection>()?;
+    m.add_class::<PyDatabase>()?;
+    m.add_class::<PyTableHandle>()?;
     m.add_function(wrap_pyfunction!(hydrate_flat, m)?)?;
     m.add_function(wrap_pyfunction!(hydrate_joined, m)?)?;
     m.add_function(wrap_pyfunction!(plan_result_shape, m)?)?;
