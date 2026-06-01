@@ -110,6 +110,29 @@ impl NativeConnection {
             _ => self.execute(&format!("SAVEPOINT {name}"), &[]).map(|_| ()),
         }
     }
+
+    pub fn rollback_to_savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+        match self {
+            Self::MsSql(_) => self
+                .execute(&format!("ROLLBACK TRANSACTION {name}"), &[])
+                .map(|_| ()),
+            Self::Oracle(_) => self
+                .execute(&format!("ROLLBACK TO SAVEPOINT {name}"), &[])
+                .map(|_| ()),
+            _ => self
+                .execute(&format!("ROLLBACK TO SAVEPOINT {name}"), &[])
+                .map(|_| ()),
+        }
+    }
+
+    pub fn release_savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+        match self {
+            Self::MsSql(_) | Self::Oracle(_) => Ok(()),
+            _ => self
+                .execute(&format!("RELEASE SAVEPOINT {name}"), &[])
+                .map(|_| ()),
+        }
+    }
     pub fn dialect(&self) -> &'static str {
         match self {
             Self::Sqlite(_) => "sqlite",

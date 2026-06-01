@@ -209,6 +209,22 @@ impl PyDatabase {
             .savepoint(name)
             .map_err(|error| PyValueError::new_err(error.to_string()))
     }
+
+    fn rollback_to_savepoint(&self, name: &str) -> PyResult<()> {
+        self.connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .rollback_to_savepoint(name)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn release_savepoint(&self, name: &str) -> PyResult<()> {
+        self.connection
+            .lock()
+            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
+            .release_savepoint(name)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
 }
 
 #[pymethods]
@@ -294,7 +310,7 @@ impl PyTableHandle {
     fn find_many(
         &self,
         py: Python<'_>,
-        filters: Vec<FilterSpec>,
+        filters: &Bound<'_, PyAny>,
         values: &Bound<'_, PyDict>,
         order_by: Vec<String>,
         order_direction: &str,
@@ -303,7 +319,7 @@ impl PyTableHandle {
         depth: usize,
     ) -> PyResult<Py<PyAny>> {
         let direction = parse_sort_direction(order_direction)?;
-        let filter_params = filter_specs(filters.clone())?;
+        let filter_params = parse_filter_input(filters)?;
         let query = if depth == 0 {
             QueryAst::Select {
                 table: TableRef::new(&self.table.table),
@@ -332,12 +348,12 @@ impl PyTableHandle {
     fn count(
         &self,
         py: Python<'_>,
-        filters: Vec<FilterSpec>,
+        filters: &Bound<'_, PyAny>,
         values: &Bound<'_, PyDict>,
     ) -> PyResult<Py<PyAny>> {
         let compiled = QueryAst::Count {
             table: TableRef::new(&self.table.table),
-            filters: filter_specs(filters)?,
+            filters: parse_filter_input(filters)?,
         }
         .compile(
             &AnyDialect::parse(&self.url)
@@ -1234,6 +1250,46 @@ fn filter_specs(filters: Vec<FilterSpec>) -> PyResult<Vec<Filter>> {
             }
         })
         .collect()
+}
+
+fn parse_filter_input(filters: &Bound<'_, PyAny>) -> PyResult<Vec<Filter>> {
+    if let Ok(specs) = filters.extract::<Vec<FilterSpec>>() {
+        return filter_specs(specs);
+    }
+
+    let dict = filters.downcast::<PyDict>()?;
+    let connector: String = dict
+        .get_item("connector")?
+        .ok_or_else(|| PyValueError::new_err("filter tree missing connector"))?
+        .extract()?;
+
+    match connector.as_str() {
+        "leaf" => {
+            let filters = dict
+                .get_item("filters")?
+                .ok_or_else(|| PyValueError::new_err("leaf filter tree missing filters"))?;
+            let specs = filters.extract::<Vec<FilterSpec>>()?;
+            filter_specs(specs)
+        }
+        "and" | "or" => {
+            let children = dict
+                .get_item("children")?
+                .ok_or_else(|| PyValueError::new_err("group filter tree missing children"))?;
+            let children = children.extract::<Vec<Py<PyAny>>>()?;
+            let mut parsed = Vec::new();
+            for child in children {
+                parsed.extend(parse_filter_input(child.bind(filters.py()))?);
+            }
+            if connector == "and" {
+                Ok(vec![Filter::And(parsed)])
+            } else {
+                Ok(vec![Filter::Or(parsed)])
+            }
+        }
+        other => Err(PyValueError::new_err(format!(
+            "unsupported filter connector '{other}'"
+        ))),
+    }
 }
 
 fn parse_sort_direction(direction: &str) -> PyResult<SortDirection> {

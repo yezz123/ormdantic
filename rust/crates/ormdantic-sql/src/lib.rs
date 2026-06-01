@@ -621,7 +621,9 @@ fn render_filter(
             param,
             bind_index,
             params,
-        ),
+        )
+        .replace(" LIKE ", " LIKE LOWER(")
+        + ")",
         Filter::In {
             column,
             params: names,
