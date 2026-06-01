@@ -7,6 +7,14 @@ async with database.transaction():
     await database[Flavor].insert(Flavor(id="1", name="mocha"))
 ```
 
+Use `savepoint()` for a named savepoint inside a larger transaction:
+
+```python
+async with database.transaction():
+    async with database.savepoint("before_update"):
+        await database[Flavor].update(flavor)
+```
+
 Use `session()` for a small async unit-of-work layer:
 
 ```python
@@ -18,6 +26,9 @@ The session supports:
 
 - `add(model)`
 - `mark_dirty(model)`
+- `delete(model)`
+- `merge(model)`
+- `expire(model)`
 - `flush()`
 - `commit()`
 - `rollback()`

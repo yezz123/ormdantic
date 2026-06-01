@@ -19,3 +19,11 @@ Supported events:
 - `after_flush`
 
 Handlers may be normal functions or async functions.
+
+Handlers can be removed or cleared through the event registry:
+
+```python
+handler = database.on("before_insert", lambda model, table: None)
+database._events.off("before_insert", handler)
+database._events.clear("before_insert")
+```

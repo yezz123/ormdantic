@@ -2,7 +2,7 @@
 
 ## Create a database
 
-Ormdantic uses a native Rust execution layer. Initialize it with a database connection string.
+Ormdantic uses a native Rust runtime. The Python API registers Pydantic models and then delegates DDL, CRUD, filtering, counting, relationship-depth planning, and execution to Rust-owned table handles.
 
 ```python
 from ormdantic import Ormdantic
@@ -36,13 +36,13 @@ class Flavor(BaseModel):
 
 ## Queries
 
-Now after we create the table, we can initialize the database with the table and then run different queries.
+After the models are registered, initialize the Rust runtime and create the tables.
 
 ### `Init()`
 
 * Register models as ORM models and initialize the database.
 
-We use `database.init` will Populate relations information and create the tables.
+`database.init()` discovers relationships, builds the Rust runtime table registry, and creates the tables.
 
 ```python
 async def demo() -> None:

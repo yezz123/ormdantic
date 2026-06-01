@@ -20,3 +20,15 @@ Supported operators:
 - `is_null`, `is_not_null`
 
 The Rust SQL compiler expands these into dialect-specific SQL and bind parameters.
+
+You can also build simple composable expressions:
+
+```python
+from ormdantic import column
+
+await database[Flavor].find_many(
+    where=column("strength").ge(2) & column("name").like("mo%")
+)
+```
+
+The expression facade lowers into the Rust filter contract. Simple `AND` groups are supported today; native `OR`, subquery, CTE, and window lowering are tracked in the Rust SQL roadmap.

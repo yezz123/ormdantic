@@ -10,12 +10,12 @@ The API reference is generated from Ormdantic's Python source with mkdocstrings.
 - [Events](events.md): event registration and dispatch.
 - [Loaders](loaders.md): relationship loader options.
 - [Errors](errors.md): Ormdantic-specific exceptions.
+- [Table](table.md): Rust-backed table CRUD facade.
+- `ormdantic.column`: query expression helper.
+- `ormdantic.association_proxy` and `ormdantic.hybrid_property`: descriptor helpers for proxy and computed attributes.
+- `Ormdantic.inspect()` and `Ormdantic.migrations`: reflection and migration facades.
 
 ## ORM Internals
 
-- [CRUD](crud.md): table-scoped CRUD orchestration.
-- [Table](table.md): schema creation orchestration.
-- [Field](field.md): select, count, delete, and relationship query planning.
-- [Query](query.md): insert/update/upsert query planning.
 - [Serializer](serializer.md): result payload conversion into Pydantic models.
-- [Rust Bridge Internals](internals.md): private Python modules that call the Rust extension.
+- [Runtime Internals](internals.md): schema and hydration helpers used by the Rust-first facade.
