@@ -46,9 +46,8 @@ jobs:
           enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
 
       - run: cargo test --workspace --exclude ormdantic-py
-      - run: uv sync --group testing
-      - run: uv pip install maturin
-      - run: maturin develop
+      - run: uv sync --group dev
+      - run: uv run --group dev maturin develop
       - run: bash scripts/test.sh
         env:
           DATABASE_URL: sqlite:///db.sqlite3
