@@ -20,6 +20,26 @@ impl MySqlConnection {
     pub fn execute(&mut self, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
         execute_conn(&mut self.connection, sql, params)
     }
+
+    pub fn begin(&mut self) -> OrmdanticResult<()> {
+        self.connection
+            .query_drop("START TRANSACTION")
+            .map_err(sql_error)
+    }
+
+    pub fn commit(&mut self) -> OrmdanticResult<()> {
+        self.connection.query_drop("COMMIT").map_err(sql_error)
+    }
+
+    pub fn rollback(&mut self) -> OrmdanticResult<()> {
+        self.connection.query_drop("ROLLBACK").map_err(sql_error)
+    }
+
+    pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+        self.connection
+            .query_drop(format!("SAVEPOINT {name}"))
+            .map_err(sql_error)
+    }
 }
 
 pub fn execute_url(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {

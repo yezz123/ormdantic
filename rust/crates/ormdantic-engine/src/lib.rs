@@ -79,6 +79,7 @@ impl NativeConnection {
 
     pub fn begin(&mut self) -> OrmdanticResult<()> {
         match self {
+            Self::MySql(connection) | Self::MariaDb(connection) => connection.begin(),
             Self::MsSql(connection) => connection.begin(),
             Self::Oracle(connection) => connection.begin(),
             _ => self.execute("BEGIN", &[]).map(|_| ()),
@@ -87,6 +88,7 @@ impl NativeConnection {
 
     pub fn commit(&mut self) -> OrmdanticResult<()> {
         match self {
+            Self::MySql(connection) | Self::MariaDb(connection) => connection.commit(),
             Self::Oracle(connection) => connection.commit(),
             _ => self.execute("COMMIT", &[]).map(|_| ()),
         }
@@ -94,6 +96,7 @@ impl NativeConnection {
 
     pub fn rollback(&mut self) -> OrmdanticResult<()> {
         match self {
+            Self::MySql(connection) | Self::MariaDb(connection) => connection.rollback(),
             Self::Oracle(connection) => connection.rollback(),
             _ => self.execute("ROLLBACK", &[]).map(|_| ()),
         }
@@ -101,6 +104,7 @@ impl NativeConnection {
 
     pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
         match self {
+            Self::MySql(connection) | Self::MariaDb(connection) => connection.savepoint(name),
             Self::MsSql(connection) => connection.savepoint(name),
             Self::Oracle(connection) => connection.savepoint(name),
             _ => self.execute(&format!("SAVEPOINT {name}"), &[]).map(|_| ()),
