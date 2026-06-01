@@ -1,92 +1,125 @@
+INHERIT: ./mkdocs.env.yml
 site_name: Ormdantic
 site_description: A Rust-backed async ORM for Python 3.10+ using Pydantic v2 models.
 site_url: https://ormdantic.yezz.me/
 
 theme:
-  name: 'material'
+  variant: classic
+  name: material
   palette:
-    - scheme: default
-      primary: amber
-      accent: orange
+    - media: '(prefers-color-scheme)'
+      toggle:
+        icon: material/lightbulb-auto
+        name: Switch to light mode
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: black
+      accent: teal
       toggle:
         icon: material/lightbulb
         name: Switch to dark mode
-    - scheme: slate
-      primary: amber
-      accent: orange
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: black
+      accent: teal
       toggle:
         icon: material/lightbulb-outline
-        name: Switch to light mode
-  favicon: favicon.png
+        name: Switch to system preference
   features:
-    - search.suggest
-    - search.highlight
-    - content.tabs.link
-    - navigation.indexes
-    - content.tooltips
-    - navigation.path
     - content.code.annotate
     - content.code.copy
-    - content.code.select
+    # - content.code.select
+    - content.footnote.tooltips
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    # - navigation.instant.preview
+    - navigation.instant.progress
+    - navigation.path
     - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
   icon:
-    repo: fontawesome/brands/github-alt
-    logo: fontawesome/solid/database
+    repo: octicons/mark-github-24
+  logo: favicon.png
+  favicon: favicon.png
   language: en
-repo_name: Yezz123/Ormdantic
+
+repo_name: yezz123/ormdantic
 repo_url: https://github.com/yezz123/ormdantic
 edit_uri: edit/main/docs/
 
 plugins:
-  - search: null
-  - social:
-      cards_layout_options:
-        background_color: '#FFDE59'
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            extensions:
-              - griffe_typingdoc
-            show_root_heading: true
-            show_if_no_docstring: true
-            inherited_members: true
-            members_order: source
-            separate_signature: true
-            unwrap_annotated: true
-            filters:
-              - '!^_'
-            heading_level: 3
-            merge_init_into_class: true
-            docstring_section_style: spacy
-            signature_crossrefs: true
-            allow_inspection: true
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
+  mkdocstrings:
+    handlers:
+      python:
+        options:
+          extensions:
+            - griffe_typingdoc
+          show_root_heading: true
+          show_if_no_docstring: true
+          inherited_members: true
+          members_order: source
+          separate_signature: true
+          unwrap_annotated: true
+          filters:
+            - '!^_'
+          merge_init_into_class: true
+          docstring_section_style: spacy
+          signature_crossrefs: true
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
 
 markdown_extensions:
-  - attr_list
-  - md_in_html
-  - pymdownx.superfences
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - abbr
-  - admonition
-  - pymdownx.details
-  - def_list
-  - pymdownx.tasklist:
-      custom_checkbox: true
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Material for MkDocs Extensions
+  material.extensions.preview:
+    targets:
+      include:
+        - '*'
+  zensical.extensions.macros:
+  # Python Markdown
+  abbr:
+  attr_list:
+  footnotes:
+  md_in_html:
+  tables:
+  toc:
+    permalink: true
+
+  # Python Markdown Extensions
+  pymdownx.betterem:
+    smart_enable: all
+  pymdownx.caret:
+  pymdownx.highlight:
+    line_spans: __span
+    linenums_style: pymdownx-inline
+  pymdownx.inlinehilite:
+  pymdownx.keys:
+  pymdownx.mark:
+  pymdownx.superfences:
+    custom_fences:
+      - name: mermaid
+        class: mermaid
+        format: !!python/name:pymdownx.superfences.fence_code_format
+  pymdownx.tilde:
+
+  # pymdownx blocks
+  pymdownx.blocks.admonition:
+  pymdownx.blocks.details:
+  pymdownx.blocks.tab:
+    alternate_style: True
+
+  # Other extensions
+  mdx_include:
+  markdown_include_variants:
 
 extra_javascript:
   - js/termynal.js
@@ -134,9 +167,14 @@ nav:
 
 extra:
   social:
-    - icon: fontawesome/brands/github-alt
+    - icon: octicons/mark-github-24
       link: https://github.com/yezz123/ormdantic
     - icon: fontawesome/brands/x-twitter
       link: https://x.com/yezz123
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/yezz123
     - icon: fontawesome/solid/globe
-      link: https://ormdantic.yezz.me
+      link: https://yezz.me
+
+validation:
+  unresolved_references: false
