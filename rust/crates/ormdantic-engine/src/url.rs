@@ -13,7 +13,25 @@ pub fn normalize_driver_url(url: &str) -> String {
         .replace("mysql+pymysql://", "mysql://")
         .replace("mysql+aiomysql://", "mysql://")
         .replace("mysql+asyncmy://", "mysql://")
+        .replace("mariadb://", "mysql://")
         .replace("mariadb+mariadbconnector://", "mysql://")
         .replace("mssql+pyodbc://", "mssql://")
         .replace("oracle+oracledb://", "oracle://")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_driver_url;
+
+    #[test]
+    fn normalizes_mariadb_urls_for_mysql_driver() {
+        assert_eq!(
+            normalize_driver_url("mariadb://root:mariadb@localhost:3307/mariadb"),
+            "mysql://root:mariadb@localhost:3307/mariadb"
+        );
+        assert_eq!(
+            normalize_driver_url("mariadb+mariadbconnector://root:mariadb@localhost:3307/mariadb",),
+            "mysql://root:mariadb@localhost:3307/mariadb"
+        );
+    }
 }
