@@ -104,6 +104,9 @@ markdown_extensions:
   pymdownx.inlinehilite:
   pymdownx.keys:
   pymdownx.mark:
+  pymdownx.snippets:
+    base_path:
+      - .
   pymdownx.superfences:
     custom_fences:
       - name: mermaid
