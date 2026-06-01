@@ -1,5 +1,7 @@
 use ormdantic_dialects::{AnyDialect, Dialect};
-use ormdantic_engine::{execute_url, DbValue, NativeConnection};
+use ormdantic_engine::{
+    execute_url, runtime_capabilities as engine_runtime_capabilities, DbValue, NativeConnection,
+};
 use ormdantic_hydrate::{FlatHydrationPlan, ResultShape};
 use ormdantic_schema::{SchemaRegistry, TableDef};
 use ormdantic_sql::{
@@ -811,6 +813,15 @@ fn row_to_dict<'py>(
     Ok(record)
 }
 
+#[pyfunction]
+fn runtime_capabilities(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let capabilities = PyDict::new(py);
+    for (name, available) in engine_runtime_capabilities() {
+        capabilities.set_item(name, available)?;
+    }
+    Ok(capabilities.into_any().unbind())
+}
+
 #[pymodule]
 fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyNativeConnection>()?;
@@ -831,5 +842,6 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sql_value, m)?)?;
     m.add_function(wrap_pyfunction!(compile_create_table_sql, m)?)?;
     m.add_function(wrap_pyfunction!(compile_drop_table_sql, m)?)?;
+    m.add_function(wrap_pyfunction!(runtime_capabilities, m)?)?;
     Ok(())
 }

@@ -9,6 +9,20 @@ use ormdantic_dialects::DialectKind;
 pub use result::QueryResult;
 pub use value::DbValue;
 
+pub fn runtime_capabilities() -> [(&'static str, bool); 6] {
+    [
+        ("sqlite", cfg!(feature = "sqlite")),
+        ("postgresql", cfg!(feature = "postgres")),
+        ("mysql", cfg!(feature = "mysql")),
+        (
+            "mariadb",
+            cfg!(feature = "mysql") || cfg!(feature = "mariadb"),
+        ),
+        ("mssql", cfg!(feature = "mssql")),
+        ("oracle", cfg!(feature = "oracle")),
+    ]
+}
+
 pub fn execute_url(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
     match DialectKind::parse(url)? {
         DialectKind::Sqlite => drivers::sqlite::execute_url(url, sql, params),
