@@ -13,6 +13,20 @@ except ImportError:  # pragma: no cover - exercised when extension is not built
     _ormdantic = None
 
 
+def runtime_capabilities() -> dict[str, bool]:
+    """Return the database runtimes compiled into the Rust extension."""
+    if _ormdantic is None or not hasattr(_ormdantic, "runtime_capabilities"):
+        return {
+            "sqlite": False,
+            "postgresql": False,
+            "mysql": False,
+            "mariadb": False,
+            "mssql": False,
+            "oracle": False,
+        }
+    return dict(_ormdantic.runtime_capabilities())
+
+
 @dataclass
 class NativeCursor:
     """Cursor-like metadata returned with native query results."""
