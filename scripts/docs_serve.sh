@@ -4,4 +4,4 @@ set -e
 set -x
 
 # Serve the docs
-uv run --group docs mkdocs serve --livereload
+uv run zensical serve
