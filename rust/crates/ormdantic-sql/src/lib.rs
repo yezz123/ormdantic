@@ -293,6 +293,7 @@ impl QueryAst {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compile_joined_select(
     dialect: &impl Dialect,
     table: &TableRef,

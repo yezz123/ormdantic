@@ -58,8 +58,8 @@ Additional feature gates are available for MariaDB, SQL Server, Oracle, and a co
 | `postgres` | PostgreSQL support through the `postgres` crate. |
 | `mysql` | MySQL support through the `mysql` crate. |
 | `mariadb` | MariaDB support through the MySQL protocol. |
-| `mssql` | SQL Server dialect/runtime gate. |
-| `oracle` | Oracle dialect/runtime gate. |
+| `mssql` | SQL Server runtime through the pure Rust TDS driver. |
+| `oracle` | Oracle runtime through the pure Rust TNS driver. |
 | `all-engines` | Enables every engine feature. |
 
 ## Build And Test
@@ -69,6 +69,7 @@ Run these from the repository root:
 ```bash
 cargo build
 cargo test
+cargo test -p ormdantic-engine --features mssql,oracle
 cargo build -p ormdantic-py
 ```
 
@@ -79,8 +80,8 @@ Database integration tests are gated by environment variables so local and CI ru
 | `ORMDANTIC_POSTGRES_URL` | PostgreSQL execution tests. |
 | `ORMDANTIC_MYSQL_URL` | MySQL execution tests. |
 | `ORMDANTIC_MARIADB_URL` | MariaDB execution tests. |
-| `ORMDANTIC_MSSQL_URL` | SQL Server gated-runtime tests. |
-| `ORMDANTIC_ORACLE_URL` | Oracle gated-runtime tests. |
+| `ORMDANTIC_MSSQL_URL` | SQL Server runtime tests with the `mssql` feature. |
+| `ORMDANTIC_ORACLE_URL` | Oracle runtime tests with the `oracle` feature. |
 
 ## Python Boundary
 

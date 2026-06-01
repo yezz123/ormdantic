@@ -23,5 +23,6 @@ fn renders_driver_placeholder_styles() {
         "$3"
     );
     assert_eq!(AnyDialect::parse("mysql").unwrap().placeholder(3), "?");
+    assert_eq!(AnyDialect::parse("mssql").unwrap().placeholder(3), "@P3");
     assert_eq!(AnyDialect::parse("oracle").unwrap().placeholder(3), ":3");
 }

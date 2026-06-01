@@ -19,8 +19,8 @@ sqlite = []
 postgres = []
 mysql = []
 mariadb = ["mysql"]
-mssql = []
-oracle = []
+mssql = ["dep:tiberius", "dep:tokio", "dep:tokio-util"]
+oracle = ["dep:oracle-rs", "dep:tokio"]
 all-engines = ["sqlite", "postgres", "mysql", "mariadb", "mssql", "oracle"]
 
 [dependencies]
@@ -29,3 +29,8 @@ ormdantic-dialects.workspace = true
 mysql = "25"
 postgres = "0.19"
 rusqlite = { version = "0.32", features = ["bundled"] }
+tiberius = { version = "0.12.3", default-features = false, features = ["rustls", "tds73"], optional = true }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "net"], optional = true }
+tokio-util = { version = "0.7.18", features = ["compat"], optional = true }
+oracle-rs = { version = "0.1.7", optional = true }
+url = "2.5.8"

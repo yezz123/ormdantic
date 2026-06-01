@@ -229,8 +229,8 @@ impl Dialect for MsSqlDialect {
         format!("[{}]", ident.replace(']', "]]"))
     }
 
-    fn placeholder(&self, _index: usize) -> String {
-        "?".to_string()
+    fn placeholder(&self, index: usize) -> String {
+        format!("@P{index}")
     }
 
     fn supports_returning(&self) -> bool {
@@ -409,8 +409,7 @@ pub fn normalize_dialect_name(name_or_url: &str) -> String {
         .split('+')
         .next()
         .unwrap_or(before_url)
-        .replace('-', "")
-        .replace('_', "")
+        .replace(['-', '_'], "")
 }
 
 fn quote_double(ident: &str) -> String {
@@ -521,7 +520,7 @@ mod tests {
     fn renders_additional_dialect_placeholders() {
         assert_eq!(MySqlDialect.placeholder(1), "?");
         assert_eq!(MariaDbDialect.placeholder(1), "?");
-        assert_eq!(MsSqlDialect.placeholder(1), "?");
+        assert_eq!(MsSqlDialect.placeholder(1), "@P1");
         assert_eq!(OracleDialect.placeholder(3), ":3");
     }
 }

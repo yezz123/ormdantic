@@ -279,6 +279,7 @@ fn compile_select_pk(
     offset=None,
     aliases=None
 ))]
+#[allow(clippy::too_many_arguments)]
 fn compile_find_many(
     py: Python<'_>,
     dialect: &str,
@@ -317,6 +318,7 @@ fn compile_find_many(
     limit=None,
     offset=None
 ))]
+#[allow(clippy::too_many_arguments)]
 fn compile_joined_find_many(
     py: Python<'_>,
     dialect: &str,

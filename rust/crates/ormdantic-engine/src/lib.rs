@@ -21,25 +21,35 @@ pub fn execute_url(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<
 }
 
 pub enum NativeConnection {
-    Sqlite(drivers::sqlite::SqliteConnection),
-    Postgres(drivers::postgres::PostgresConnection),
-    MySql(drivers::mysql::MySqlConnection),
-    MariaDb(drivers::mysql::MySqlConnection),
-    MsSql(drivers::mssql::MsSqlConnection),
-    Oracle(drivers::oracle::OracleConnection),
+    Sqlite(Box<drivers::sqlite::SqliteConnection>),
+    Postgres(Box<drivers::postgres::PostgresConnection>),
+    MySql(Box<drivers::mysql::MySqlConnection>),
+    MariaDb(Box<drivers::mysql::MySqlConnection>),
+    MsSql(Box<drivers::mssql::MsSqlConnection>),
+    Oracle(Box<drivers::oracle::OracleConnection>),
 }
 
 impl NativeConnection {
     pub fn open(url: &str) -> OrmdanticResult<Self> {
         match DialectKind::parse(url)? {
-            DialectKind::Sqlite => Ok(Self::Sqlite(drivers::sqlite::SqliteConnection::open(url)?)),
-            DialectKind::Postgres => Ok(Self::Postgres(
+            DialectKind::Sqlite => Ok(Self::Sqlite(Box::new(
+                drivers::sqlite::SqliteConnection::open(url)?,
+            ))),
+            DialectKind::Postgres => Ok(Self::Postgres(Box::new(
                 drivers::postgres::PostgresConnection::open(url)?,
-            )),
-            DialectKind::MySql => Ok(Self::MySql(drivers::mysql::MySqlConnection::open(url)?)),
-            DialectKind::MariaDb => Ok(Self::MariaDb(drivers::mysql::MySqlConnection::open(url)?)),
-            DialectKind::MsSql => Ok(Self::MsSql(drivers::mssql::MsSqlConnection::open(url)?)),
-            DialectKind::Oracle => Ok(Self::Oracle(drivers::oracle::OracleConnection::open(url)?)),
+            ))),
+            DialectKind::MySql => Ok(Self::MySql(Box::new(
+                drivers::mysql::MySqlConnection::open(url)?,
+            ))),
+            DialectKind::MariaDb => Ok(Self::MariaDb(Box::new(
+                drivers::mysql::MySqlConnection::open(url)?,
+            ))),
+            DialectKind::MsSql => Ok(Self::MsSql(Box::new(
+                drivers::mssql::MsSqlConnection::open(url)?,
+            ))),
+            DialectKind::Oracle => Ok(Self::Oracle(Box::new(
+                drivers::oracle::OracleConnection::open(url)?,
+            ))),
         }
     }
 
@@ -54,19 +64,33 @@ impl NativeConnection {
     }
 
     pub fn begin(&mut self) -> OrmdanticResult<()> {
-        self.execute("BEGIN", &[]).map(|_| ())
+        match self {
+            Self::MsSql(connection) => connection.begin(),
+            Self::Oracle(connection) => connection.begin(),
+            _ => self.execute("BEGIN", &[]).map(|_| ()),
+        }
     }
 
     pub fn commit(&mut self) -> OrmdanticResult<()> {
-        self.execute("COMMIT", &[]).map(|_| ())
+        match self {
+            Self::Oracle(connection) => connection.commit(),
+            _ => self.execute("COMMIT", &[]).map(|_| ()),
+        }
     }
 
     pub fn rollback(&mut self) -> OrmdanticResult<()> {
-        self.execute("ROLLBACK", &[]).map(|_| ())
+        match self {
+            Self::Oracle(connection) => connection.rollback(),
+            _ => self.execute("ROLLBACK", &[]).map(|_| ()),
+        }
     }
 
     pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
-        self.execute(&format!("SAVEPOINT {name}"), &[]).map(|_| ())
+        match self {
+            Self::MsSql(connection) => connection.savepoint(name),
+            Self::Oracle(connection) => connection.savepoint(name),
+            _ => self.execute(&format!("SAVEPOINT {name}"), &[]).map(|_| ()),
+        }
     }
     pub fn dialect(&self) -> &'static str {
         match self {

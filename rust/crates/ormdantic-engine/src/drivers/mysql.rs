@@ -43,7 +43,7 @@ fn execute_conn(
             .map(|column| column.name_str().to_string())
             .collect::<Vec<_>>();
         let rows = result
-            .map(|row| row.map(|row| mysql_row(row)).map_err(sql_error))
+            .map(|row| row.map(mysql_row).map_err(sql_error))
             .collect::<OrmdanticResult<Vec<_>>>()?;
         Ok(QueryResult::new(columns, rows))
     } else {

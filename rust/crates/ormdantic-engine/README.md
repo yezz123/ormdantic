@@ -23,8 +23,8 @@ Native database execution for Ormdantic.
 | `postgres` | `drivers::postgres` | Uses the `postgres` crate. |
 | `mysql` | `drivers::mysql` | Uses the `mysql` crate. |
 | `mariadb` | `drivers::mysql` | Uses the MySQL protocol. |
-| `mssql` | `drivers::mssql` | Gated runtime support. |
-| `oracle` | `drivers::oracle` | Gated runtime support. |
+| `mssql` | `drivers::mssql` | SQL Server runtime support through `tiberius`. |
+| `oracle` | `drivers::oracle` | Oracle runtime support through `oracle-rs`. |
 
 Default features are `sqlite`, `postgres`, and `mysql`. Use `all-engines` to enable every feature gate.
 
@@ -38,9 +38,19 @@ Internal dependencies:
 External dependencies:
 
 - `mysql`
+- `oracle-rs` (optional)
 - `postgres`
 - `rusqlite`
+- `tiberius` (optional)
+- `tokio` (optional)
+- `tokio-util` (optional)
 
 ## Tests
 
 SQLite is covered by local tests. PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle integration tests are gated by `ORMDANTIC_POSTGRES_URL`, `ORMDANTIC_MYSQL_URL`, `ORMDANTIC_MARIADB_URL`, `ORMDANTIC_MSSQL_URL`, and `ORMDANTIC_ORACLE_URL`.
+
+Run the enterprise runtimes with:
+
+```bash
+cargo test -p ormdantic-engine --features mssql,oracle
+```
