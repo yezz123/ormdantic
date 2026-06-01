@@ -10,8 +10,8 @@ This matrix tracks Ormdantic vNext against SQLAlchemy-style capabilities.
 | PostgreSQL runtime | Full | Native Rust support with gated CI integration. |
 | MySQL runtime | Full | Native Rust support with gated CI integration. |
 | MariaDB runtime | Full | Native Rust support via MySQL protocol with gated CI integration. |
-| SQL Server runtime | Full | Native Rust support through the optional `mssql` engine feature using a TDS driver. |
-| Oracle runtime | Full | Native Rust support through the optional `oracle` engine feature using a pure Rust TNS driver. |
+| SQL Server runtime | Full | Native Rust support through the pure Rust TDS driver compiled into default Python wheels. |
+| Oracle runtime | Full | Native Rust support through the pure Rust TNS driver compiled into default Python wheels. |
 | Query expressions | Partial | Comparisons, `IN`, `LIKE`, null checks are implemented; subqueries/CTEs/window functions are planned. |
 | DDL | Partial | Tables, primary keys, foreign keys, indexes, unique/check constraints are covered; advanced defaults and migrations are planned. |
 | Relationships | Partial | Joined/depth loading and explicit lazy loading are available; select-in planning is being expanded. |

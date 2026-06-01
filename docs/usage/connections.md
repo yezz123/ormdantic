@@ -17,16 +17,29 @@ Ormdantic("oracle+oracledb://user:password@localhost:1521/service")
 
 ## Runtime Support
 
+Default Python wheels are built from the private `ormdantic._ormdantic` extension with all runtime drivers compiled in.
+
 | Dialect | Native runtime | Notes |
 | --- | --- | --- |
 | SQLite | Full | Local baseline and default development engine. |
 | PostgreSQL | Full | Parameter binding, row decoding, and transactions are supported. |
 | MySQL | Full | Uses the Rust MySQL driver. |
 | MariaDB | Full | Uses the MySQL protocol where compatible. |
-| SQL Server | Full with `mssql` feature | Uses the pure Rust TDS driver. Add `trust_cert=true` for local/self-signed TLS test servers. |
-| Oracle | Full with `oracle` feature | Uses the pure Rust Oracle TNS driver. Service names can be passed in the path or `service_name` query parameter. |
+| SQL Server | Full | Uses the pure Rust TDS driver. Add `trust_cert=true` for local/self-signed TLS test servers. |
+| Oracle | Full | Uses the pure Rust Oracle TNS driver. Service names can be passed in the path or `service_name` query parameter. |
 
-SQL Server and Oracle are intentionally optional because their drivers add larger enterprise-runtime dependency trees.
+Source builds that bypass the Python extension can still choose Cargo features directly, but the standard maturin build includes the enterprise runtimes.
+
+## Runtime Capabilities
+
+Use `runtime_capabilities()` to inspect the database runtimes compiled into the installed extension:
+
+```python
+from ormdantic import runtime_capabilities
+
+print(runtime_capabilities())
+# {"sqlite": True, "postgresql": True, "mysql": True, "mariadb": True, "mssql": True, "oracle": True}
+```
 
 ## Test Environment Variables
 
