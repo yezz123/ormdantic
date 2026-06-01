@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from ormdantic.handler.snake import get_words
+from ormdantic.naming import get_words
 
 
 class SnakeTest(TestCase):

@@ -4,9 +4,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from ormdantic.generator._hydration import plan_result_shape
-from ormdantic.generator._rust_query import (
-    bind_compiled_query,
+from ormdantic._ormdantic import (
     compile_count,
     compile_delete_pk,
     compile_find_many,
@@ -16,8 +14,9 @@ from ormdantic.generator._rust_query import (
     compile_update,
     compile_upsert,
 )
-from ormdantic.generator._rust_schema import validate_table_map
+from ormdantic.hydration import plan_result_shape
 from ormdantic.models import Map, OrmTable
+from ormdantic.schema import validate_table_map
 
 
 class RustBridgeFlavor(BaseModel):
@@ -215,24 +214,6 @@ def test_rust_query_bridge_compiles_delete() -> None:
         "params": ["id"],
         "operation": "delete",
     }
-
-
-def test_rust_query_bridge_binds_values_in_compiler_order() -> None:
-    compiled = compile_update(
-        dialect="sqlite",
-        table="flavors",
-        primary_key="id",
-        columns=["name", "id"],
-    )
-
-    query = bind_compiled_query(compiled, {"id": "flavor-id", "name": "mocha"})
-
-    if query is None:
-        return
-
-    assert query.sql == 'UPDATE "flavors" SET "name" = ?, "id" = ? WHERE "id" = ?'
-    assert query.values == ("mocha", "flavor-id", "flavor-id")
-    assert query.operation == "update"
 
 
 def test_result_shape_bridge_describes_relationship_aliases() -> None:

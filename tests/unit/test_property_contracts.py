@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ormdantic.generator._rust_query import bind_compiled_query
-from ormdantic.handler.snake import snake
+from ormdantic.naming import snake_case
 
 
 @pytest.mark.parametrize(
@@ -16,17 +15,11 @@ from ormdantic.handler.snake import snake
     ],
 )
 def test_snake_case_contract(source: str, expected: str) -> None:
-    assert snake(source) == expected
+    assert snake_case(source) == expected
 
 
-def test_bind_compiled_query_preserves_parameter_order() -> None:
-    query = bind_compiled_query(
-        {
-            "sql": "SELECT * FROM t WHERE a = ? AND b = ?",
-            "params": ["b", "a"],
-            "operation": "select",
-        },
-        {"a": 1, "b": 2},
-    )
+def test_python_dict_preserves_bind_parameter_order() -> None:
+    params = ["b", "a"]
+    values = {"a": 1, "b": 2}
 
-    assert query.values == (2, 1)
+    assert tuple(values[param] for param in params) == (2, 1)

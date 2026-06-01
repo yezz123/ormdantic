@@ -7,8 +7,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import BaseModel, Field
 
-from ormdantic.generator._serializer import OrmSerializer
 from ormdantic.models import Map, OrmTable, Relationship
+from ormdantic.serializer import OrmSerializer
 
 pytest.importorskip("pytest_benchmark")
 

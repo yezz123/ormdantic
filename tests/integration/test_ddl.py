@@ -6,7 +6,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from ormdantic import Ormdantic
-from ormdantic.generator._rust_schema import compile_create_table_sql
+from ormdantic.schema import compile_create_table_sql
 
 
 class DdlFlavor(Enum):

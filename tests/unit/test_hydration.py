@@ -6,9 +6,9 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from ormdantic.generator._hydration import hydrate_flat_payload
-from ormdantic.generator._serializer import OrmSerializer
+from ormdantic.hydration import hydrate_flat_payload
 from ormdantic.models import Map, OrmTable
+from ormdantic.serializer import OrmSerializer
 
 
 class HydratedFlavor(BaseModel):

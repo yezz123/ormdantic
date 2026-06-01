@@ -9,10 +9,10 @@ import pytest
 from decouple import config
 from pydantic import BaseModel, Field
 
-from ormdantic import Ormdantic
-from ormdantic.handler import (
+from ormdantic import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
+    Ormdantic,
     TypeConversionError,
     UndefinedBackReferenceError,
 )
