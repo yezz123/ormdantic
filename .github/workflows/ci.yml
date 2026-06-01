@@ -112,7 +112,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p ormdantic-engine --test mssql_exec --test oracle_exec
+
+      - run: cargo test -p ormdantic-engine --features mssql,oracle --test mssql_exec --test oracle_exec
         env:
           ORMDANTIC_MSSQL_URL: ${{ secrets.ORMDANTIC_MSSQL_URL }}
           ORMDANTIC_ORACLE_URL: ${{ secrets.ORMDANTIC_ORACLE_URL }}
