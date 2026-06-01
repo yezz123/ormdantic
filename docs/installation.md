@@ -2,7 +2,7 @@
 
 A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
 
-As **Ormdantic** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, it requires them. They will be automatically installed when you install Ormdantic.
+As **Ormdantic** is based on **Pydantic** and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
 
 ## Installation
 
@@ -18,28 +18,4 @@ $ pip install ormdantic
 
 </div>
 
-* Install The specific Asynchronous ORM library for your database.
-
-### SQLite
-
-<div class="termy">
-
-```console
-$ pip install ormdantic[sqlite]
-
----> 100%
-```
-
-</div>
-
-### PostgreSQL
-
-<div class="termy">
-
-```console
-$ pip install ormdantic[postgresql]
-
----> 100%
-```
-
-</div>
+Database drivers are provided by Ormdantic's Rust extension.

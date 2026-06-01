@@ -1,131 +1,195 @@
+INHERIT: ./mkdocs.env.yml
 site_name: Ormdantic
-site_description: A fast, async, and type-safe ORM for Python 3.10+ based on SQLAlchemy and Pydantic.
+site_description: A Rust-backed async ORM for Python 3.10+ using Pydantic v2 models.
 site_url: https://ormdantic.yezz.me/
 
 theme:
-  name: 'material'
+  variant: classic
+  name: material
   palette:
-    - scheme: default
-      primary: amber
-      accent: orange
+    - media: '(prefers-color-scheme)'
       toggle:
-          icon: material/lightbulb
-          name: Switch to dark mode
-    - scheme: slate
-      primary: amber
-      accent: orange
+        icon: material/lightbulb-auto
+        name: Switch to light mode
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: brown
+      accent: deep orange
       toggle:
-          icon: material/lightbulb-outline
-          name: Switch to light mode
-  favicon: favicon.png
+        icon: material/lightbulb
+        name: Switch to dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: brown
+      accent: deep orange
+      toggle:
+        icon: material/lightbulb-outline
+        name: Switch to system preference
   features:
-  - search.suggest
-  - search.highlight
-  - content.tabs.link
-  - navigation.indexes
-  - content.tooltips
-  - navigation.path
-  - content.code.annotate
-  - content.code.copy
-  - content.code.select
-  - navigation.tabs
+    - content.code.annotate
+    - content.code.copy
+    # - content.code.select
+    - content.footnote.tooltips
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    # - navigation.instant.preview
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
   icon:
-    repo: fontawesome/brands/github-alt
-    logo: fontawesome/solid/database
+    repo: octicons/mark-github-24
+  logo: favicon.png
+  favicon: favicon.png
   language: en
-repo_name: Yezz123/Ormdantic
+
+repo_name: yezz123/ormdantic
 repo_url: https://github.com/yezz123/ormdantic
 edit_uri: edit/main/docs/
 
 plugins:
-  - search: null
-  - social:
-      cards_layout_options:
-        background_color: "#FFDE59"
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            extensions:
+  mkdocstrings:
+    handlers:
+      python:
+        options:
+          extensions:
             - griffe_typingdoc
-            show_root_heading: true
-            show_if_no_docstring: true
-            inherited_members: true
-            members_order: source
-            separate_signature: true
-            unwrap_annotated: true
-            filters:
+          show_root_heading: true
+          show_if_no_docstring: true
+          inherited_members: true
+          members_order: source
+          separate_signature: true
+          unwrap_annotated: true
+          filters:
             - '!^_'
-            heading_level: 3
-            merge_init_into_class: true
-            docstring_section_style: spacy
-            signature_crossrefs: true
-            allow_inspection: true
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
+          merge_init_into_class: true
+          docstring_section_style: spacy
+          signature_crossrefs: true
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
 
 markdown_extensions:
-  - attr_list
-  - md_in_html
-  - pymdownx.superfences
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - abbr
-  - admonition
-  - pymdownx.details
-  - def_list
-  - pymdownx.tasklist:
-      custom_checkbox: true
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Material for MkDocs Extensions
+  material.extensions.preview:
+    targets:
+      include:
+        - '*'
+  zensical.extensions.macros:
+  # Python Markdown
+  abbr:
+  attr_list:
+  footnotes:
+  md_in_html:
+  tables:
+  toc:
+    permalink: true
+
+  # Python Markdown Extensions
+  pymdownx.betterem:
+    smart_enable: all
+  pymdownx.caret:
+  pymdownx.highlight:
+    line_spans: __span
+    linenums_style: pymdownx-inline
+  pymdownx.inlinehilite:
+  pymdownx.keys:
+  pymdownx.mark:
+  pymdownx.snippets:
+    base_path:
+      - .
+  pymdownx.superfences:
+    custom_fences:
+      - name: mermaid
+        class: mermaid
+        format: !!python/name:pymdownx.superfences.fence_code_format
+  pymdownx.tilde:
+
+  # pymdownx blocks
+  pymdownx.blocks.admonition:
+  pymdownx.blocks.details:
+  pymdownx.blocks.tab:
+    alternate_style: True
+
+  # Other extensions
+  mdx_include:
+  markdown_include_variants:
 
 extra_javascript:
-    - js/termynal.js
-    - js/custom.js
+  - js/termynal.js
+  - js/custom.js
 extra_css:
-    - css/termynal.css
-    - css/custom.css
+  - css/termynal.css
+  - css/custom.css
 
 nav:
   - About: index.md
+  - Why Ormdantic: why-ormdantic.md
   - Installation: installation.md
+  - Examples:
+      - Basic CRUD: examples/basic-crud.md
+      - Relationships: examples/relationships.md
+      - Transactions And Sessions: examples/transactions-sessions.md
+      - Query Expressions: examples/query-expressions.md
+      - Migrations And Reflection: examples/migrations-reflection.md
+      - Enterprise Dialects: examples/enterprise-dialects.md
   - Usage:
-    - Getting Started: usage/usage.md
-    - Generator: usage/generator.md
+      - Getting Started: usage/usage.md
+      - Connections And Dialects: usage/connections.md
+      - Query Expressions: usage/query-expressions.md
+      - Transactions And Sessions: usage/transactions-sessions.md
+      - Relationship Loading: usage/relationship-loading.md
+      - Events: usage/events.md
+  - Architecture:
+      - Rust Core: architecture/rust-core.md
+      - Dialect Support: architecture/dialect-support.md
+      - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
+      - vNext Migration: architecture/vnext-migration.md
+      - Migration History: architecture/migration-history.md
+  - Performance: performance.md
+  - Comparisons:
+      - SQLAlchemy: comparisons/sqlalchemy.md
+      - SQLModel: comparisons/sqlmodel.md
   - Reference - API:
-    - api/reference.md
-    - api/ormdantic.md
-    - Errors:
-      - api/errors.md
-    - Generator:
-      - api/crud.md
-      - api/table.md
-      - api/field.md
-      - api/query.md
-      - api/serializer.md
+      - Overview: api/reference.md
+      - Ormdantic: api/ormdantic.md
+      - Native Engine: api/engine.md
+      - Session: api/session.md
+      - Events: api/events.md
+      - Loaders: api/loaders.md
+      - Errors:
+          - api/errors.md
+      - ORM Internals:
+          - api/table.md
+          - api/serializer.md
+          - api/internals.md
   - Development:
-    - Contributing: development/contributing.md
+      - Contributing: development/contributing.md
   - FAQ:
-    - Frequently Asked Questions: faq/faq.md
-    - Code of Conduct: faq/code_of_conduct.md
-    - License: faq/license.md
+      - Frequently Asked Questions: faq/faq.md
+      - Code of Conduct: faq/code_of_conduct.md
+      - License: faq/license.md
   - Changelog: release.md
 
 extra:
-  generator: true
   social:
-  - icon: fontawesome/brands/github-alt
-    link: https://github.com/yezz123/ormdantic
-  - icon: fontawesome/brands/x-twitter
-    link: https://x.com/THyasser1
-  - icon: fontawesome/solid/globe
-    link: https://ormdantic.yezz.me
+    - icon: octicons/mark-github-24
+      link: https://github.com/yezz123/ormdantic
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/yezz123
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/yezz123
+    - icon: fontawesome/solid/globe
+      link: https://yezz.me
+
+validation:
+  unresolved_references: false

@@ -3,4 +3,4 @@
 set -e
 set -x
 
-pre-commit run --all-files --verbose --show-diff-on-failure
+uv run --group linting pre-commit run --all-files --verbose --show-diff-on-failure

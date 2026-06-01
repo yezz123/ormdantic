@@ -1,21 +1,26 @@
-# Frequently Asked Questions 🍂
+# Frequently Asked Questions
 
 ![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/.github/logo.png)
 
 ## What is the purpose of this project?
 
-- **Ormdantic** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+**Ormdantic** is an async ORM that uses Pydantic v2 models as database table models. The Python API handles model declarations, decorators, sessions, events, and final Pydantic object construction, while the Rust core handles schema validation, SQL compilation, row hydration, and native database execution.
 
-## What are the key differences between Ormdantic and Sqlmodel?
+## What are the key differences between Ormdantic and SQLModel?
 
-| (as of August 2022) | SQLModel | Ormdantic |
-|---|---|---|
-| Multimorphism  (being both a pydantic model  and a SQLAlchemy model) | Inherits from pydantic BaseModel and uses a modified SQLAlchemy base model  as its meta-class. | Uses a wrapper/decorator to make pydantic BaseModels behave like database tables as well. |
-| Database connection/async | Database connection is not built into the main class (SQLModel),  but handled by separate equivalents of SQLAlchemy classes and functions  (Session and create_engine). <br> <br> Since the async equivalents are not  available in `sqlmodel` yet,  one has to use the original  SQLAlchemy ext versions,  which is certainly possible,  but can be a bit cumbersome  until SQLAlchemy 2.0 is released  (type checking is also a problem). | Takes a connection string as a constructor parameter  and creates sessions internally where needed. <br> <br> It is "async by default" one might say. |
-| API/Syntax | You typically interact  with both a Session object  and a SQLModel object, e.g.:  <br><pre><code>hero = Hero()<br>session.add(hero)<br>await session.commit()</code></pre><br>  It uses the SQLAlchemy syntax. | You interact with the database abstraction:  <br><pre><code>hero = Hero()<br>await database["Hero"].insert(hero)</code></pre><br>  The syntax is similar to `PonyORM`, which means you can write queries  to the database using Python generator expressions and lambdas.  It makes the structure similar to writing SQL queries  but even easier to understand and integrate. |
-| Background | A bit more established  and has the benefit of  being authored by the creator of FastAPI,  so on paper it should be the ORM to use with FastAPI. Unfortunately said creator has a lot on his plate, so `sqlmodel` may not publish new releases  as often as other projects do. | Brand new and thus unproven,  but could be an exciting alternative. |
+| Area | SQLModel | Ormdantic |
+| --- | --- | --- |
+| Model style | Uses Pydantic models with SQLAlchemy table metadata. | Uses regular Pydantic v2 models decorated with `database.table`. |
+| Runtime | Builds on SQLAlchemy. | Uses Rust SQL compilation and native Rust execution. |
+| Async API | Uses SQLAlchemy-style sessions and engines. | Creates an async database abstraction from a connection URL and exposes table-scoped CRUD helpers. |
+| Query path | SQLAlchemy expression/session model. | Rust-compiled CRUD, filters, counts, joins, and DDL behind a Python API. |
+| Relationship loading | SQLAlchemy relationship machinery. | Explicit `depth` and loader options; no hidden synchronous lazy loading. |
 
-Thanks for [@iron3oxide](https://github.com/iron3oxide) for the great explanation!
+Ormdantic is inspired by SQLModel's Pydantic-first ergonomics, but its internals are intentionally different after the Rust-core migration.
+
+## Does Ormdantic still depend on SQLAlchemy?
+
+No. The vNext runtime removed SQLAlchemy and PyPika from runtime dependencies. Dialect parsing still accepts SQLAlchemy-style database URLs for compatibility with familiar connection strings.
 
 ## How to Support Project?
 

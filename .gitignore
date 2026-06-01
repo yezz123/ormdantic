@@ -130,3 +130,9 @@ dmypy.json
 
 # vs code
 .vscode/
+
+# Local reference repositories
+.references/
+
+# skills
+.skills/

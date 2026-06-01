@@ -1,12 +1,13 @@
+"""Internal Pydantic models for ORM metadata and result wrappers."""
+
 from typing import Generic, Type
 
 from pydantic import BaseModel, Field
-from pydantic.generics import GenericModel
 
 from ormdantic.types import ModelType
 
 
-class Result(GenericModel, Generic[ModelType]):
+class Result(BaseModel, Generic[ModelType]):
     """Search result object."""
 
     offset: int
@@ -21,7 +22,7 @@ class Relationship(BaseModel):
     back_references: str | None = None
 
 
-class OrmTable(GenericModel, Generic[ModelType]):
+class OrmTable(BaseModel, Generic[ModelType]):
     """
     Class to store table information,
     including relationships,

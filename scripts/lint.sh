@@ -3,4 +3,4 @@
 set -e
 set -x
 
-mypy --show-error-codes ormdantic
+uv run --group linting mypy --show-error-codes ormdantic

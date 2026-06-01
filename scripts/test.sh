@@ -6,4 +6,5 @@ set -x
 echo "ENV=${ENV}"
 
 export PYTHONPATH=.
-pytest --cov=ormdantic --cov-report=xml
+export DATABASE_URL="${DATABASE_URL:-sqlite:///db.sqlite3}"
+uv run --group testing pytest --cov=ormdantic --cov-report=xml

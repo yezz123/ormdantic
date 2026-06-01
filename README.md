@@ -21,24 +21,20 @@
 
 Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
 
-**Ormdantic** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
-
-> What is [Pypika](https://github.com/kayak/pypika)?
->
-> PyPika is a Python API for building SQL queries. The motivation behind PyPika is to provide a simple interface for building SQL queries without limiting the flexibility of handwritten SQL. Designed with data analysis in mind, PyPika leverages the builder design pattern to construct queries to avoid messy string formatting and concatenation. It is also easily extended to take full advantage of specific features of SQL database vendors.
+**Ormdantic** is powered by Rust SQL compilation and native Rust database execution, uses <a href="https://docs.pydantic.dev/" class="external-link" target="_blank">Pydantic</a> models, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
 
 The key features are:
 
 * **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-* **Compatible**: It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-* **Extensible**: You have all the power of SQLAlchemy and Pypika underneath.
+* **Compatible**: It combines Pydantic models and Rust query compilation/execution to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
+* **Extensible**: You have Ormdantic's Rust internals underneath.
 * **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
 
 ## Requirements
 
 A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
 
-As **Ormdantic** is based on **Pydantic** and **SQLAlchemy** and **Pypika**, it requires them. They will be automatically installed when you install Ormdantic.
+As **Ormdantic** is based on **Pydantic** and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
 
 ## Installation
 
@@ -52,15 +48,7 @@ $ pip install ormdantic
 Successfully installed Ormdantic
 ```
 
-* Install The specific Asynchronous ORM library for your database.
-
-```shell
-# PostgreSQL
-$ pip install ormdantic[postgres]
-
-# SQLite
-$ pip install ormdantic[sqlite]
-```
+Database drivers are provided by Ormdantic's Rust extension.
 
 ## Example
 
@@ -70,21 +58,19 @@ Check out the [documentation](https://sqlmodel.tiangolo.com/).
 
 But let's see how to use Ormdantic.
 
-### Create SQLAlchemy engine
+### Create a database
 
-Ormdantic uses SQLAlchemy under hood to run different queries, which is why we need to initialize by creating an asynchronous engine.
-
-> **Note**: You will use the `connection` parameter to pass the connection to the engine directly.
+Ormdantic uses a native Rust runtime. Python registers Pydantic models and Rust owns table handles for DDL, CRUD, filtering, counting, relationship-depth planning, and execution.
 
 ```python
 from ormdantic import Ormdantic
 
-connection = "sqlite+aiosqlite:///db.sqlite3"
+connection = "sqlite:///db.sqlite3"
 
 database = Ormdantic(connection)
 ```
 
-**Note**: You can use any asynchronous engine, check out the [documentation](https://docs.sqlalchemy.org/en/14/core/engines.html) for more information.
+PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle URLs are also supported by the Rust runtime compiled into the Python extension.
 
 ### Create a table
 
@@ -121,10 +107,9 @@ We use `database.init` will Populate relations information and create the tables
 ```python
 async def demo() -> None:
     async def _init() -> None:
-        async with db._engine.begin() as conn:
-            await db.init()
-            await conn.run_sync(db._metadata.drop_all)
-            await conn.run_sync(db._metadata.create_all)
+        await db.init()
+        await db.drop_all()
+        await db.create_all()
     await _init()
 ```
 
@@ -239,53 +224,6 @@ To count the number of rows of a table or in a result set you can use the `count
      print(count_advanced)
 ```
 
-## Generator Feature
-
-We introduce a new feature called `Generator`, which is a way to generate a Model instance with random data.
-
-So, Given a Pydantic model type can generate instances of that model with randomly generated values.
-
-using `ormdantic.generator.Generator` to generate a Model instance.
-
-```python
-from enum import auto, Enum
-from uuid import UUID
-
-from ormdantic.generator import Generator
-from pydantic import BaseModel
-
-
-class Flavor(Enum):
-    MOCHA = auto()
-    VANILLA = auto()
-
-
-class Brand(BaseModel):
-    brand_name: str
-
-
-class Coffee(BaseModel):
-    id: UUID
-    description: str
-    cream: bool
-    sweetener: int
-    flavor: Flavor
-    brand: Brand
-
-
-print(Generator(Coffee))
-```
-
-so the results will be:
-
-```shell
-id=UUID('93b517c2-083b-457d-a0e5-6e1bd2a927e4')
-description='ctWOb' cream=True sweetener=234
-flavor=<Flavor.VANILLA: 2> brand=Brand(brand_name='LMrIf')
-```
-
-We can integrate this with our database while testing our application (Live Tests).
-
 ## Development 🚧
 
 ### Setup environment 📦
@@ -304,8 +242,12 @@ And then install the development dependencies:
 
 ```bash
 # Install dependencies
-pip install -r requirements/all.txt
+uv sync --all-groups
 ```
+
+### Rust workspace
+
+Ormdantic's Rust crates live under `rust/crates/` and are managed by the repository-root `Cargo.toml`. See [`rust/README.md`](rust/README.md) for the crate layout, feature flags, and Rust build/test commands.
 
 ### Run tests 🌝
 

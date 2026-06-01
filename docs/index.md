@@ -3,11 +3,15 @@ hide:
   - navigation
 ---
 
-![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/.github/logo.png)
-
-<p align="center">
-    <em>Asynchronous ORM that uses pydantic models to represent database tables ✨</em>
-</p>
+<section class="brand-hero">
+  <p class="brand-eyebrow">Rust-backed ORM for Pydantic applications</p>
+  <h1>Ormdantic</h1>
+  <p>Define tables with Pydantic v2 models. Let Rust handle SQL compilation, native execution, relationship planning, and hydration.</p>
+  <p>
+    <a class="brand-button" href="installation/">Install Ormdantic</a>
+    <a class="brand-button brand-button-secondary" href="examples/basic-crud/">View Examples</a>
+  </p>
+</section>
 
 <p align="center">
 <a href="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml" target="_blank">
@@ -24,20 +28,28 @@ hide:
 </a>
 </p>
 
-Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
+Ormdantic is a library for interacting with asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, explicit, and robust.
 
-**Ormdantic** is based on [Pypika](https://github.com/kayak/pypika), and powered by <a href="https://pydantic-docs.helpmanual.io/" class="external-link" target="_blank">Pydantic</a> and <a href="https://sqlalchemy.org/" class="external-link" target="_blank">SQLAlchemy</a>, and Highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+**Ormdantic** is powered by Rust SQL compilation and native Rust database execution, uses <a href="https://docs.pydantic.dev/" class="external-link" target="_blank">Pydantic</a> models, and is built for applications that want a small Python facade over a native runtime.
 
-> What is [Pypika](https://github.com/kayak/pypika)?
->
-> PyPika is a Python API for building SQL queries. The motivation behind PyPika is to provide a simple interface for building SQL queries without limiting the flexibility of handwritten SQL. Designed with data analysis in mind, PyPika leverages the builder design pattern to construct queries to avoid messy string formatting and concatenation. It is also easily extended to take full advantage of specific features of SQL database vendors.
+<div class="brand-grid">
+  <div class="brand-card">
+    <h3>Pydantic-first tables</h3>
+    <p>Use Pydantic models for validation, serialization, and ORM table declarations.</p>
+  </div>
+  <div class="brand-card">
+    <h3>Native Rust runtime</h3>
+    <p>Rust owns SQL compilation, bind ordering, native execution, and row hydration.</p>
+  </div>
+  <div class="brand-card">
+    <h3>Async-safe loading</h3>
+    <p>Relationship loading is explicit, predictable, and designed for async applications.</p>
+  </div>
+</div>
 
-The key features are:
+## Supported Runtimes
 
-* **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-* **Compatible**: It combines SQLAlchemy, Pydantic and Pypika tries to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-* **Extensible**: You have all the power of SQLAlchemy and Pypika underneath.
-* **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
+SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle are compiled into the default Python extension.
 
 ## License
 

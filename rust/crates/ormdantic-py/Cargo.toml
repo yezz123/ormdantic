@@ -1,0 +1,27 @@
+[package]
+name = "ormdantic-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "PyO3 bindings for Ormdantic Rust internals"
+readme = "README.md"
+
+[lib]
+name = "_ormdantic"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ormdantic-core.workspace = true
+ormdantic-schema.workspace = true
+ormdantic-hydrate.workspace = true
+ormdantic-dialects.workspace = true
+ormdantic-engine = { workspace = true, features = ["all-engines"] }
+ormdantic-sql.workspace = true
+pyo3 = { workspace = true, features = ["extension-module"] }
+
+[build-dependencies]
+pyo3-build-config = "0.28.3"

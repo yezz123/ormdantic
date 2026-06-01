@@ -4,4 +4,4 @@ set -e
 set -x
 
 # Build the docs
-mkdocs build -d build
+uv run zensical build

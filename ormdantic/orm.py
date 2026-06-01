@@ -1,21 +1,37 @@
 """Module providing a way to create ORM models and schemas"""
 
+import importlib
 from types import UnionType
-from typing import Callable, ForwardRef, Type, get_args, get_origin
+from typing import Any, Callable, ForwardRef, Type, Union, get_args, get_origin
 
-from pydantic.fields import ModelField
-from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import create_async_engine
-
-from ormdantic.generator import CRUD, Table
-from ormdantic.handler import (
+from ormdantic._introspect import (
+    FieldMetadata,
+    contains_list_annotation,
+    first_model_arg,
+    model_field,
+    model_fields,
+)
+from ormdantic.engine import NativeEngine
+from ormdantic.errors import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     UndefinedBackReferenceError,
-    snake_case,
 )
+from ormdantic.events import EventHandler, EventRegistry
+from ormdantic.migrations import MigrationManager
 from ormdantic.models import Map, OrmTable, Relationship
+from ormdantic.naming import snake_case
+from ormdantic.reflection import Inspector
+from ormdantic.schema import (
+    column_descriptor,
+    compile_drop_table_sql,
+    index_descriptors,
+)
+from ormdantic.session import Session
+from ormdantic.table import Table
 from ormdantic.types import ModelType
+
+_ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
 
 
 class Ormdantic:
@@ -25,14 +41,16 @@ class Ormdantic:
 
     def __init__(self, connection: str) -> None:
         """Register models as ORM models and create schemas"""
-        self._metadata: MetaData | None = None
-        self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
-        self._engine = create_async_engine(connection)
+        self._tables: dict[Type, Table] = {}  # type: ignore
+        self._connection = connection
+        self._native_engine = NativeEngine(connection)
+        self._events = EventRegistry()
         self._table_map: Map = Map()
+        self._runtime: Any | None = None
 
-    def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
+    def __getitem__(self, item: Type[ModelType]) -> Table[ModelType]:
         """Get a `Table` for the given pydantic model."""
-        return self._crud_generators[item]
+        return self._tables[item]
 
     def table(
         self,
@@ -59,7 +77,7 @@ class Ormdantic:
                 unique_constraints=unique_constraints or [],
                 columns=[
                     field
-                    for field in cls.__fields__
+                    for field in model_fields(cls)
                     if field not in cls_back_references
                 ],
                 relationships={},
@@ -73,26 +91,86 @@ class Ormdantic:
 
     async def init(self) -> None:
         """Initialize ORM models."""
-        # Populate relation information.
         for table_data in self._table_map.name_to_data.values():
             rels = self.get(table_data)
             table_data.relationships = rels
-        # Now that relation information is populated generate tables.
-        self._metadata = MetaData()
+        self._runtime = _ormdantic.PyDatabase(
+            self._connection, self._runtime_table_specs()
+        )
         for table_data in self._table_map.name_to_data.values():
-            self._crud_generators[table_data.model] = CRUD(
-                table_data,
-                self._table_map,
-                self._engine,
+            self._tables[table_data.model] = Table(
+                table_data=table_data,
+                table_map=self._table_map,
+                rust_handle=self._runtime.table(table_data.model.__name__),
+                events=self._events,
             )
-        await Table(self._engine, self._metadata, self._table_map).init()
-        async with self._engine.begin() as conn:
-            await conn.run_sync(self._metadata.create_all)
+        await self.create_all()
+
+    async def create_all(self) -> None:
+        """Create all registered tables."""
+        if self._runtime is None:
+            self._runtime = _ormdantic.PyDatabase(
+                self._connection, self._runtime_table_specs()
+            )
+        self._runtime.create_all()
+
+    async def drop_all(self) -> None:
+        """Drop all registered tables."""
+        if self._runtime is not None:
+            self._runtime.drop_all()
+            return
+        for tablename in reversed(list(self._table_map.name_to_data)):
+            sql = compile_drop_table_sql(tablename, self._connection)
+            await self._native_engine.execute(sql, ())
+
+    def transaction(self) -> Any:
+        """Open a native transaction context."""
+        return _OrmdanticTransaction(self)
+
+    def session(self) -> Session:
+        """Open an async unit-of-work session."""
+        return Session(self)
+
+    def inspect(self) -> Inspector:
+        """Return a database inspector."""
+        return Inspector(self)
+
+    @property
+    def migrations(self) -> MigrationManager:
+        """Return the migration manager."""
+        return MigrationManager(self)
+
+    def savepoint(self, name: str) -> Any:
+        """Open a savepoint context."""
+        return _OrmdanticSavepoint(self, name)
+
+    def on(self, event: str, handler: EventHandler) -> EventHandler:
+        """Register an event handler."""
+        return self._events.on(event, handler)
+
+    def off(self, event: str, handler: EventHandler) -> None:
+        """Remove a registered event handler."""
+        self._events.off(event, handler)
+
+    def clear_events(self, event: str | None = None) -> None:
+        """Clear event handlers for one event or all events."""
+        self._events.clear(event)
+
+    async def load(self, model: ModelType, path: str) -> Any:
+        """Explicitly load a relationship path for a model instance."""
+        table = self._table_map.model_to_data[type(model)]
+        loaded = await self[type(model)].find_one(getattr(model, table.pk), depth=1)
+        if loaded is None:
+            return None
+        value: Any = loaded
+        for part in path.split("."):
+            value = getattr(value, part)
+        return value
 
     def get(self, table_data: OrmTable[ModelType]) -> dict[str, Relationship]:
         """Get relationships for a given table."""
         relationships = {}
-        for field_name, field in table_data.model.__fields__.items():
+        for field_name, field in model_fields(table_data.model).items():
             related_table = self._get_related_table(field)
             if related_table is None:
                 continue
@@ -102,25 +180,27 @@ class Ormdantic:
                 )
 
                 continue
-            if get_origin(field.outer_type_) == list or field.type_ == ForwardRef(
-                f"{related_table.model.__name__}"
-            ):
+            if contains_list_annotation(
+                field.annotation
+            ) or field.annotation == ForwardRef(f"{related_table.model.__name__}"):
                 raise UndefinedBackReferenceError(
                     table_data.tablename, related_table.tablename, field_name
                 )
 
-            args = get_args(field.type_)
+            args = get_args(field.annotation)
             correct_type = (
-                related_table.model.__fields__[related_table.pk].type_ in args
+                model_field(related_table.model, related_table.pk).annotation in args
             )
-            origin = get_origin(field.type_)
-            if not args or origin != UnionType or not correct_type:
+            origin = get_origin(field.annotation)
+            if not args or origin not in {UnionType, Union} or not correct_type:
                 raise MustUnionForeignKeyError(
                     table_data.tablename,
                     related_table.tablename,
                     field_name,
                     related_table.model,
-                    related_table.model.__fields__[related_table.pk].type_.__name__,
+                    model_field(
+                        related_table.model, related_table.pk
+                    ).annotation.__name__,
                 )
 
             relationships[field_name] = Relationship(
@@ -129,20 +209,50 @@ class Ormdantic:
 
         return relationships
 
-    def _get_related_table(self, field: ModelField) -> OrmTable | None:  # type: ignore
+    def _runtime_table_specs(self) -> list[tuple[Any, ...]]:
+        """Build compact table descriptors for the Rust runtime."""
+        specs = []
+        for table in self._table_map.name_to_data.values():
+            columns = [
+                column_descriptor(
+                    table_map=self._table_map,
+                    table=table,
+                    field_name=field_name,
+                    field=field,
+                )
+                for field_name, field in model_fields(table.model).items()
+                if field_name not in table.back_references
+            ]
+            relationships = []
+            for field_name, relationship in table.relationships.items():
+                related = self._table_map.name_to_data[relationship.foreign_table]
+                relationships.append(
+                    (
+                        field_name,
+                        relationship.foreign_table,
+                        related.pk,
+                        relationship.back_references,
+                    )
+                )
+            specs.append(
+                (
+                    table.model.__name__,
+                    table.tablename,
+                    table.pk,
+                    columns,
+                    index_descriptors(table),
+                    table.unique_constraints,
+                    relationships,
+                )
+            )
+        return specs
+
+    def _get_related_table(self, field: FieldMetadata) -> OrmTable | None:  # type: ignore
         """Get related table for a given field."""
-        related_table: OrmTable | None = None  # type: ignore
-        # Try to get foreign model from union.
-        if args := get_args(field.type_):
-            for arg in args:
-                try:
-                    related_table = self._table_map.model_to_data.get(arg)
-                except TypeError:
-                    break
-                if related_table is not None:
-                    break
-        # Try to get foreign table from type.
-        return related_table or self._table_map.model_to_data.get(field.type_)
+        model = first_model_arg(
+            field.annotation, set(self._table_map.model_to_data.keys())
+        )
+        return self._table_map.model_to_data.get(model) if model else None
 
     @staticmethod
     def _get_many_relationship(
@@ -152,11 +262,17 @@ class Ormdantic:
         related_table: OrmTable,  # type: ignore
     ) -> Relationship:
         """Get many-to-many relationship."""
-        back_referenced_field = related_table.model.__fields__.get(back_reference)
-        # TODO: Check if back-reference is present but mismatched in type.
+        back_referenced_field = model_fields(related_table.model).get(back_reference)
+        if back_referenced_field is None:  # pragma: no cover
+            raise MismatchingBackReferenceError(
+                table_data.tablename,
+                related_table.tablename,
+                field_name,
+                back_reference,
+            )
         if (
-            table_data.model not in get_args(back_referenced_field.type_)
-            and table_data.model != back_referenced_field.type_
+            table_data.model not in get_args(back_referenced_field.annotation)
+            and table_data.model != back_referenced_field.annotation
         ):
             raise MismatchingBackReferenceError(
                 table_data.tablename,
@@ -164,7 +280,68 @@ class Ormdantic:
                 field_name,
                 back_reference,
             )
-        # Is the back referenced field also a list?
         return Relationship(
             foreign_table=related_table.tablename, back_references=back_reference
         )
+
+    def _ensure_runtime(self) -> Any:
+        if self._runtime is None:
+            self._runtime = _ormdantic.PyDatabase(
+                self._connection, self._runtime_table_specs()
+            )
+        return self._runtime
+
+    async def _begin(self) -> None:
+        await self._events.dispatch("before_begin", database=self)
+        self._ensure_runtime().begin()
+        await self._events.dispatch("after_begin", database=self)
+
+    async def _commit(self) -> None:
+        await self._events.dispatch("before_commit", database=self)
+        self._ensure_runtime().commit()
+        await self._events.dispatch("after_commit", database=self)
+
+    async def _rollback(self) -> None:
+        await self._events.dispatch("before_rollback", database=self)
+        self._ensure_runtime().rollback()
+        await self._events.dispatch("after_rollback", database=self)
+
+    async def _savepoint(self, name: str) -> None:
+        self._ensure_runtime().savepoint(name)
+
+    async def _rollback_to_savepoint(self, name: str) -> None:
+        self._ensure_runtime().rollback_to_savepoint(name)
+
+    async def _release_savepoint(self, name: str) -> None:
+        self._ensure_runtime().release_savepoint(name)
+
+
+class _OrmdanticTransaction:
+    def __init__(self, database: Ormdantic) -> None:
+        self._database = database
+
+    async def __aenter__(self) -> "_OrmdanticTransaction":
+        await self._database._begin()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is None:
+            await self._database._commit()
+        else:
+            await self._database._rollback()
+
+
+class _OrmdanticSavepoint:
+    def __init__(self, database: Ormdantic, name: str) -> None:
+        self._database = database
+        self._name = name
+
+    async def __aenter__(self) -> "_OrmdanticSavepoint":
+        await self._database._savepoint(self._name)
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is not None:
+            await self._database._rollback_to_savepoint(self._name)
+        else:
+            await self._database._release_savepoint(self._name)

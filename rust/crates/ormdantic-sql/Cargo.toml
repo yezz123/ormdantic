@@ -1,0 +1,25 @@
+[package]
+name = "ormdantic-sql"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "SQL AST and query compiler for Ormdantic"
+readme = "README.md"
+
+[lib]
+name = "ormdantic_sql"
+path = "src/lib.rs"
+
+[dependencies]
+ormdantic-core.workspace = true
+ormdantic-dialects.workspace = true
+
+[dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "sql_compiler"
+harness = false

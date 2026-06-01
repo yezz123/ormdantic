@@ -9,94 +9,58 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11"]
-      fail-fast: false
-
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: setup uv
-        uses: yezz123/setup-uv@v4
+          persist-credentials: false
+      - uses: actions/setup-python@v5
         with:
-          uv-version: "0.1.22"
-          uv-venv: ".venv"
-      - name: Install Dependencies
-        run: uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/linting.txt
-      - name: Run Pre-commit
-        run: bash scripts/format.sh
-      - name: check Static Analysis
-        run: bash scripts/lint.sh
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: uv sync --group linting
+      - run: bash scripts/lint.sh
 
   tests:
-
-    name: test py${{ matrix.python-version }} on ${{ matrix.os }}
-
+    name: py${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}-latest
-
-
     strategy:
-
+      fail-fast: false
       matrix:
-
-        python-version: ["3.10", "3.11", "3.12"]
-
+        python-version: ['3.10', '3.11', '3.12']
         os: [ubuntu, macos, windows]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: setup uv
-        uses: yezz123/setup-uv@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
-          uv-version: "0.1.22"
-          uv-venv: ".venv"
+          enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
 
-      - name: Install Dependencies
-        run:  uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/testing.txt && uv pip install -r requirements/extra.txt
-
-      - name: Freeze Dependencies
-        run: uv pip freeze
-
-      - name: Test with pytest
-        run: bash scripts/test.sh
+      - run: cargo test --workspace --exclude ormdantic-py
+      - run: uv sync --group dev
+      - run: uv run --group dev maturin develop
+      - run: bash scripts/test.sh
         env:
-          DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
+          DATABASE_URL: sqlite:///db.sqlite3
 
-      - name: Upload coverage
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        uses: codecov/codecov-action@v5
-
-  Integration:
-    name: test on python ${{ matrix.python-version }} with Integration tests
+  database-services:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-        postgres-version: [14]
-
-    # Service containers to run with `container-job`
     services:
-      # Label used to access the service container
       postgres:
-        # Docker Hub image
-        image: postgres:${{ matrix.postgres-version }}
-        # Provide the password for postgres
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
-        # Set health checks to wait until postgres has started
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -104,37 +68,60 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_DATABASE: mysql
+        options: >-
+          --health-cmd "mysqladmin ping -hmysql -uroot -pmysql"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 3306:3306
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: mariadb
+          MARIADB_DATABASE: mariadb
+        options: >-
+          --health-cmd "mariadb-admin ping -hmariadb -uroot -pmariadb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 3307:3306
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: setup uv
-        uses: yezz123/setup-uv@v4
-        with:
-          uv-version: "0.1.22"
-          uv-venv: ".venv"
-      - name: Install Dependencies
-        run: uv pip install -r requirements/pyproject.txt && uv pip install -r requirements/testing.txt && uv pip install -r requirements/extra.txt
-      - name: Integration Tests - SQLite
-        run: bash scripts/integration.sh
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p ormdantic-engine
         env:
-          DATABASE_URL: sqlite+aiosqlite:///db.sqlite3
-      - name: Integration Tests - Postgres
-        run: bash scripts/integration.sh
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
 
-
-  # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
-  check:
-    if: always()
-    needs: [lint, tests, Integration]
+  optional-enterprise-engines:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Decide whether the needed jobs succeeded or failed
-        uses: re-actors/alls-green@release/v1
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: cargo test -p ormdantic-engine --features mssql,oracle --test mssql_exec --test oracle_exec
+        env:
+          ORMDANTIC_MSSQL_URL: ${{ secrets.ORMDANTIC_MSSQL_URL }}
+          ORMDANTIC_ORACLE_URL: ${{ secrets.ORMDANTIC_ORACLE_URL }}
+
+  check:
+    if: always()
+    needs: [lint, tests, database-services]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
