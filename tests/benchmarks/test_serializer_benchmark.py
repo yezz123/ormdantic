@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import tempfile
 from dataclasses import dataclass
 from typing import Any, Iterator
 from uuid import UUID, uuid4
@@ -7,6 +9,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import BaseModel, Field
 
+from ormdantic import Ormdantic, column
+from ormdantic.migrations import MigrationOperation, MigrationPlan
 from ormdantic.models import Map, OrmTable, Relationship
 from ormdantic.serializer import OrmSerializer
 
@@ -236,3 +240,63 @@ def test_one_to_many_serializer_benchmark(benchmark: Any) -> None:
 
     assert len(result) == 100
     assert len(result[0].many) == 10
+
+
+async def _runtime_crud_once(database_url: str) -> int:
+    db = Ormdantic(database_url)
+
+    @db.table(pk="id")
+    class BenchRuntimeFlavor(BaseModel):
+        id: str
+        name: str
+        strength: int
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+    for index in range(25):
+        await db[BenchRuntimeFlavor].insert(
+            BenchRuntimeFlavor(id=str(index), name=f"flavor-{index}", strength=index)
+        )
+    results = await db[BenchRuntimeFlavor].find_many(
+        where=column("strength").ge(10) & column("name").like("flavor-%")
+    )
+    return len(results.data)
+
+
+def test_runtime_crud_expression_benchmark(benchmark: Any) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        database_url = f"sqlite:///{tmp}/runtime.sqlite3"
+
+        result = benchmark(lambda: asyncio.run(_runtime_crud_once(database_url)))
+
+    assert result == 15
+
+
+async def _reflection_migration_once(database_url: str) -> int:
+    db = Ormdantic(database_url)
+
+    @db.table(pk="id")
+    class BenchMigrationFlavor(BaseModel):
+        id: str
+        name: str
+
+    await db.init()
+    await db.migrations.apply(
+        f"bench-{uuid4()}",
+        MigrationPlan(
+            [MigrationOperation("CREATE TABLE IF NOT EXISTS bench_extra (id TEXT)")]
+        ),
+    )
+    return len(await db.inspect().table_names())
+
+
+def test_reflection_migration_benchmark(benchmark: Any) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        database_url = f"sqlite:///{tmp}/migration.sqlite3"
+
+        result = benchmark(
+            lambda: asyncio.run(_reflection_migration_once(database_url))
+        )
+
+    assert result >= 2
