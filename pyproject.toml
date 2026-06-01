@@ -90,6 +90,7 @@ dev = [
     { include-group = "docs" },
     "pytest-benchmark",
     "maturin>=1,<2",
+    "pytest-codspeed>=5.0.3",
 ]
 
 [tool.hatch.version]
