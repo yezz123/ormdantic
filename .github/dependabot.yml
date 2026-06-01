@@ -1,25 +1,40 @@
 version: 2
-
 updates:
-  # GitHub Actions
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
-      interval: 'weekly'
-    commit-message:
-      prefix: ⬆
-    cooldown:
-      default-days: 7
-  # Python
-  - package-ecosystem: 'pip'
-    directory: '/'
-    schedule:
-      interval: 'weekly'
+      interval: 'monthly'
     groups:
       python-packages:
         patterns:
           - '*'
     commit-message:
       prefix: ⬆
-    cooldown:
-      default-days: 7
+    labels:
+      - 'upgrade'
+
+  - package-ecosystem: 'uv'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    groups:
+      python-packages:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: ⬆
+    labels:
+      - 'upgrade'
+
+  - package-ecosystem: 'cargo'
+    directory: 'rust/crates'
+    schedule:
+      interval: 'monthly'
+    groups:
+      cargo-packages:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: ⬆
+    labels:
+      - 'upgrade'
