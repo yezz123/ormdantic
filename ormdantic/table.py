@@ -137,7 +137,9 @@ class Table(Generic[ModelType]):
             rows=[tuple(row) for row in result["rows"]],
         ).scalar()
 
-    def _deserialize(self, result: dict[str, Any], *, is_array: bool, depth: int) -> Any:
+    def _deserialize(
+        self, result: dict[str, Any], *, is_array: bool, depth: int
+    ) -> Any:
         native_result = NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],

@@ -8,7 +8,9 @@ from ormdantic.migrations import MigrationOperation, MigrationPlan
 
 
 @pytest.mark.asyncio
-async def test_expression_facade_reflection_migrations_and_session_delete(tmp_path) -> None:
+async def test_expression_facade_reflection_migrations_and_session_delete(
+    tmp_path,
+) -> None:
     db = Ormdantic(f"sqlite:///{tmp_path / 'parity.sqlite3'}")
 
     @db.table(pk="id")
