@@ -23,10 +23,10 @@ Ormdantic("oracle+oracledb://user:password@localhost:1521/service")
 | PostgreSQL | Full | Parameter binding, row decoding, and transactions are supported. |
 | MySQL | Full | Uses the Rust MySQL driver. |
 | MariaDB | Full | Uses the MySQL protocol where compatible. |
-| SQL Server | Optional gate | Dialect recognized; runtime reports a clear optional-feature error until native client support is enabled. |
-| Oracle | Optional gate | Dialect recognized; runtime reports a clear optional-feature/client-library error until enabled. |
+| SQL Server | Full with `mssql` feature | Uses the pure Rust TDS driver. Add `trust_cert=true` for local/self-signed TLS test servers. |
+| Oracle | Full with `oracle` feature | Uses the pure Rust Oracle TNS driver. Service names can be passed in the path or `service_name` query parameter. |
 
-SQL Server and Oracle are intentionally optional because their drivers and client-library setup can complicate portable Python wheels.
+SQL Server and Oracle are intentionally optional because their drivers add larger enterprise-runtime dependency trees.
 
 ## Test Environment Variables
 

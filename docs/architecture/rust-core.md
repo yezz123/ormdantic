@@ -66,8 +66,8 @@ Rust owns:
 | `postgres` | Full native execution through the `postgres` crate. |
 | `mysql` | Full native execution through the `mysql` crate. |
 | `mariadb` | Full native execution through the MySQL protocol. |
-| `mssql` | Dialect represented; runtime behind an optional gate. |
-| `oracle` | Dialect represented; runtime behind an optional client-library gate. |
+| `mssql` | Full native execution through `tiberius` behind the optional `mssql` feature. |
+| `oracle` | Full native execution through `oracle-rs` behind the optional `oracle` feature. |
 
 SQLite, PostgreSQL, and MySQL are enabled by default. MariaDB, SQL Server, Oracle, and `all-engines` builds are feature-gated in `ormdantic-engine`.
 
