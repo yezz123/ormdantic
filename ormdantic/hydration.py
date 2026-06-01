@@ -1,4 +1,4 @@
-"""Private hydration bridge with Rust fast paths and Python fallbacks."""
+"""Hydration helpers backed by Rust."""
 
 from __future__ import annotations
 
@@ -20,11 +20,7 @@ def hydrate_flat_payload(
     rows: list[tuple[Any, ...]],
     is_array: bool,
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
-    """Hydrate flat SQL rows into dict payloads.
-
-    The Rust extension owns the fast path when it is available. The Python
-    fallback keeps source checkouts usable before the extension is built.
-    """
+    """Hydrate flat SQL rows into dict payloads."""
     if _ormdantic is not None:
         return cast(
             dict[str, Any] | list[dict[str, Any]] | None,
@@ -52,10 +48,10 @@ def hydrate_joined_payload(
     path_pks: list[tuple[str, str]],
     array_paths: list[str],
 ) -> dict[str, Any] | None:
-    """Hydrate joined SQL rows into the serializer's nested dict payload."""
+    """Hydrate joined SQL rows into nested dict payloads."""
     if _ormdantic is None or not hasattr(_ormdantic, "hydrate_joined"):
         raise RuntimeError(
-            "Ormdantic vNext requires the Rust extension for joined hydration. "
+            "Ormdantic requires the Rust extension for joined hydration. "
             "Install the package with maturin or reinstall the wheel."
         )
     payload = cast(
@@ -96,13 +92,10 @@ def _hydrate_flat_payload_python(
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
     parsed_columns = [_parse_column_alias(alias, tablename) for alias in columns]
     pk_idx = _get_pk_index(parsed_columns, tablename, pk)
-
     if not rows:
         return None
-
     if not is_array:
         return _row_to_dict(rows[0], parsed_columns)
-
     records: OrderedDict[Any, dict[str, Any]] = OrderedDict()
     for row in rows:
         pk_value = row[pk_idx]

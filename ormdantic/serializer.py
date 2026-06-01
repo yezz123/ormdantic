@@ -1,3 +1,5 @@
+"""Pydantic model construction from Rust row payloads."""
+
 import json
 from types import NoneType
 from typing import Any, Generic, cast, get_args
@@ -5,7 +7,7 @@ from typing import Any, Generic, cast, get_args
 from pydantic import BaseModel, Field
 
 from ormdantic._introspect import is_dict_annotation, is_list_annotation, model_field
-from ormdantic.generator._hydration import hydrate_flat_payload, hydrate_joined_payload
+from ormdantic.hydration import hydrate_flat_payload, hydrate_joined_payload
 from ormdantic.models import Map, OrmTable
 from ormdantic.types import ModelType, SerializedType
 
@@ -29,14 +31,6 @@ class OrmSerializer(Generic[SerializedType]):
         is_array: bool,
         depth: int,
     ) -> None:
-        """Generate Python models from a table map and result set.
-
-        :param table_data: Table data for the returned model type.
-        :param table_map: Map of tablenames and models.
-        :param result_set: SQL Alchemy cursor result.
-        :param is_array: Deserialize as a model or a list of models?
-        :param depth: Model tree depth.
-        """
         self._table_data = table_data
         self._table_map = table_map
         self._result_set = result_set
@@ -55,7 +49,7 @@ class OrmSerializer(Generic[SerializedType]):
 
     def deserialize(self) -> SerializedType:
         """Deserialize the result set into Python models."""
-        if self._can_use_flat_hydration():
+        if self._depth <= 0:
             return self._deserialize_flat()
         self._return_dict = (
             hydrate_joined_payload(
@@ -80,9 +74,6 @@ class OrmSerializer(Generic[SerializedType]):
                 self._table_data.tablename
             ]
         )
-
-    def _can_use_flat_hydration(self) -> bool:
-        return self._depth <= 0
 
     def _deserialize_flat(self) -> SerializedType:
         rows = [tuple(row) for row in self._result_set]
@@ -145,8 +136,8 @@ class OrmSerializer(Generic[SerializedType]):
                 else:
                     node[key] = self._prep_result(node[key], ref_schema)
                 continue
-            if td := schema.table_data:
-                node[key] = self._sql_type_to_py(td.model, key, val)
+            if table_data := schema.table_data:
+                node[key] = self._sql_type_to_py(table_data.model, key, val)
         return node
 
     def _get_result_schema(

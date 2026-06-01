@@ -15,11 +15,12 @@ class Session:
         self._database = database
         self._new: list[BaseModel] = []
         self._dirty: list[BaseModel] = []
+        self._deleted: list[BaseModel] = []
         self._identity_map: dict[tuple[type[BaseModel], Any], BaseModel] = {}
 
     async def __aenter__(self) -> Session:
         """Begin a native transaction and return the session."""
-        await self._database._native_engine.begin()
+        await self._database._begin()
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -39,6 +40,21 @@ class Session:
         if model not in self._dirty:
             self._dirty.append(model)
 
+    def delete(self, model: BaseModel) -> None:
+        """Stage an existing model for deletion on flush."""
+        if model not in self._deleted:
+            self._deleted.append(model)
+
+    def merge(self, model: BaseModel) -> BaseModel:
+        """Remember and return a detached model instance."""
+        self._remember(model)
+        return model
+
+    def expire(self, model: BaseModel) -> None:
+        """Remove a model from the identity map."""
+        table = self._database._table_map.model_to_data[type(model)]
+        self._identity_map.pop((type(model), getattr(model, table.pk)), None)
+
     async def flush(self) -> None:
         """Write staged inserts and updates without ending the transaction."""
         await self._database._events.dispatch("before_flush", session=self)
@@ -51,18 +67,26 @@ class Session:
             stored = await self._database[type(model)].update(model)
             self._remember(stored)
         self._dirty.clear()
+
+        for model in list(self._deleted):
+            table = self._database._table_map.model_to_data[type(model)]
+            pk = getattr(model, table.pk)
+            await self._database[type(model)].delete(pk)
+            self._identity_map.pop((type(model), pk), None)
+        self._deleted.clear()
         await self._database._events.dispatch("after_flush", session=self)
 
     async def commit(self) -> None:
         """Flush changes and commit the active transaction."""
         await self.flush()
-        await self._database._native_engine.commit()
+        await self._database._commit()
 
     async def rollback(self) -> None:
         """Discard staged changes and roll back the active transaction."""
         self._new.clear()
         self._dirty.clear()
-        await self._database._native_engine.rollback()
+        self._deleted.clear()
+        await self._database._rollback()
 
     async def refresh(self, model: BaseModel, *, depth: int = 0) -> BaseModel | None:
         """Reload a model by primary key and remember the refreshed instance."""

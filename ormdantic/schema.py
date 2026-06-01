@@ -1,4 +1,4 @@
-"""Private bridge from Python table metadata to Rust schema/DDL compilation."""
+"""Schema descriptor helpers for the Rust runtime."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ormdantic._introspect import (
     is_list_annotation,
     model_fields,
 )
-from ormdantic.handler import TypeConversionError
+from ormdantic.errors import TypeConversionError
 from ormdantic.models import Map
 
 try:
@@ -29,7 +29,6 @@ def validate_table_map(table_map: Map) -> int | None:
     """Validate current Python table metadata through Rust when available."""
     if _ormdantic is None or not hasattr(_ormdantic, "validate_schema_tables"):
         return None
-
     tables = [
         (table.tablename, table.pk, list(table.columns))
         for table in table_map.name_to_data.values()
@@ -42,7 +41,7 @@ def compile_create_table_sql(table_map: Map, tablename: str, dialect: str) -> li
     rust = _require_schema_symbol("compile_create_table_sql")
     table = table_map.name_to_data[tablename]
     columns = [
-        _column_descriptor(table_map, table, field_name, field)
+        column_descriptor(table_map, table, field_name, field)
         for field_name, field in model_fields(table.model).items()
         if field_name not in table.back_references
     ]
@@ -51,7 +50,7 @@ def compile_create_table_sql(table_map: Map, tablename: str, dialect: str) -> li
             dialect,
             table.tablename,
             columns,
-            _index_descriptors(table),
+            index_descriptors(table),
             table.unique_constraints,
         )
     )
@@ -63,16 +62,7 @@ def compile_drop_table_sql(tablename: str, dialect: str) -> str:
     return str(rust.compile_drop_table_sql(dialect, tablename))
 
 
-def _require_schema_symbol(symbol: str) -> Any:
-    if _ormdantic is None or not hasattr(_ormdantic, symbol):
-        raise RuntimeError(
-            "Ormdantic vNext requires the Rust extension for schema compilation. "
-            "Install the package with maturin or reinstall the wheel."
-        )
-    return _ormdantic
-
-
-def _column_descriptor(
+def column_descriptor(
     table_map: Map, table: Any, field_name: str, field: FieldMetadata
 ) -> tuple[
     str,
@@ -85,23 +75,37 @@ def _column_descriptor(
     bool,
     list[str],
 ]:
+    """Return a compact Rust schema descriptor for one model field."""
     relationship = table.relationships.get(field_name)
     foreign_table = relationship.foreign_table if relationship else None
     foreign_column = table_map.name_to_data[foreign_table].pk if foreign_table else None
     return (
         field_name,
-        _field_kind(field),
+        field_kind(field),
         not field.required,
         field_name == table.pk,
         foreign_table,
         foreign_column,
         field.max_length,
         field_name in table.unique,
-        _check_constraints(field_name, field),
+        check_constraints(field_name, field),
     )
 
 
-def _field_kind(field: FieldMetadata) -> str:
+def index_descriptors(table: Any) -> list[tuple[str, list[str], bool]]:
+    """Return compact Rust index descriptors for a table."""
+    indexes = [
+        (f"{table.tablename}_{column}_idx", [column], False) for column in table.indexed
+    ]
+    indexes.extend(
+        (f"{table.tablename}_{column}_unique_idx", [column], True)
+        for column in table.unique
+    )
+    return indexes
+
+
+def field_kind(field: FieldMetadata) -> str:
+    """Map a Pydantic field to a Rust schema field kind."""
     annotation = field.annotation
     if get_origin(annotation) is Callable or annotation is Callable:
         raise TypeConversionError(annotation)
@@ -149,18 +153,8 @@ def _field_kind(field: FieldMetadata) -> str:
     return "json"
 
 
-def _index_descriptors(table: Any) -> list[tuple[str, list[str], bool]]:
-    indexes = [
-        (f"{table.tablename}_{column}_idx", [column], False) for column in table.indexed
-    ]
-    indexes.extend(
-        (f"{table.tablename}_{column}_unique_idx", [column], True)
-        for column in table.unique
-    )
-    return indexes
-
-
-def _check_constraints(field_name: str, field: FieldMetadata) -> list[str]:
+def check_constraints(field_name: str, field: FieldMetadata) -> list[str]:
+    """Return DDL check constraints for a Pydantic field."""
     checks = []
     if field.ge is not None:
         checks.append(f"{field_name} >= {field.ge}")
@@ -175,3 +169,12 @@ def _check_constraints(field_name: str, field: FieldMetadata) -> list[str]:
     if field.max_length is not None:
         checks.append(f"LENGTH({field_name}) <= {field.max_length}")
     return checks
+
+
+def _require_schema_symbol(symbol: str) -> Any:
+    if _ormdantic is None or not hasattr(_ormdantic, symbol):
+        raise RuntimeError(
+            "Ormdantic requires the Rust extension for schema compilation. "
+            "Install the package with maturin or reinstall the wheel."
+        )
+    return _ormdantic

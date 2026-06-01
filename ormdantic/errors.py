@@ -1,3 +1,5 @@
+"""Public Ormdantic exception types."""
+
 from typing import Type
 
 

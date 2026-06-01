@@ -21,6 +21,18 @@ class EventRegistry:
         self._handlers[event].append(handler)
         return handler
 
+    def off(self, event: str, handler: EventHandler) -> None:
+        """Remove a previously registered event handler."""
+        if handler in self._handlers.get(event, []):
+            self._handlers[event].remove(handler)
+
+    def clear(self, event: str | None = None) -> None:
+        """Clear handlers for one event or for all events."""
+        if event is None:
+            self._handlers.clear()
+        else:
+            self._handlers.pop(event, None)
+
     async def dispatch(self, event: str, **payload: Any) -> None:
         """Dispatch an event payload to all registered handlers."""
         for handler in self._handlers.get(event, []):

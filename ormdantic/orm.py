@@ -1,5 +1,6 @@
 """Module providing a way to create ORM models and schemas"""
 
+import importlib
 from types import UnionType
 from typing import Any, Callable, ForwardRef, Type, Union, get_args, get_origin
 
@@ -11,18 +12,26 @@ from ormdantic._introspect import (
     model_fields,
 )
 from ormdantic.engine import NativeEngine
-from ormdantic.events import EventHandler, EventRegistry
-from ormdantic.generator import CRUD, Table
-from ormdantic.generator._rust_schema import compile_drop_table_sql
-from ormdantic.handler import (
+from ormdantic.errors import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     UndefinedBackReferenceError,
-    snake_case,
 )
+from ormdantic.events import EventHandler, EventRegistry
+from ormdantic.migrations import MigrationManager
 from ormdantic.models import Map, OrmTable, Relationship
+from ormdantic.naming import snake_case
+from ormdantic.reflection import Inspector
+from ormdantic.schema import (
+    column_descriptor,
+    compile_drop_table_sql,
+    index_descriptors,
+)
 from ormdantic.session import Session
+from ormdantic.table import Table
 from ormdantic.types import ModelType
+
+_ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
 
 
 class Ormdantic:
@@ -32,15 +41,16 @@ class Ormdantic:
 
     def __init__(self, connection: str) -> None:
         """Register models as ORM models and create schemas"""
-        self._crud_generators: dict[Type, CRUD] = {}  # type: ignore
+        self._tables: dict[Type, Table] = {}  # type: ignore
         self._connection = connection
         self._native_engine = NativeEngine(connection)
         self._events = EventRegistry()
         self._table_map: Map = Map()
+        self._runtime: Any | None = None
 
-    def __getitem__(self, item: Type[ModelType]) -> CRUD[ModelType]:
+    def __getitem__(self, item: Type[ModelType]) -> Table[ModelType]:
         """Get a `Table` for the given pydantic model."""
-        return self._crud_generators[item]
+        return self._tables[item]
 
     def table(
         self,
@@ -84,33 +94,55 @@ class Ormdantic:
         for table_data in self._table_map.name_to_data.values():
             rels = self.get(table_data)
             table_data.relationships = rels
+        self._runtime = _ormdantic.PyDatabase(
+            self._connection, self._runtime_table_specs()
+        )
         for table_data in self._table_map.name_to_data.values():
-            self._crud_generators[table_data.model] = CRUD(
-                table_data,
-                self._table_map,
-                self._connection,
-                self._native_engine,
-                self._events,
+            self._tables[table_data.model] = Table(
+                table_data=table_data,
+                table_map=self._table_map,
+                rust_handle=self._runtime.table(table_data.model.__name__),
+                events=self._events,
             )
         await self.create_all()
 
     async def create_all(self) -> None:
         """Create all registered tables."""
-        await Table(self._connection, self._table_map).init()
+        if self._runtime is None:
+            self._runtime = _ormdantic.PyDatabase(
+                self._connection, self._runtime_table_specs()
+            )
+        self._runtime.create_all()
 
     async def drop_all(self) -> None:
         """Drop all registered tables."""
+        if self._runtime is not None:
+            self._runtime.drop_all()
+            return
         for tablename in reversed(list(self._table_map.name_to_data)):
             sql = compile_drop_table_sql(tablename, self._connection)
             await self._native_engine.execute(sql, ())
 
     def transaction(self) -> Any:
         """Open a native transaction context."""
-        return self._native_engine.transaction()
+        return _OrmdanticTransaction(self)
 
     def session(self) -> Session:
         """Open an async unit-of-work session."""
         return Session(self)
+
+    def inspect(self) -> Inspector:
+        """Return a database inspector."""
+        return Inspector(self)
+
+    @property
+    def migrations(self) -> MigrationManager:
+        """Return the migration manager."""
+        return MigrationManager(self)
+
+    def savepoint(self, name: str) -> Any:
+        """Open a savepoint context."""
+        return _OrmdanticSavepoint(self, name)
 
     def on(self, event: str, handler: EventHandler) -> EventHandler:
         """Register an event handler."""
@@ -169,6 +201,44 @@ class Ormdantic:
 
         return relationships
 
+    def _runtime_table_specs(self) -> list[tuple[Any, ...]]:
+        """Build compact table descriptors for the Rust runtime."""
+        specs = []
+        for table in self._table_map.name_to_data.values():
+            columns = [
+                column_descriptor(
+                    table_map=self._table_map,
+                    table=table,
+                    field_name=field_name,
+                    field=field,
+                )
+                for field_name, field in model_fields(table.model).items()
+                if field_name not in table.back_references
+            ]
+            relationships = []
+            for field_name, relationship in table.relationships.items():
+                related = self._table_map.name_to_data[relationship.foreign_table]
+                relationships.append(
+                    (
+                        field_name,
+                        relationship.foreign_table,
+                        related.pk,
+                        relationship.back_references,
+                    )
+                )
+            specs.append(
+                (
+                    table.model.__name__,
+                    table.tablename,
+                    table.pk,
+                    columns,
+                    index_descriptors(table),
+                    table.unique_constraints,
+                    relationships,
+                )
+            )
+        return specs
+
     def _get_related_table(self, field: FieldMetadata) -> OrmTable | None:  # type: ignore
         """Get related table for a given field."""
         model = first_model_arg(
@@ -205,3 +275,51 @@ class Ormdantic:
         return Relationship(
             foreign_table=related_table.tablename, back_references=back_reference
         )
+
+    def _ensure_runtime(self) -> Any:
+        if self._runtime is None:
+            self._runtime = _ormdantic.PyDatabase(
+                self._connection, self._runtime_table_specs()
+            )
+        return self._runtime
+
+    async def _begin(self) -> None:
+        self._ensure_runtime().begin()
+
+    async def _commit(self) -> None:
+        self._ensure_runtime().commit()
+
+    async def _rollback(self) -> None:
+        self._ensure_runtime().rollback()
+
+    async def _savepoint(self, name: str) -> None:
+        self._ensure_runtime().savepoint(name)
+
+
+class _OrmdanticTransaction:
+    def __init__(self, database: Ormdantic) -> None:
+        self._database = database
+
+    async def __aenter__(self) -> "_OrmdanticTransaction":
+        await self._database._begin()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is None:
+            await self._database._commit()
+        else:
+            await self._database._rollback()
+
+
+class _OrmdanticSavepoint:
+    def __init__(self, database: Ormdantic, name: str) -> None:
+        self._database = database
+        self._name = name
+
+    async def __aenter__(self) -> "_OrmdanticSavepoint":
+        await self._database._savepoint(self._name)
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is not None:
+            await self._database._rollback()
