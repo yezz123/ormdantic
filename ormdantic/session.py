@@ -17,6 +17,7 @@ class Session:
         self._dirty: list[BaseModel] = []
         self._deleted: list[BaseModel] = []
         self._identity_map: dict[tuple[type[BaseModel], Any], BaseModel] = {}
+        self._closed = False
 
     async def __aenter__(self) -> Session:
         """Begin a native transaction and return the session."""
@@ -25,6 +26,8 @@ class Session:
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         """Commit on success and roll back on error."""
+        if self._closed:
+            return
         if exc_type is None:
             await self.commit()
         else:
@@ -46,8 +49,16 @@ class Session:
             self._deleted.append(model)
 
     def merge(self, model: BaseModel) -> BaseModel:
-        """Remember and return a detached model instance."""
+        """Merge a detached model into the identity map and stage it as dirty."""
+        table = self._database._table_map.model_to_data[type(model)]
+        key = (type(model), getattr(model, table.pk))
+        if cached := self._identity_map.get(key):
+            for field, value in model.__dict__.items():
+                setattr(cached, field, value)
+            self.mark_dirty(cached)
+            return cached
         self._remember(model)
+        self.mark_dirty(model)
         return model
 
     def expire(self, model: BaseModel) -> None:
@@ -78,15 +89,21 @@ class Session:
 
     async def commit(self) -> None:
         """Flush changes and commit the active transaction."""
+        if self._closed:
+            return
         await self.flush()
         await self._database._commit()
+        self._closed = True
 
     async def rollback(self) -> None:
         """Discard staged changes and roll back the active transaction."""
+        if self._closed:
+            return
         self._new.clear()
         self._dirty.clear()
         self._deleted.clear()
         await self._database._rollback()
+        self._closed = True
 
     async def refresh(self, model: BaseModel, *, depth: int = 0) -> BaseModel | None:
         """Reload a model by primary key and remember the refreshed instance."""
@@ -101,6 +118,17 @@ class Session:
     def get_cached(self, model_type: type[BaseModel], pk: Any) -> BaseModel | None:
         """Return a model from the identity map if it has been remembered."""
         return self._identity_map.get((model_type, pk))
+
+    async def get(
+        self, model_type: type[BaseModel], pk: Any, *, depth: int = 0
+    ) -> BaseModel | None:
+        """Return a cached model or load it by primary key."""
+        if cached := self.get_cached(model_type, pk):
+            return cached
+        loaded = await self._database[model_type].find_one(pk, depth=depth)
+        if loaded is not None:
+            self._remember(loaded)
+        return loaded
 
     def _remember(self, model: BaseModel) -> None:
         """Store a model in the identity map by model type and primary key."""

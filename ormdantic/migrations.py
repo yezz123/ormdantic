@@ -11,6 +11,7 @@ class MigrationOperation:
     """A SQL migration operation."""
 
     sql: str
+    values: tuple[Any, ...] = ()
 
 
 @dataclass
@@ -50,7 +51,9 @@ class MigrationManager:
         await self.ensure_revision_table()
         async with self._database.transaction():
             for operation in plan.operations:
-                await self._database._native_engine.execute(operation.sql, ())
+                await self._database._native_engine.execute(
+                    operation.sql, operation.values
+                )
             await self._database._native_engine.execute(
                 "INSERT INTO ormdantic_migrations (revision) VALUES (?)",
                 (revision,),
@@ -61,7 +64,9 @@ class MigrationManager:
         await self.ensure_revision_table()
         async with self._database.transaction():
             for operation in plan.operations:
-                await self._database._native_engine.execute(operation.sql, ())
+                await self._database._native_engine.execute(
+                    operation.sql, operation.values
+                )
             await self._database._native_engine.execute(
                 "DELETE FROM ormdantic_migrations WHERE revision = ?",
                 (revision,),

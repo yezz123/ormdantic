@@ -148,6 +148,14 @@ class Ormdantic:
         """Register an event handler."""
         return self._events.on(event, handler)
 
+    def off(self, event: str, handler: EventHandler) -> None:
+        """Remove a registered event handler."""
+        self._events.off(event, handler)
+
+    def clear_events(self, event: str | None = None) -> None:
+        """Clear event handlers for one event or all events."""
+        self._events.clear(event)
+
     async def load(self, model: ModelType, path: str) -> Any:
         """Explicitly load a relationship path for a model instance."""
         table = self._table_map.model_to_data[type(model)]
@@ -284,16 +292,28 @@ class Ormdantic:
         return self._runtime
 
     async def _begin(self) -> None:
+        await self._events.dispatch("before_begin", database=self)
         self._ensure_runtime().begin()
+        await self._events.dispatch("after_begin", database=self)
 
     async def _commit(self) -> None:
+        await self._events.dispatch("before_commit", database=self)
         self._ensure_runtime().commit()
+        await self._events.dispatch("after_commit", database=self)
 
     async def _rollback(self) -> None:
+        await self._events.dispatch("before_rollback", database=self)
         self._ensure_runtime().rollback()
+        await self._events.dispatch("after_rollback", database=self)
 
     async def _savepoint(self, name: str) -> None:
         self._ensure_runtime().savepoint(name)
+
+    async def _rollback_to_savepoint(self, name: str) -> None:
+        self._ensure_runtime().rollback_to_savepoint(name)
+
+    async def _release_savepoint(self, name: str) -> None:
+        self._ensure_runtime().release_savepoint(name)
 
 
 class _OrmdanticTransaction:
@@ -322,4 +342,6 @@ class _OrmdanticSavepoint:
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if exc_type is not None:
-            await self._database._rollback()
+            await self._database._rollback_to_savepoint(self._name)
+        else:
+            await self._database._release_savepoint(self._name)

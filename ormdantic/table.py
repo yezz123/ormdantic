@@ -79,7 +79,7 @@ class Table(Generic[ModelType]):
     ) -> Result[ModelType]:
         """Find many model instances."""
         depth = max(depth, loader_depth(load))
-        filters, values = self._parse_where(self._normalize_where(where))
+        filters, values = self._compile_where(where)
         result = self._rust_handle.find_many(
             filters,
             values,
@@ -116,7 +116,13 @@ class Table(Generic[ModelType]):
 
     async def upsert(self, model_instance: ModelType) -> ModelType:
         """Insert or update a model instance."""
+        await self._events.dispatch(
+            "before_upsert", model=model_instance, table=self._table_data
+        )
         self._rust_handle.upsert(self._payload(model_instance))
+        await self._events.dispatch(
+            "after_upsert", model=model_instance, table=self._table_data
+        )
         return model_instance
 
     async def delete(self, pk: Any) -> bool:
@@ -130,7 +136,7 @@ class Table(Generic[ModelType]):
         self, where: dict[str, Any] | QueryExpression | None = None, depth: int = 0
     ) -> int:
         """Count records matching an optional filter."""
-        filters, values = self._parse_where(self._normalize_where(where))
+        filters, values = self._compile_where(where)
         result = self._rust_handle.count(filters, values)
         return NativeResult(
             columns=list(result["columns"]),
@@ -181,14 +187,50 @@ class Table(Generic[ModelType]):
         return filters, values
 
     @staticmethod
-    def _normalize_where(
-        where: dict[str, Any] | QueryExpression | None,
-    ) -> dict[str, Any]:
+    def _normalize_where(where: dict[str, Any] | None) -> dict[str, Any]:
         if where is None:
             return {}
-        if isinstance(where, QueryExpression):
-            return where.to_where()
         return where
+
+    def _compile_where(
+        self, where: dict[str, Any] | QueryExpression | None
+    ) -> tuple[Any, dict[str, Any]]:
+        if isinstance(where, QueryExpression):
+            return self._parse_expression(where, "expr")
+        return self._parse_where(self._normalize_where(where))
+
+    def _parse_expression(
+        self, expression: QueryExpression, prefix: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if expression.connector == "leaf":
+            filters, values = self._parse_where(expression.filters or {})
+            filters, values = self._rename_filter_params(filters, values, prefix)
+            return {"connector": "leaf", "filters": filters}, values
+        children = []
+        expression_values: dict[str, Any] = {}
+        for idx, child in enumerate(expression.children):
+            child_tree, child_values = self._parse_expression(child, f"{prefix}_{idx}")
+            children.append(child_tree)
+            expression_values.update(child_values)
+        return {
+            "connector": expression.connector,
+            "children": children,
+        }, expression_values
+
+    @staticmethod
+    def _rename_filter_params(
+        filters: list[tuple[str, str, list[str]]], values: dict[str, Any], prefix: str
+    ) -> tuple[list[tuple[str, str, list[str]]], dict[str, Any]]:
+        renamed_values: dict[str, Any] = {}
+        renamed_filters = []
+        for column, operator, params in filters:
+            renamed_params = []
+            for param in params:
+                renamed = f"{prefix}__{param}"
+                renamed_params.append(renamed)
+                renamed_values[renamed] = values[param]
+            renamed_filters.append((column, operator, renamed_params))
+        return renamed_filters, renamed_values
 
     @staticmethod
     def _split_filter_key(key: str) -> tuple[str, str]:

@@ -31,8 +31,17 @@ class QueryExpression:
             return merged
         raise ValueError("OR expressions require native disjunction support")
 
+    def to_filter_tree(self) -> dict[str, Any]:
+        """Return a recursive filter tree for the Rust runtime."""
+        if self.connector == "leaf":
+            return {"connector": "leaf", "filters": dict(self.filters or {})}
+        return {
+            "connector": self.connector,
+            "children": [child.to_filter_tree() for child in self.children],
+        }
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, eq=False)
 class ColumnExpression:
     """Column helper for building query expressions."""
 
@@ -41,20 +50,38 @@ class ColumnExpression:
     def eq(self, value: Any) -> QueryExpression:
         return QueryExpression("leaf", {self.name: value})
 
+    def __eq__(self, value: Any) -> QueryExpression:  # type: ignore[override]
+        return self.eq(value)
+
     def ne(self, value: Any) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__ne": value})
+
+    def __ne__(self, value: Any) -> QueryExpression:  # type: ignore[override]
+        return self.ne(value)
 
     def lt(self, value: Any) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__lt": value})
 
+    def __lt__(self, value: Any) -> QueryExpression:
+        return self.lt(value)
+
     def le(self, value: Any) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__le": value})
+
+    def __le__(self, value: Any) -> QueryExpression:
+        return self.le(value)
 
     def gt(self, value: Any) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__gt": value})
 
+    def __gt__(self, value: Any) -> QueryExpression:
+        return self.gt(value)
+
     def ge(self, value: Any) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__ge": value})
+
+    def __ge__(self, value: Any) -> QueryExpression:
+        return self.ge(value)
 
     def like(self, value: str) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__like": value})
@@ -65,11 +92,24 @@ class ColumnExpression:
     def in_(self, values: list[Any]) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__in": values})
 
+    def not_in(self, values: list[Any]) -> QueryExpression:
+        return QueryExpression("leaf", {f"{self.name}__not_in": values})
+
     def is_null(self) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__is_null": True})
 
     def is_not_null(self) -> QueryExpression:
         return QueryExpression("leaf", {f"{self.name}__is_not_null": True})
+
+    def is_(self, value: Any) -> QueryExpression:
+        if value is not None:
+            raise ValueError("only None is supported by is_()")
+        return self.is_null()
+
+    def is_not(self, value: Any) -> QueryExpression:
+        if value is not None:
+            raise ValueError("only None is supported by is_not()")
+        return self.is_not_null()
 
 
 def column(name: str) -> ColumnExpression:
