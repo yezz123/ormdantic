@@ -1,6 +1,6 @@
 # Rust Core
 
-Ormdantic is split into a thin Python API and a focused Rust workspace. Python keeps Pydantic model declarations, decorators, event callbacks, and final model construction; Rust owns the runtime table handles, schema validation, SQL compilation, relationship load planning, result-shape planning, and native database execution.
+Ormdantic is split into a thin Python API and a focused Rust workspace. Python keeps Pydantic model declarations, decorators, event callbacks, and final model construction; Rust owns the runtime table handles, schema validation, filter normalization, SQL compilation, relationship load planning, result-shape planning, reflection, migration execution, and native database execution.
 
 The workspace is defined by the repository-root `Cargo.toml`. Rust crates live under `rust/crates/`, and the Python package build points maturin at `rust/crates/ormdantic-py/Cargo.toml`.
 
@@ -52,8 +52,10 @@ Rust owns:
 - Schema metadata validation after Python has normalized model metadata.
 - Dialect detection from SQLAlchemy-style URLs.
 - SQL query and DDL compilation.
+- Filter normalization for dict filters and expression trees.
 - Ordered bind parameter planning.
 - Rust-owned database and table handles for DDL, CRUD, count, and relationship-depth query planning.
+- Reflection and migration revision bookkeeping.
 - Native database execution.
 - Result-shape planning and nested row folding.
 

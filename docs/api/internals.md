@@ -1,6 +1,6 @@
 # Rust Bridge Internals
 
-These modules are private implementation details. The public runtime now uses Rust-owned database and table handles exposed through `ormdantic._ormdantic`; the remaining bridge modules are compatibility helpers while the Python facade stays small.
+These modules are private implementation details. The public runtime uses Rust-owned database and table handles exposed through `ormdantic._ormdantic`; Python modules keep the user-facing facade small while delegating hydration, filter normalization, schema compilation, reflection, and migration execution to Rust.
 
 ## Pydantic Introspection
 

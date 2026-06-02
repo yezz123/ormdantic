@@ -19,9 +19,9 @@ Supported operators:
 - `in`, `not_in`
 - `is_null`, `is_not_null`
 
-The Rust SQL compiler expands these into dialect-specific SQL and bind parameters.
+Rust normalizes these filters, expands bind parameters, and compiles them into dialect-specific SQL.
 
-You can also build simple composable expressions:
+You can also build composable boolean expressions:
 
 ```python
 from ormdantic import column
@@ -29,6 +29,10 @@ from ormdantic import column
 await database[Flavor].find_many(
     where=column("strength").ge(2) & column("name").like("mo%")
 )
+
+await database[Flavor].find_many(
+    where=(column("name") == "mocha") | (column("name") == "latte")
+)
 ```
 
-The expression facade lowers into the Rust filter contract. Simple `AND` groups are supported today; native `OR`, subquery, CTE, and window lowering are tracked in the Rust SQL roadmap.
+The expression facade is normalized through the Rust filter contract, so `AND` and `OR` groups are supported for `find_many()` and `count()` filters. Subqueries, CTEs, projections, SQL functions, and window expressions are future typed-AST expansions and are not part of the current public API.
