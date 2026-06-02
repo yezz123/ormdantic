@@ -35,11 +35,15 @@ def test_compile_create_table_sql_includes_types_indexes_and_checks() -> None:
     assert statements[0] == (
         'CREATE TABLE IF NOT EXISTS "flavor" ('
         '"id" TEXT PRIMARY KEY NOT NULL, '
-        '"name" VARCHAR(63) NOT NULL CHECK (LENGTH(name) >= 2) CHECK (LENGTH(name) <= 63), '
-        '"code" BLOB NOT NULL UNIQUE, '
-        '"price" NUMERIC NOT NULL CHECK (price > 0), '
+        '"name" TEXT NOT NULL, '
+        '"code" BLOB NOT NULL, '
+        '"price" NUMERIC NOT NULL, '
         '"flavor" TEXT NOT NULL, '
-        'UNIQUE ("name", "code"))'
+        'CONSTRAINT "flavor_unique_0" UNIQUE ("name", "code"), '
+        'CONSTRAINT "flavor_unique_1" UNIQUE ("code"), '
+        'CONSTRAINT "flavor_name_min_length_check" CHECK (LENGTH(name) >= 2), '
+        'CONSTRAINT "flavor_name_max_length_check" CHECK (LENGTH(name) <= 63), '
+        'CONSTRAINT "flavor_price_gt_check" CHECK (price > 0))'
     )
     assert (
         'CREATE INDEX IF NOT EXISTS "flavor_name_idx" ON "flavor" ("name")'

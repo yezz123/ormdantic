@@ -11,6 +11,7 @@ from ormdantic._ormdantic import (
     compile_select_pk,
     compile_update,
     compile_upsert,
+    normalize_filters,
 )
 from pydantic import BaseModel, Field
 
@@ -130,6 +131,59 @@ def test_rust_query_bridge_compiles_joined_find_many() -> None:
         "sql": 'SELECT "coffee"."id" AS "coffee\\id", "coffee/flavor"."id" AS "coffee/flavor\\id", "coffee/flavor"."name" AS "coffee/flavor\\name" FROM "coffee" LEFT JOIN "flavors" AS "coffee/flavor" ON "coffee"."flavor" = "coffee/flavor"."id" WHERE "coffee"."id" = ?',
         "params": ["id"],
         "operation": "select",
+    }
+
+
+def test_rust_query_bridge_normalizes_recursive_filter_tree() -> None:
+    normalized = normalize_filters(
+        {
+            "connector": "or",
+            "children": [
+                {"connector": "leaf", "filters": {"name": "mocha"}},
+                {
+                    "connector": "and",
+                    "children": [
+                        {"connector": "leaf", "filters": {"strength__ge": 5}},
+                        {"connector": "leaf", "filters": {"id__in": ["1", "2"]}},
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert normalized["filters"] == {
+        "connector": "or",
+        "children": [
+            {
+                "connector": "leaf",
+                "filters": [("name", "eq", ["expr_0__name"])],
+            },
+            {
+                "connector": "and",
+                "children": [
+                    {
+                        "connector": "leaf",
+                        "filters": [("strength", "ge", ["expr_1_0__strength__ge"])],
+                    },
+                    {
+                        "connector": "leaf",
+                        "filters": [
+                            (
+                                "id",
+                                "in",
+                                ["expr_1_1__id__in_0", "expr_1_1__id__in_1"],
+                            )
+                        ],
+                    },
+                ],
+            },
+        ],
+    }
+    assert normalized["values"] == {
+        "expr_0__name": "mocha",
+        "expr_1_0__strength__ge": 5,
+        "expr_1_1__id__in_0": "1",
+        "expr_1_1__id__in_1": "2",
     }
 
 
