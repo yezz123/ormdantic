@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
-
 from ormdantic._ormdantic import (
     compile_count,
     compile_delete_pk,
@@ -14,6 +12,8 @@ from ormdantic._ormdantic import (
     compile_update,
     compile_upsert,
 )
+from pydantic import BaseModel, Field
+
 from ormdantic.hydration import plan_result_shape
 from ormdantic.models import Map, OrmTable
 from ormdantic.schema import validate_table_map
