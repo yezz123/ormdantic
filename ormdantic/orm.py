@@ -11,7 +11,6 @@ from ormdantic._introspect import (
     model_field,
     model_fields,
 )
-from ormdantic.engine import NativeEngine
 from ormdantic.errors import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
@@ -24,7 +23,6 @@ from ormdantic.naming import snake_case
 from ormdantic.reflection import Inspector
 from ormdantic.schema import (
     column_descriptor,
-    compile_drop_table_sql,
     index_descriptors,
 )
 from ormdantic.session import Session
@@ -43,7 +41,6 @@ class Ormdantic:
         """Register models as ORM models and create schemas"""
         self._tables: dict[Type, Table] = {}  # type: ignore
         self._connection = connection
-        self._native_engine = NativeEngine(connection)
         self._events = EventRegistry()
         self._table_map: Map = Map()
         self._runtime: Any | None = None
@@ -116,12 +113,7 @@ class Ormdantic:
 
     async def drop_all(self) -> None:
         """Drop all registered tables."""
-        if self._runtime is not None:
-            self._runtime.drop_all()
-            return
-        for tablename in reversed(list(self._table_map.name_to_data)):
-            sql = compile_drop_table_sql(tablename, self._connection)
-            await self._native_engine.execute(sql, ())
+        self._ensure_runtime().drop_all()
 
     def transaction(self) -> Any:
         """Open a native transaction context."""

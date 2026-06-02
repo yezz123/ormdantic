@@ -32,42 +32,24 @@ class MigrationManager:
 
     async def ensure_revision_table(self) -> None:
         """Create the migration revision table when missing."""
-        await self._database._native_engine.execute(
-            "CREATE TABLE IF NOT EXISTS ormdantic_migrations (revision TEXT PRIMARY KEY)",
-            (),
-        )
+        self._database._ensure_runtime().ensure_revision_table()
 
     async def applied_revisions(self) -> list[str]:
         """Return applied migration revisions."""
-        await self.ensure_revision_table()
-        result = await self._database._native_engine.execute(
-            "SELECT revision FROM ormdantic_migrations ORDER BY revision",
-            (),
-        )
-        return [row[0] for row in result]
+        return list(self._database._ensure_runtime().applied_revisions())
 
     async def apply(self, revision: str, plan: MigrationPlan) -> None:
         """Apply a migration plan and record its revision."""
-        await self.ensure_revision_table()
-        async with self._database.transaction():
-            for operation in plan.operations:
-                await self._database._native_engine.execute(
-                    operation.sql, operation.values
-                )
-            await self._database._native_engine.execute(
-                "INSERT INTO ormdantic_migrations (revision) VALUES (?)",
-                (revision,),
-            )
+        self._database._ensure_runtime().apply_migration(
+            revision, _operation_payload(plan)
+        )
 
     async def rollback(self, revision: str, plan: MigrationPlan) -> None:
         """Run rollback SQL and remove a migration revision."""
-        await self.ensure_revision_table()
-        async with self._database.transaction():
-            for operation in plan.operations:
-                await self._database._native_engine.execute(
-                    operation.sql, operation.values
-                )
-            await self._database._native_engine.execute(
-                "DELETE FROM ormdantic_migrations WHERE revision = ?",
-                (revision,),
-            )
+        self._database._ensure_runtime().rollback_migration(
+            revision, _operation_payload(plan)
+        )
+
+
+def _operation_payload(plan: MigrationPlan) -> list[tuple[str, tuple[Any, ...]]]:
+    return [(operation.sql, operation.values) for operation in plan.operations]

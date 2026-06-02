@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from enum import Enum
 from typing import Any, Generic
 
@@ -14,28 +15,14 @@ from ormdantic.serializer import OrmSerializer
 from ormdantic.types import ModelType
 from ormdantic.values import py_type_to_sql
 
+_ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
+
 
 class Order(Enum):
     """Sort direction for table queries."""
 
     asc = "asc"
     desc = "desc"
-
-
-FILTER_OPERATORS = {
-    "eq",
-    "ne",
-    "lt",
-    "le",
-    "gt",
-    "ge",
-    "like",
-    "ilike",
-    "in",
-    "not_in",
-    "is_null",
-    "is_not_null",
-}
 
 
 class Table(Generic[ModelType]):
@@ -164,28 +151,6 @@ class Table(Generic[ModelType]):
             for column in self._table_data.columns
         }
 
-    def _parse_where(
-        self, where: dict[str, Any]
-    ) -> tuple[list[tuple[str, str, list[str]]], dict[str, Any]]:
-        filters: list[tuple[str, str, list[str]]] = []
-        values: dict[str, Any] = {}
-        for key, value in where.items():
-            column, operator = self._split_filter_key(key)
-            if operator in {"is_null", "is_not_null"}:
-                filters.append((column, operator, []))
-                continue
-            if operator in {"in", "not_in"}:
-                param_names = []
-                for idx, item in enumerate(value):
-                    param_name = f"{column}__{operator}_{idx}"
-                    param_names.append(param_name)
-                    values[param_name] = py_type_to_sql(self._table_map, item)
-                filters.append((column, operator, param_names))
-                continue
-            filters.append((column, operator, [key]))
-            values[key] = py_type_to_sql(self._table_map, value)
-        return filters, values
-
     @staticmethod
     def _normalize_where(where: dict[str, Any] | None) -> dict[str, Any]:
         if where is None:
@@ -195,48 +160,10 @@ class Table(Generic[ModelType]):
     def _compile_where(
         self, where: dict[str, Any] | QueryExpression | None
     ) -> tuple[Any, dict[str, Any]]:
+        """Normalize public Python filter inputs into the Rust runtime payload."""
         if isinstance(where, QueryExpression):
-            return self._parse_expression(where, "expr")
-        return self._parse_where(self._normalize_where(where))
-
-    def _parse_expression(
-        self, expression: QueryExpression, prefix: str
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        if expression.connector == "leaf":
-            filters, values = self._parse_where(expression.filters or {})
-            filters, values = self._rename_filter_params(filters, values, prefix)
-            return {"connector": "leaf", "filters": filters}, values
-        children = []
-        expression_values: dict[str, Any] = {}
-        for idx, child in enumerate(expression.children):
-            child_tree, child_values = self._parse_expression(child, f"{prefix}_{idx}")
-            children.append(child_tree)
-            expression_values.update(child_values)
-        return {
-            "connector": expression.connector,
-            "children": children,
-        }, expression_values
-
-    @staticmethod
-    def _rename_filter_params(
-        filters: list[tuple[str, str, list[str]]], values: dict[str, Any], prefix: str
-    ) -> tuple[list[tuple[str, str, list[str]]], dict[str, Any]]:
-        renamed_values: dict[str, Any] = {}
-        renamed_filters = []
-        for column, operator, params in filters:
-            renamed_params = []
-            for param in params:
-                renamed = f"{prefix}__{param}"
-                renamed_params.append(renamed)
-                renamed_values[renamed] = values[param]
-            renamed_filters.append((column, operator, renamed_params))
-        return renamed_filters, renamed_values
-
-    @staticmethod
-    def _split_filter_key(key: str) -> tuple[str, str]:
-        if "__" not in key:
-            return key, "eq"
-        column, operator = key.rsplit("__", 1)
-        if operator not in FILTER_OPERATORS:
-            return key, "eq"
-        return column, operator
+            raw_where: Any = where.to_filter_tree()
+        else:
+            raw_where = self._normalize_where(where)
+        normalized = _ormdantic.normalize_filters(raw_where)
+        return normalized["filters"], dict(normalized["values"])

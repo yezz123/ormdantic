@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 @dataclass(frozen=True)
 class QueryExpression:
-    """A small expression tree that lowers into table filter dictionaries."""
+    """Compatibility expression facade consumed by the Rust filter normalizer."""
 
     connector: Literal["and", "or", "leaf"]
     filters: dict[str, Any] | None = None
@@ -32,7 +32,7 @@ class QueryExpression:
         raise ValueError("OR expressions require native disjunction support")
 
     def to_filter_tree(self) -> dict[str, Any]:
-        """Return a recursive filter tree for the Rust runtime."""
+        """Return the recursive payload consumed by the Rust filter normalizer."""
         if self.connector == "leaf":
             return {"connector": "leaf", "filters": dict(self.filters or {})}
         return {
