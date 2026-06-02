@@ -26,6 +26,7 @@ all-engines = ["sqlite", "postgres", "mysql", "mariadb", "mssql", "oracle"]
 [dependencies]
 ormdantic-core.workspace = true
 ormdantic-dialects.workspace = true
+ormdantic-schema.workspace = true
 mysql = "25"
 postgres = "0.19"
 rusqlite = { version = "0.32", features = ["bundled"] }

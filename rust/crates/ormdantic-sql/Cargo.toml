@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 ormdantic-core.workspace = true
 ormdantic-dialects.workspace = true
+ormdantic-schema.workspace = true
 
 [dev-dependencies]
 criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
