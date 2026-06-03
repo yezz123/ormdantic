@@ -1,3 +1,19 @@
+//! Native database execution primitives for Ormdantic.
+//!
+//! ```
+//! use ormdantic_engine::{runtime_capabilities, DbValue, QueryResult, StatementResult};
+//!
+//! let result = QueryResult::new(
+//!     vec!["id".to_string()],
+//!     vec![vec![DbValue::Integer(1)]],
+//! );
+//! let statement = StatementResult::from_query_result(result);
+//!
+//! assert_eq!(statement.row_count(), 1);
+//! assert_eq!(statement.columns(), &["id".to_string()]);
+//! assert!(runtime_capabilities().iter().any(|(name, _)| *name == "sqlite"));
+//! ```
+
 mod drivers;
 mod result;
 mod url;

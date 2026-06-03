@@ -1,3 +1,21 @@
+//! Shared primitives used by Ormdantic's Rust crates.
+//!
+//! ```
+//! use ormdantic_core::{BackendFeature, FeatureSet, Identifier, QualifiedName};
+//!
+//! let table = Identifier::new("coffee")?;
+//! assert_eq!(table.as_str(), "coffee");
+//! assert!(Identifier::new("not-a-valid-identifier").is_err());
+//!
+//! let qualified = QualifiedName::with_schema("public", "coffee")?;
+//! assert_eq!(qualified.to_string(), "public.coffee");
+//!
+//! let features = FeatureSet::new([BackendFeature::Returning, BackendFeature::Returning]);
+//! assert_eq!(features.features(), &[BackendFeature::Returning]);
+//!
+//! # Ok::<(), ormdantic_core::OrmdanticError>(())
+//! ```
+
 use std::fmt::{Display, Formatter};
 
 pub type OrmdanticResult<T> = Result<T, OrmdanticError>;

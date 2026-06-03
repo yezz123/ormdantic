@@ -1,3 +1,34 @@
+//! SQL AST and query compiler for Ormdantic.
+//!
+//! ```
+//! use ormdantic_dialects::PostgresDialect;
+//! use ormdantic_sql::{Filter, QueryAst, SelectColumn, TableRef};
+//!
+//! let compiled = QueryAst::Select {
+//!     table: TableRef::new("flavors"),
+//!     columns: vec![
+//!         SelectColumn::aliased("id", "flavors\\id"),
+//!         SelectColumn::aliased("name", "flavors\\name"),
+//!     ],
+//!     filters: vec![Filter::Eq {
+//!         column: "id".to_string(),
+//!         param: "id".to_string(),
+//!     }],
+//!     order_by: Vec::new(),
+//!     limit: None,
+//!     offset: None,
+//! }
+//! .compile(&PostgresDialect)?;
+//!
+//! assert_eq!(
+//!     compiled.sql(),
+//!     "SELECT \"flavors\".\"id\" AS \"flavors\\id\", \"flavors\".\"name\" AS \"flavors\\name\" FROM \"flavors\" WHERE \"id\" = $1"
+//! );
+//! assert_eq!(compiled.params(), &["id".to_string()]);
+//!
+//! # Ok::<(), ormdantic_core::OrmdanticError>(())
+//! ```
+
 use ormdantic_core::{OrmdanticError, OrmdanticResult};
 use ormdantic_dialects::Dialect;
 use ormdantic_schema::{SchemaDiff, SchemaOperation};

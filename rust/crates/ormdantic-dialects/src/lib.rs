@@ -1,3 +1,21 @@
+//! SQL dialect support for Ormdantic query compilation.
+//!
+//! ```
+//! use ormdantic_dialects::{AnyDialect, Dialect, DialectKind};
+//!
+//! assert_eq!(
+//!     DialectKind::parse("postgresql+asyncpg://user:pass@localhost/db")?,
+//!     DialectKind::Postgres
+//! );
+//!
+//! let dialect = AnyDialect::parse("postgresql")?;
+//! assert_eq!(dialect.name(), "postgresql");
+//! assert_eq!(dialect.quote_ident("coffee"), "\"coffee\"");
+//! assert_eq!(dialect.placeholder(2), "$2");
+//!
+//! # Ok::<(), ormdantic_core::OrmdanticError>(())
+//! ```
+
 use ormdantic_core::{
     BackendFeature, DeferrableMode, FeatureSet, IsolationLevel, OrmdanticError, OrmdanticResult,
     SavepointName, TransactionAccessMode, TransactionOptions,

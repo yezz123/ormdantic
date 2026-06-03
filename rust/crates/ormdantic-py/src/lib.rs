@@ -251,6 +251,8 @@ struct PyEventBridge {
     events: Mutex<Vec<EventPayload>>,
 }
 
+type PyEventRecord = (String, Option<String>, Option<String>);
+
 #[pymethods]
 impl PyEventBridge {
     #[new]
@@ -273,7 +275,7 @@ impl PyEventBridge {
         Ok(())
     }
 
-    fn events(&self) -> PyResult<Vec<(String, Option<String>, Option<String>)>> {
+    fn events(&self) -> PyResult<Vec<PyEventRecord>> {
         Ok(self
             .events
             .lock()
@@ -1568,6 +1570,7 @@ fn compile_delete_pk(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 #[pyfunction(signature = (dialect, table, projections, where_column=None, where_param=None, limit=None, offset=None))]
 fn compile_expression_query(
     py: Python<'_>,
@@ -1629,7 +1632,7 @@ fn reflect_schema(py: Python<'_>, url: &str, scope: Option<String>) -> PyResult<
         Reflector::for_url(url).map_err(|error| PyValueError::new_err(error.to_string()))?;
     let scope = scope
         .map(|schema| ReflectionScope::new().schema(schema))
-        .unwrap_or_else(ReflectionScope::new);
+        .unwrap_or_default();
     let output = PyDict::new(py);
     let queries = PyList::empty(py);
     for query in reflector.reflection_queries(&scope) {
@@ -1668,6 +1671,7 @@ fn compile_selectin_plan(
     compiled_query_to_dict(py, compiled)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 fn execute_selectin_load(
     py: Python<'_>,
