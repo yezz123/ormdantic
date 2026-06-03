@@ -20,3 +20,17 @@ repos:
     rev: v0.21.0
     hooks:
       - id: yamlfmt
+  - repo: local
+    hooks:
+      - id: lint-rust
+        name: Lint Rust
+        entry: make format
+        types: [rust]
+        language: system
+        pass_filenames: false
+      - id: taplo-check
+        name: Check Taplo TOML formatting
+        entry: npx @taplo/cli fmt --config ./taplo/taplo.toml --check
+        language: system
+        pass_filenames: false
+        always_run: true
