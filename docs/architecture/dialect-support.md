@@ -1,13 +1,13 @@
 # Dialect Support
 
-| Dialect | SQL compiler | Native execution | CI |
-| --- | --- | --- | --- |
-| SQLite | Full | Full | Required |
-| PostgreSQL | Full | Full | Required service job |
-| MySQL | Full | Full | Required service job |
-| MariaDB | Full | Full | Required service job |
-| SQL Server | Partial | Full with `mssql` feature | Optional/manual |
-| Oracle | Partial | Full with `oracle` feature | Optional/manual |
+| Dialect    | SQL compiler | Native execution           | CI                   |
+| ---------- | ------------ | -------------------------- | -------------------- |
+| SQLite     | Full         | Full                       | Required             |
+| PostgreSQL | Full         | Full                       | Required service job |
+| MySQL      | Full         | Full                       | Required service job |
+| MariaDB    | Full         | Full                       | Required service job |
+| SQL Server | Partial      | Full with `mssql` feature  | Optional/manual      |
+| Oracle     | Partial      | Full with `oracle` feature | Optional/manual      |
 
 ## Notes
 

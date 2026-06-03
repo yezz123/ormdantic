@@ -25,15 +25,15 @@ flowchart TD
 
 ## Crate Responsibilities
 
-| Crate | Responsibility |
-| --- | --- |
-| `ormdantic-core` | Shared errors, result aliases, typed identifiers, and stable primitives. |
-| `ormdantic-schema` | Table definitions, columns, primary keys, indexes, constraints, relationships, and registry validation. |
-| `ormdantic-dialects` | Identifier quoting, placeholder style, upsert syntax, returning support, and dialect capability flags. |
-| `ormdantic-sql` | SQL AST, filter expressions, CRUD/count/join compilation, bind parameter ordering, and dialect-aware rendering. |
-| `ormdantic-hydrate` | Result alias parsing, flat hydration planning, nested result-shape planning, relationship paths, and array paths. |
-| `ormdantic-engine` | Native connection handling, driver dispatch, query execution, result values, and transaction primitives. |
-| `ormdantic-py` | PyO3 bindings exposed as `ormdantic._ormdantic`, including conversion between Python metadata/values and Rust internals. |
+| Crate                | Responsibility                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `ormdantic-core`     | Shared errors, result aliases, typed identifiers, and stable primitives.                                                 |
+| `ormdantic-schema`   | Table definitions, columns, primary keys, indexes, constraints, relationships, and registry validation.                  |
+| `ormdantic-dialects` | Identifier quoting, placeholder style, upsert syntax, returning support, and dialect capability flags.                   |
+| `ormdantic-sql`      | SQL AST, filter expressions, CRUD/count/join compilation, bind parameter ordering, and dialect-aware rendering.          |
+| `ormdantic-hydrate`  | Result alias parsing, flat hydration planning, nested result-shape planning, relationship paths, and array paths.        |
+| `ormdantic-engine`   | Native connection handling, driver dispatch, query execution, result values, and transaction primitives.                 |
+| `ormdantic-py`       | PyO3 bindings exposed as `ormdantic._ormdantic`, including conversion between Python metadata/values and Rust internals. |
 
 Each crate also has a repository README with its public API summary. Start with the [Rust workspace README](https://github.com/yezz123/ormdantic/tree/main/rust).
 
@@ -63,14 +63,14 @@ Rust owns:
 
 `ormdantic-engine` is organized by driver modules:
 
-| Driver | Runtime status |
-| --- | --- |
-| `sqlite` | Full native execution through `rusqlite`. |
-| `postgres` | Full native execution through the `postgres` crate. |
-| `mysql` | Full native execution through the `mysql` crate. |
-| `mariadb` | Full native execution through the MySQL protocol. |
-| `mssql` | Full native execution through `tiberius` behind the optional `mssql` feature. |
-| `oracle` | Full native execution through `oracle-rs` behind the optional `oracle` feature. |
+| Driver     | Runtime status                                                                  |
+| ---------- | ------------------------------------------------------------------------------- |
+| `sqlite`   | Full native execution through `rusqlite`.                                       |
+| `postgres` | Full native execution through the `postgres` crate.                             |
+| `mysql`    | Full native execution through the `mysql` crate.                                |
+| `mariadb`  | Full native execution through the MySQL protocol.                               |
+| `mssql`    | Full native execution through `tiberius` behind the optional `mssql` feature.   |
+| `oracle`   | Full native execution through `oracle-rs` behind the optional `oracle` feature. |
 
 SQLite, PostgreSQL, and MySQL are enabled by default. MariaDB, SQL Server, Oracle, and `all-engines` builds are feature-gated in `ormdantic-engine`.
 
