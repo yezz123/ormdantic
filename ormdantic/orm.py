@@ -113,7 +113,11 @@ class Ormdantic:
 
     async def drop_all(self) -> None:
         """Drop all registered tables."""
-        self._ensure_runtime().drop_all()
+        for table_data in reversed(list(self._table_map.name_to_data.values())):
+            sql = _ormdantic.compile_drop_table_sql(
+                self._connection, table_data.tablename
+            )
+            _ormdantic.execute_native(self._connection, sql, [])
 
     def transaction(self) -> Any:
         """Open a native transaction context."""
