@@ -1,5 +1,8 @@
 [build]
 rustflags = []
+# Use all available CPU cores for parallel compilation
+# Can be overridden with CARGO_BUILD_JOBS env var
+jobs = 32
 
 # see https://pyo3.rs/main/building_and_distribution.html#macos
 [target.x86_64-apple-darwin]
@@ -13,3 +16,13 @@ rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
 ]
+
+# =============================================================================
+# Cargo build configuration optimized for CI/CD with high CPU count
+# =============================================================================
+[net]
+# Parallel git fetches for faster dependency downloads
+git-fetch-with-cli = true
+
+[registries.crates-io]
+protocol = "sparse"
