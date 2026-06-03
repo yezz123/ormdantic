@@ -4,16 +4,16 @@ These modules are private implementation details. The public runtime uses Rust-o
 
 ## Pydantic Introspection
 
-::: ormdantic.\_introspect.FieldMetadata
-::: ormdantic.\_introspect.model_fields
-::: ormdantic.\_introspect.model_field
-::: ormdantic.\_introspect.annotation_allows_none
-::: ormdantic.\_introspect.is_union_annotation
-::: ormdantic.\_introspect.is_list_annotation
-::: ormdantic.\_introspect.contains_list_annotation
-::: ormdantic.\_introspect.is_dict_annotation
-::: ormdantic.\_introspect.first_model_arg
-::: ormdantic.\_introspect.rebuild_model
+::: ormdantic._introspect.FieldMetadata
+::: ormdantic._introspect.model_fields
+::: ormdantic._introspect.model_field
+::: ormdantic._introspect.annotation_allows_none
+::: ormdantic._introspect.is_union_annotation
+::: ormdantic._introspect.is_list_annotation
+::: ormdantic._introspect.contains_list_annotation
+::: ormdantic._introspect.is_dict_annotation
+::: ormdantic._introspect.first_model_arg
+::: ormdantic._introspect.rebuild_model
 
 ## Schema Helpers
 
