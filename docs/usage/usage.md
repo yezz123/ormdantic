@@ -18,9 +18,9 @@ To create tables decorate a pydantic model with the `database.table` decorator, 
 
 ### Table Restrictions
 
-* Tables must have a single column primary key.
-* The primary key column must be the first column.
-* Relationships must `union-type` the foreign model and that models primary key.
+- Tables must have a single column primary key.
+- The primary key column must be the first column.
+- Relationships must `union-type` the foreign model and that models primary key.
 
 ```python
 from uuid import uuid4
@@ -40,7 +40,7 @@ After the models are registered, initialize the Rust runtime and create the tabl
 
 ### `Init()`
 
-* Register models as ORM models and initialize the database.
+- Register models as ORM models and initialize the database.
 
 `database.init()` discovers relationships, builds the Rust runtime table registry, and creates the tables.
 
@@ -92,7 +92,7 @@ In Ormdantic, we can search for data using the `database.find_one` or `database.
 
 #### `Find_one()`
 
-* `Find_one`  used to find a Model instance by Primary Key, its could also find with `depth` parameter.
+- `Find_one` used to find a Model instance by Primary Key, its could also find with `depth` parameter.
 
 ```python
      # Find one
@@ -106,7 +106,7 @@ In Ormdantic, we can search for data using the `database.find_one` or `database.
 
 #### `Find_many()`
 
-* `Find_many` used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
+- `Find_many` used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
 
 ```python
      # Find many
@@ -159,7 +159,7 @@ To count the number of rows of a table or in a result set you can use the `count
      print(count)
 ```
 
-* It's support also `Where` and `Depth`
+- It's support also `Where` and `Depth`
 
 ```python
      count_advanced = await database[Coffee].count(

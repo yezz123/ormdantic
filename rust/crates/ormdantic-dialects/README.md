@@ -6,17 +6,17 @@ SQL dialect support for Ormdantic.
 
 ## Public API
 
-| Item | Purpose |
-| --- | --- |
-| `DialectKind` | Supported database kind enum with parsing from names or URLs. |
-| `Dialect` | Trait implemented by each dialect. |
-| `SqliteDialect` | SQLite quoting, placeholders, and capabilities. |
-| `PostgresDialect` | PostgreSQL quoting, placeholders, and capabilities. |
-| `MySqlDialect` | MySQL quoting, placeholders, and capabilities. |
-| `MariaDbDialect` | MariaDB quoting, placeholders, and capabilities. |
-| `MsSqlDialect` | SQL Server quoting, placeholders, and capabilities. |
-| `OracleDialect` | Oracle quoting, placeholders, and capabilities. |
-| `AnyDialect` | Runtime enum wrapper over all supported dialects. |
+| Item                     | Purpose                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `DialectKind`            | Supported database kind enum with parsing from names or URLs.      |
+| `Dialect`                | Trait implemented by each dialect.                                 |
+| `SqliteDialect`          | SQLite quoting, placeholders, and capabilities.                    |
+| `PostgresDialect`        | PostgreSQL quoting, placeholders, and capabilities.                |
+| `MySqlDialect`           | MySQL quoting, placeholders, and capabilities.                     |
+| `MariaDbDialect`         | MariaDB quoting, placeholders, and capabilities.                   |
+| `MsSqlDialect`           | SQL Server quoting, placeholders, and capabilities.                |
+| `OracleDialect`          | Oracle quoting, placeholders, and capabilities.                    |
+| `AnyDialect`             | Runtime enum wrapper over all supported dialects.                  |
 | `normalize_dialect_name` | Normalizes URL schemes and driver suffixes before dialect parsing. |
 
 ## Dependencies

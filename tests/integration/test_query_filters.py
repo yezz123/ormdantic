@@ -45,3 +45,21 @@ async def test_find_many_supports_in_and_null_filters(database) -> None:
     )
 
     assert result.data == [vanilla]
+
+
+async def test_find_many_preserves_ilike_and_empty_in_semantics(database) -> None:
+    db, Flavor = database
+    mocha = await db[Flavor].insert(Flavor(name="Mocha", strength=3))
+    await db[Flavor].insert(Flavor(name="vanilla", strength=1))
+
+    ilike_result = await db[Flavor].find_many(where={"name__ilike": "mo%"})
+    assert ilike_result.data == [mocha]
+
+    empty_in_result = await db[Flavor].find_many(where={"id__in": []})
+    assert empty_in_result.data == []
+
+    empty_not_in_result = await db[Flavor].find_many(where={"id__not_in": []})
+    assert {flavor.name for flavor in empty_not_in_result.data} == {
+        "Mocha",
+        "vanilla",
+    }

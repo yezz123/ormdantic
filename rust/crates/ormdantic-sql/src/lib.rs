@@ -1,5 +1,37 @@
+//! SQL AST and query compiler for Ormdantic.
+//!
+//! ```
+//! use ormdantic_dialects::PostgresDialect;
+//! use ormdantic_sql::{Filter, QueryAst, SelectColumn, TableRef};
+//!
+//! let compiled = QueryAst::Select {
+//!     table: TableRef::new("flavors"),
+//!     columns: vec![
+//!         SelectColumn::aliased("id", "flavors\\id"),
+//!         SelectColumn::aliased("name", "flavors\\name"),
+//!     ],
+//!     filters: vec![Filter::Eq {
+//!         column: "id".to_string(),
+//!         param: "id".to_string(),
+//!     }],
+//!     order_by: Vec::new(),
+//!     limit: None,
+//!     offset: None,
+//! }
+//! .compile(&PostgresDialect)?;
+//!
+//! assert_eq!(
+//!     compiled.sql(),
+//!     "SELECT \"flavors\".\"id\" AS \"flavors\\id\", \"flavors\".\"name\" AS \"flavors\\name\" FROM \"flavors\" WHERE \"id\" = $1"
+//! );
+//! assert_eq!(compiled.params(), &["id".to_string()]);
+//!
+//! # Ok::<(), ormdantic_core::OrmdanticError>(())
+//! ```
+
 use ormdantic_core::{OrmdanticError, OrmdanticResult};
 use ormdantic_dialects::Dialect;
+use ormdantic_schema::{SchemaDiff, SchemaOperation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryOperation {
@@ -9,6 +41,7 @@ pub enum QueryOperation {
     Upsert,
     Delete,
     Count,
+    Ddl,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +137,148 @@ pub enum Filter {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct ColumnRef {
+    name: String,
+}
+
+impl ColumnRef {
+    fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BindParam {
+    name: String,
+}
+
+impl BindParam {
+    fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ComparisonOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Like,
+    ILike,
+}
+
+impl ComparisonOp {
+    fn sql_operator(&self) -> &'static str {
+        match self {
+            Self::Eq => "=",
+            Self::Ne => "!=",
+            Self::Lt => "<",
+            Self::Le => "<=",
+            Self::Gt => ">",
+            Self::Ge => ">=",
+            Self::Like | Self::ILike => "LIKE",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BoolOp {
+    And,
+    Or,
+}
+
+impl BoolOp {
+    fn sql_operator(&self) -> &'static str {
+        match self {
+            Self::And => "AND",
+            Self::Or => "OR",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PredicateExpr {
+    Compare {
+        left: ColumnRef,
+        op: ComparisonOp,
+        right: BindParam,
+    },
+    InList {
+        left: ColumnRef,
+        params: Vec<BindParam>,
+        negated: bool,
+    },
+    NullCheck {
+        expr: ColumnRef,
+        negated: bool,
+    },
+    Bool {
+        op: BoolOp,
+        exprs: Vec<PredicateExpr>,
+    },
+}
+
+impl From<&Filter> for PredicateExpr {
+    fn from(filter: &Filter) -> Self {
+        match filter {
+            Filter::Eq { column, param } => comparison_expr(column, ComparisonOp::Eq, param),
+            Filter::Ne { column, param } => comparison_expr(column, ComparisonOp::Ne, param),
+            Filter::Lt { column, param } => comparison_expr(column, ComparisonOp::Lt, param),
+            Filter::Le { column, param } => comparison_expr(column, ComparisonOp::Le, param),
+            Filter::Gt { column, param } => comparison_expr(column, ComparisonOp::Gt, param),
+            Filter::Ge { column, param } => comparison_expr(column, ComparisonOp::Ge, param),
+            Filter::Like { column, param } => comparison_expr(column, ComparisonOp::Like, param),
+            Filter::ILike { column, param } => comparison_expr(column, ComparisonOp::ILike, param),
+            Filter::In { column, params } => PredicateExpr::InList {
+                left: ColumnRef::new(column.clone()),
+                params: params.iter().cloned().map(BindParam::new).collect(),
+                negated: false,
+            },
+            Filter::NotIn { column, params } => PredicateExpr::InList {
+                left: ColumnRef::new(column.clone()),
+                params: params.iter().cloned().map(BindParam::new).collect(),
+                negated: true,
+            },
+            Filter::IsNull { column } => PredicateExpr::NullCheck {
+                expr: ColumnRef::new(column.clone()),
+                negated: false,
+            },
+            Filter::IsNotNull { column } => PredicateExpr::NullCheck {
+                expr: ColumnRef::new(column.clone()),
+                negated: true,
+            },
+            Filter::And(filters) => PredicateExpr::Bool {
+                op: BoolOp::And,
+                exprs: filters.iter().map(PredicateExpr::from).collect(),
+            },
+            Filter::Or(filters) => PredicateExpr::Bool {
+                op: BoolOp::Or,
+                exprs: filters.iter().map(PredicateExpr::from).collect(),
+            },
+        }
+    }
+}
+
+fn comparison_expr(column: &str, op: ComparisonOp, param: &str) -> PredicateExpr {
+    PredicateExpr::Compare {
+        left: ColumnRef::new(column),
+        op,
+        right: BindParam::new(param),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SortDirection {
     Asc,
     Desc,
@@ -129,6 +304,503 @@ impl OrderBy {
 
     pub fn direction(&self) -> &SortDirection {
         &self.direction
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SqlLiteral {
+    Null,
+    Integer(i64),
+    String(String),
+    Boolean(bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinaryOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    And,
+    Or,
+    Like,
+    ILike,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnaryOp {
+    Not,
+    Neg,
+    IsNull,
+    IsNotNull,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderExpr {
+    expr: Expr,
+    direction: SortDirection,
+    nulls: Option<OrderNulls>,
+}
+
+impl OrderExpr {
+    pub fn new(expr: Expr, direction: SortDirection) -> Self {
+        Self {
+            expr,
+            direction,
+            nulls: None,
+        }
+    }
+
+    pub fn nulls(mut self, nulls: OrderNulls) -> Self {
+        self.nulls = Some(nulls);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderNulls {
+    First,
+    Last,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowSpec {
+    partition_by: Vec<Expr>,
+    order_by: Vec<OrderExpr>,
+}
+
+impl WindowSpec {
+    pub fn new(partition_by: Vec<Expr>, order_by: Vec<OrderExpr>) -> Self {
+        Self {
+            partition_by,
+            order_by,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr {
+    Column {
+        table: Option<String>,
+        name: String,
+    },
+    Param(String),
+    Literal(SqlLiteral),
+    Binary {
+        left: Box<Expr>,
+        op: BinaryOp,
+        right: Box<Expr>,
+    },
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+    },
+    Function {
+        name: String,
+        args: Vec<Expr>,
+        over: Option<WindowSpec>,
+    },
+    Between {
+        expr: Box<Expr>,
+        low: Box<Expr>,
+        high: Box<Expr>,
+    },
+    InList {
+        expr: Box<Expr>,
+        values: Vec<Expr>,
+        negated: bool,
+    },
+    InSubquery {
+        expr: Box<Expr>,
+        subquery: Box<SelectAst>,
+        negated: bool,
+    },
+    Exists(Box<SelectAst>),
+    Case {
+        whens: Vec<(Expr, Expr)>,
+        else_expr: Option<Box<Expr>>,
+    },
+    Cast {
+        expr: Box<Expr>,
+        type_name: String,
+    },
+    Tuple(Vec<Expr>),
+    RawSafe(String),
+}
+
+impl Expr {
+    pub fn column(name: impl Into<String>) -> Self {
+        Self::Column {
+            table: None,
+            name: name.into(),
+        }
+    }
+
+    pub fn qualified_column(table: impl Into<String>, name: impl Into<String>) -> Self {
+        Self::Column {
+            table: Some(table.into()),
+            name: name.into(),
+        }
+    }
+
+    pub fn param(name: impl Into<String>) -> Self {
+        Self::Param(name.into())
+    }
+
+    pub fn eq(left: Expr, right: Expr) -> Self {
+        Self::Binary {
+            left: Box::new(left),
+            op: BinaryOp::Eq,
+            right: Box::new(right),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Projection {
+    expr: Expr,
+    alias: Option<String>,
+}
+
+impl Projection {
+    pub fn new(expr: Expr) -> Self {
+        Self { expr, alias: None }
+    }
+
+    pub fn aliased(expr: Expr, alias: impl Into<String>) -> Self {
+        Self {
+            expr,
+            alias: Some(alias.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TableSource {
+    Table {
+        name: String,
+        alias: Option<String>,
+    },
+    Subquery {
+        subquery: Box<SelectAst>,
+        alias: String,
+    },
+    RawSafe(String),
+}
+
+impl TableSource {
+    pub fn table(name: impl Into<String>) -> Self {
+        Self::Table {
+            name: name.into(),
+            alias: None,
+        }
+    }
+
+    pub fn aliased_table(name: impl Into<String>, alias: impl Into<String>) -> Self {
+        Self::Table {
+            name: name.into(),
+            alias: Some(alias.into()),
+        }
+    }
+}
+
+pub type Subquery = SelectAst;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoinKind {
+    Inner,
+    Left,
+    Right,
+    Full,
+    Cross,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinAst {
+    kind: JoinKind,
+    source: TableSource,
+    on: Option<Expr>,
+}
+
+impl JoinAst {
+    pub fn new(kind: JoinKind, source: TableSource, on: Option<Expr>) -> Self {
+        Self { kind, source, on }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CteAst {
+    name: String,
+    query: Box<SelectAst>,
+    recursive: bool,
+}
+
+impl CteAst {
+    pub fn new(name: impl Into<String>, query: SelectAst) -> Self {
+        Self {
+            name: name.into(),
+            query: Box::new(query),
+            recursive: false,
+        }
+    }
+
+    pub fn recursive(mut self, recursive: bool) -> Self {
+        self.recursive = recursive;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectAst {
+    projections: Vec<Projection>,
+    from: Option<TableSource>,
+    joins: Vec<JoinAst>,
+    where_expr: Option<Expr>,
+    group_by: Vec<Expr>,
+    having: Option<Expr>,
+    order_by: Vec<OrderExpr>,
+    distinct: bool,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    ctes: Vec<CteAst>,
+}
+
+impl SelectAst {
+    pub fn new(projections: Vec<Projection>) -> Self {
+        Self {
+            projections,
+            from: None,
+            joins: Vec::new(),
+            where_expr: None,
+            group_by: Vec::new(),
+            having: None,
+            order_by: Vec::new(),
+            distinct: false,
+            limit: None,
+            offset: None,
+            ctes: Vec::new(),
+        }
+    }
+
+    pub fn from(mut self, source: TableSource) -> Self {
+        self.from = Some(source);
+        self
+    }
+
+    pub fn join(mut self, join: JoinAst) -> Self {
+        self.joins.push(join);
+        self
+    }
+
+    pub fn where_expr(mut self, expr: Expr) -> Self {
+        self.where_expr = Some(expr);
+        self
+    }
+
+    pub fn group_by(mut self, group_by: Vec<Expr>) -> Self {
+        self.group_by = group_by;
+        self
+    }
+
+    pub fn having(mut self, having: Expr) -> Self {
+        self.having = Some(having);
+        self
+    }
+
+    pub fn order_by(mut self, order_by: Vec<OrderExpr>) -> Self {
+        self.order_by = order_by;
+        self
+    }
+
+    pub fn distinct(mut self, distinct: bool) -> Self {
+        self.distinct = distinct;
+        self
+    }
+
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    pub fn offset(mut self, offset: usize) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    pub fn with_cte(mut self, cte: CteAst) -> Self {
+        self.ctes.push(cte);
+        self
+    }
+
+    pub fn compile(&self, dialect: &impl Dialect) -> OrmdanticResult<CompiledQuery> {
+        let mut params = Vec::new();
+        let mut bind_index = 1;
+        let sql = render_select_ast(dialect, self, &mut params, &mut bind_index)?;
+        Ok(CompiledQuery::new(sql, params, QueryOperation::Select))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DmlAst {
+    Insert {
+        table: TableSource,
+        columns: Vec<String>,
+        rows: Vec<Vec<Expr>>,
+        returning: Vec<Expr>,
+    },
+    Update {
+        table: TableSource,
+        assignments: Vec<(String, Expr)>,
+        where_expr: Option<Expr>,
+        returning: Vec<Expr>,
+    },
+    Delete {
+        table: TableSource,
+        where_expr: Option<Expr>,
+        returning: Vec<Expr>,
+    },
+    Upsert {
+        table: TableSource,
+        columns: Vec<String>,
+        rows: Vec<Vec<Expr>>,
+        conflict_target: Vec<String>,
+        update_assignments: Vec<(String, Expr)>,
+        returning: Vec<Expr>,
+    },
+}
+
+impl DmlAst {
+    pub fn compile(&self, dialect: &impl Dialect) -> OrmdanticResult<CompiledQuery> {
+        let mut params = Vec::new();
+        let mut bind_index = 1;
+        let (sql, operation) = render_dml_ast(dialect, self, &mut params, &mut bind_index)?;
+        Ok(CompiledQuery::new(sql, params, operation))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DdlAst {
+    operations: Vec<SchemaOperation>,
+}
+
+impl DdlAst {
+    pub fn new(operations: Vec<SchemaOperation>) -> Self {
+        Self { operations }
+    }
+
+    pub fn from_diff(diff: SchemaDiff) -> Self {
+        Self {
+            operations: diff.operations().to_vec(),
+        }
+    }
+
+    pub fn compile(&self, dialect: &impl Dialect) -> OrmdanticResult<Vec<CompiledQuery>> {
+        DdlCompiler::compile(dialect, &self.operations)
+    }
+}
+
+pub struct DdlCompiler;
+
+impl DdlCompiler {
+    pub fn compile(
+        dialect: &impl Dialect,
+        operations: &[SchemaOperation],
+    ) -> OrmdanticResult<Vec<CompiledQuery>> {
+        let mut compiled = Vec::new();
+        for operation in operations {
+            for sql in dialect.compile_schema_operation(operation)? {
+                if !sql.is_empty() {
+                    compiled.push(CompiledQuery::new(sql, Vec::new(), QueryOperation::Ddl));
+                }
+            }
+        }
+        Ok(compiled)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectInPlan {
+    parent_table: String,
+    child_table: String,
+    parent_key_columns: Vec<String>,
+    child_key_columns: Vec<String>,
+    batch_size: usize,
+}
+
+impl SelectInPlan {
+    pub fn new(
+        parent_table: impl Into<String>,
+        child_table: impl Into<String>,
+        parent_key_columns: Vec<String>,
+        child_key_columns: Vec<String>,
+    ) -> Self {
+        Self {
+            parent_table: parent_table.into(),
+            child_table: child_table.into(),
+            parent_key_columns,
+            child_key_columns,
+            batch_size: 500,
+        }
+    }
+
+    pub fn batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = batch_size.max(1);
+        self
+    }
+
+    pub fn query_for_batch(&self, param_names: Vec<String>) -> SelectInQuery {
+        SelectInQuery {
+            plan: self.clone(),
+            param_names,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectInQuery {
+    plan: SelectInPlan,
+    param_names: Vec<String>,
+}
+
+impl SelectInQuery {
+    pub fn compile(&self, dialect: &impl Dialect) -> OrmdanticResult<CompiledQuery> {
+        let mut bind_index = 1;
+        let selected = "*";
+        let mut params = Vec::new();
+        let predicates = self
+            .plan
+            .child_key_columns
+            .iter()
+            .map(|column| {
+                let placeholders = self
+                    .param_names
+                    .iter()
+                    .map(|param| {
+                        params.push(param.clone());
+                        let placeholder = dialect.placeholder(bind_index);
+                        bind_index += 1;
+                        placeholder
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{} IN ({placeholders})", dialect.quote_ident(column))
+            })
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        Ok(CompiledQuery::new(
+            format!(
+                "SELECT {selected} FROM {} WHERE {predicates}",
+                dialect.quote_ident(&self.plan.child_table)
+            ),
+            params,
+            QueryOperation::Select,
+        ))
     }
 }
 
@@ -290,6 +962,519 @@ impl QueryAst {
             Self::Upsert { table, columns, pk } => compile_upsert(dialect, table, columns, pk),
             Self::Delete { table, pk } => compile_delete(dialect, table, pk),
         }
+    }
+}
+
+fn render_select_ast(
+    dialect: &impl Dialect,
+    select: &SelectAst,
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    if select.projections.is_empty() {
+        return Err(OrmdanticError::SqlCompile {
+            message: "select query requires at least one projection".to_string(),
+        });
+    }
+
+    let mut sql = String::new();
+    if !select.ctes.is_empty() {
+        let recursive = select.ctes.iter().any(|cte| cte.recursive);
+        sql.push_str(if recursive {
+            "WITH RECURSIVE "
+        } else {
+            "WITH "
+        });
+        sql.push_str(
+            &select
+                .ctes
+                .iter()
+                .map(|cte| {
+                    render_select_ast(dialect, &cte.query, params, bind_index)
+                        .map(|query| format!("{} AS ({query})", dialect.quote_ident(&cte.name)))
+                })
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", "),
+        );
+        sql.push(' ');
+    }
+
+    sql.push_str("SELECT ");
+    if select.distinct {
+        sql.push_str("DISTINCT ");
+    }
+    sql.push_str(
+        &select
+            .projections
+            .iter()
+            .map(|projection| {
+                let rendered = render_expr(dialect, &projection.expr, params, bind_index)?;
+                Ok(match &projection.alias {
+                    Some(alias) => format!("{rendered} AS {}", dialect.quote_ident(alias)),
+                    None => rendered,
+                })
+            })
+            .collect::<OrmdanticResult<Vec<_>>>()?
+            .join(", "),
+    );
+
+    if let Some(source) = &select.from {
+        sql.push_str(" FROM ");
+        sql.push_str(&render_table_source(dialect, source, params, bind_index)?);
+    }
+    for join in &select.joins {
+        sql.push(' ');
+        sql.push_str(match join.kind {
+            JoinKind::Inner => "JOIN",
+            JoinKind::Left => "LEFT JOIN",
+            JoinKind::Right => "RIGHT JOIN",
+            JoinKind::Full => "FULL JOIN",
+            JoinKind::Cross => "CROSS JOIN",
+        });
+        sql.push(' ');
+        sql.push_str(&render_table_source(
+            dialect,
+            &join.source,
+            params,
+            bind_index,
+        )?);
+        if let Some(on) = &join.on {
+            sql.push_str(" ON ");
+            sql.push_str(&render_expr(dialect, on, params, bind_index)?);
+        }
+    }
+    if let Some(where_expr) = &select.where_expr {
+        sql.push_str(" WHERE ");
+        sql.push_str(&render_expr(dialect, where_expr, params, bind_index)?);
+    }
+    if !select.group_by.is_empty() {
+        sql.push_str(" GROUP BY ");
+        sql.push_str(
+            &select
+                .group_by
+                .iter()
+                .map(|expr| render_expr(dialect, expr, params, bind_index))
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", "),
+        );
+    }
+    if let Some(having) = &select.having {
+        sql.push_str(" HAVING ");
+        sql.push_str(&render_expr(dialect, having, params, bind_index)?);
+    }
+    if !select.order_by.is_empty() {
+        sql.push_str(" ORDER BY ");
+        sql.push_str(
+            &select
+                .order_by
+                .iter()
+                .map(|order| render_order_expr(dialect, order, params, bind_index))
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", "),
+        );
+    }
+    if let Some(limit) = select.limit {
+        sql.push_str(&format!(" LIMIT {limit}"));
+    }
+    if let Some(offset) = select.offset {
+        sql.push_str(&format!(" OFFSET {offset}"));
+    }
+    Ok(sql)
+}
+
+fn render_dml_ast(
+    dialect: &impl Dialect,
+    dml: &DmlAst,
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<(String, QueryOperation)> {
+    match dml {
+        DmlAst::Insert {
+            table,
+            columns,
+            rows,
+            returning,
+        } => {
+            require_columns(columns, "insert")?;
+            if rows.is_empty() {
+                return Err(OrmdanticError::SqlCompile {
+                    message: "insert query requires at least one row".to_string(),
+                });
+            }
+            let rendered_rows = rows
+                .iter()
+                .map(|row| {
+                    Ok(format!(
+                        "({})",
+                        row.iter()
+                            .map(|expr| render_expr(dialect, expr, params, bind_index))
+                            .collect::<OrmdanticResult<Vec<_>>>()?
+                            .join(", ")
+                    ))
+                })
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", ");
+            let mut sql = format!(
+                "INSERT INTO {} ({}) VALUES {rendered_rows}",
+                render_table_source(dialect, table, params, bind_index)?,
+                column_list(dialect, columns)
+            );
+            append_returning(dialect, &mut sql, returning, params, bind_index)?;
+            Ok((sql, QueryOperation::Insert))
+        }
+        DmlAst::Update {
+            table,
+            assignments,
+            where_expr,
+            returning,
+        } => {
+            if assignments.is_empty() {
+                return Err(OrmdanticError::SqlCompile {
+                    message: "update query requires at least one assignment".to_string(),
+                });
+            }
+            let assignments = assignments
+                .iter()
+                .map(|(column, expr)| {
+                    Ok(format!(
+                        "{} = {}",
+                        dialect.quote_ident(column),
+                        render_expr(dialect, expr, params, bind_index)?
+                    ))
+                })
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", ");
+            let mut sql = format!(
+                "UPDATE {} SET {assignments}",
+                render_table_source(dialect, table, params, bind_index)?
+            );
+            if let Some(where_expr) = where_expr {
+                sql.push_str(" WHERE ");
+                sql.push_str(&render_expr(dialect, where_expr, params, bind_index)?);
+            }
+            append_returning(dialect, &mut sql, returning, params, bind_index)?;
+            Ok((sql, QueryOperation::Update))
+        }
+        DmlAst::Delete {
+            table,
+            where_expr,
+            returning,
+        } => {
+            let mut sql = format!(
+                "DELETE FROM {}",
+                render_table_source(dialect, table, params, bind_index)?
+            );
+            if let Some(where_expr) = where_expr {
+                sql.push_str(" WHERE ");
+                sql.push_str(&render_expr(dialect, where_expr, params, bind_index)?);
+            }
+            append_returning(dialect, &mut sql, returning, params, bind_index)?;
+            Ok((sql, QueryOperation::Delete))
+        }
+        DmlAst::Upsert {
+            table,
+            columns,
+            rows,
+            conflict_target,
+            update_assignments,
+            returning,
+        } => {
+            require_columns(columns, "upsert")?;
+            if rows.is_empty() {
+                return Err(OrmdanticError::SqlCompile {
+                    message: "upsert query requires at least one row".to_string(),
+                });
+            }
+            let rendered_rows = rows
+                .iter()
+                .map(|row| {
+                    Ok(format!(
+                        "({})",
+                        row.iter()
+                            .map(|expr| render_expr(dialect, expr, params, bind_index))
+                            .collect::<OrmdanticResult<Vec<_>>>()?
+                            .join(", ")
+                    ))
+                })
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", ");
+            let mut sql = format!(
+                "INSERT INTO {} ({}) VALUES {rendered_rows}",
+                render_table_source(dialect, table, params, bind_index)?,
+                column_list(dialect, columns)
+            );
+            let target = conflict_target
+                .first()
+                .or_else(|| columns.first())
+                .ok_or_else(|| OrmdanticError::SqlCompile {
+                    message: "upsert query requires a conflict target".to_string(),
+                })?;
+            let update_columns = if update_assignments.is_empty() {
+                columns
+                    .iter()
+                    .filter(|column| *column != target)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            } else {
+                update_assignments
+                    .iter()
+                    .map(|(column, _)| column.clone())
+                    .collect::<Vec<_>>()
+            };
+            sql.push(' ');
+            sql.push_str(&dialect.upsert_conflict_clause(target, &update_columns));
+            append_returning(dialect, &mut sql, returning, params, bind_index)?;
+            Ok((sql, QueryOperation::Upsert))
+        }
+    }
+}
+
+fn render_expr(
+    dialect: &impl Dialect,
+    expr: &Expr,
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    Ok(match expr {
+        Expr::Column { table, name } => match table {
+            Some(table) => format!(
+                "{}.{}",
+                dialect.quote_ident(table),
+                dialect.quote_ident(name)
+            ),
+            None => dialect.quote_ident(name),
+        },
+        Expr::Param(name) => {
+            params.push(name.clone());
+            let placeholder = dialect.placeholder(*bind_index);
+            *bind_index += 1;
+            placeholder
+        }
+        Expr::Literal(literal) => render_literal(literal),
+        Expr::Binary { left, op, right } => format!(
+            "({} {} {})",
+            render_expr(dialect, left, params, bind_index)?,
+            render_binary_op(op),
+            render_expr(dialect, right, params, bind_index)?
+        ),
+        Expr::Unary { op, expr } => match op {
+            UnaryOp::Not => format!("(NOT {})", render_expr(dialect, expr, params, bind_index)?),
+            UnaryOp::Neg => format!("(-{})", render_expr(dialect, expr, params, bind_index)?),
+            UnaryOp::IsNull => {
+                format!(
+                    "({} IS NULL)",
+                    render_expr(dialect, expr, params, bind_index)?
+                )
+            }
+            UnaryOp::IsNotNull => format!(
+                "({} IS NOT NULL)",
+                render_expr(dialect, expr, params, bind_index)?
+            ),
+        },
+        Expr::Function { name, args, over } => {
+            let args = args
+                .iter()
+                .map(|arg| render_expr(dialect, arg, params, bind_index))
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", ");
+            let mut sql = format!("{name}({args})");
+            if let Some(window) = over {
+                sql.push_str(" OVER (");
+                let mut parts = Vec::new();
+                if !window.partition_by.is_empty() {
+                    parts.push(format!(
+                        "PARTITION BY {}",
+                        window
+                            .partition_by
+                            .iter()
+                            .map(|expr| render_expr(dialect, expr, params, bind_index))
+                            .collect::<OrmdanticResult<Vec<_>>>()?
+                            .join(", ")
+                    ));
+                }
+                if !window.order_by.is_empty() {
+                    parts.push(format!(
+                        "ORDER BY {}",
+                        window
+                            .order_by
+                            .iter()
+                            .map(|order| render_order_expr(dialect, order, params, bind_index))
+                            .collect::<OrmdanticResult<Vec<_>>>()?
+                            .join(", ")
+                    ));
+                }
+                sql.push_str(&parts.join(" "));
+                sql.push(')');
+            }
+            sql
+        }
+        Expr::Between { expr, low, high } => format!(
+            "({} BETWEEN {} AND {})",
+            render_expr(dialect, expr, params, bind_index)?,
+            render_expr(dialect, low, params, bind_index)?,
+            render_expr(dialect, high, params, bind_index)?
+        ),
+        Expr::InList {
+            expr,
+            values,
+            negated,
+        } => {
+            let operator = if *negated { "NOT IN" } else { "IN" };
+            format!(
+                "({} {operator} ({}))",
+                render_expr(dialect, expr, params, bind_index)?,
+                values
+                    .iter()
+                    .map(|value| render_expr(dialect, value, params, bind_index))
+                    .collect::<OrmdanticResult<Vec<_>>>()?
+                    .join(", ")
+            )
+        }
+        Expr::InSubquery {
+            expr,
+            subquery,
+            negated,
+        } => {
+            let operator = if *negated { "NOT IN" } else { "IN" };
+            format!(
+                "({} {operator} ({}))",
+                render_expr(dialect, expr, params, bind_index)?,
+                render_select_ast(dialect, subquery, params, bind_index)?
+            )
+        }
+        Expr::Exists(subquery) => format!(
+            "EXISTS ({})",
+            render_select_ast(dialect, subquery, params, bind_index)?
+        ),
+        Expr::Case { whens, else_expr } => {
+            let mut sql = "CASE".to_string();
+            for (condition, value) in whens {
+                sql.push_str(" WHEN ");
+                sql.push_str(&render_expr(dialect, condition, params, bind_index)?);
+                sql.push_str(" THEN ");
+                sql.push_str(&render_expr(dialect, value, params, bind_index)?);
+            }
+            if let Some(else_expr) = else_expr {
+                sql.push_str(" ELSE ");
+                sql.push_str(&render_expr(dialect, else_expr, params, bind_index)?);
+            }
+            sql.push_str(" END");
+            sql
+        }
+        Expr::Cast { expr, type_name } => format!(
+            "CAST({} AS {type_name})",
+            render_expr(dialect, expr, params, bind_index)?
+        ),
+        Expr::Tuple(values) => format!(
+            "({})",
+            values
+                .iter()
+                .map(|value| render_expr(dialect, value, params, bind_index))
+                .collect::<OrmdanticResult<Vec<_>>>()?
+                .join(", ")
+        ),
+        Expr::RawSafe(sql) => sql.clone(),
+    })
+}
+
+fn render_table_source(
+    dialect: &impl Dialect,
+    source: &TableSource,
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    Ok(match source {
+        TableSource::Table { name, alias } => match alias {
+            Some(alias) => format!(
+                "{} AS {}",
+                dialect.quote_ident(name),
+                dialect.quote_ident(alias)
+            ),
+            None => dialect.quote_ident(name),
+        },
+        TableSource::Subquery { subquery, alias } => format!(
+            "({}) AS {}",
+            render_select_ast(dialect, subquery, params, bind_index)?,
+            dialect.quote_ident(alias)
+        ),
+        TableSource::RawSafe(sql) => sql.clone(),
+    })
+}
+
+fn render_order_expr(
+    dialect: &impl Dialect,
+    order: &OrderExpr,
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    let direction = match order.direction {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+    let nulls = match order.nulls {
+        Some(OrderNulls::First) => " NULLS FIRST",
+        Some(OrderNulls::Last) => " NULLS LAST",
+        None => "",
+    };
+    Ok(format!(
+        "{} {direction}{nulls}",
+        render_expr(dialect, &order.expr, params, bind_index)?
+    ))
+}
+
+fn append_returning(
+    dialect: &impl Dialect,
+    sql: &mut String,
+    returning: &[Expr],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<()> {
+    if returning.is_empty() {
+        return Ok(());
+    }
+    if !dialect.supports_returning() {
+        return Err(OrmdanticError::UnsupportedFeature {
+            feature: "RETURNING".to_string(),
+            dialect: dialect.name().to_string(),
+        });
+    }
+    sql.push_str(" RETURNING ");
+    sql.push_str(
+        &returning
+            .iter()
+            .map(|expr| render_expr(dialect, expr, params, bind_index))
+            .collect::<OrmdanticResult<Vec<_>>>()?
+            .join(", "),
+    );
+    Ok(())
+}
+
+fn render_literal(literal: &SqlLiteral) -> String {
+    match literal {
+        SqlLiteral::Null => "NULL".to_string(),
+        SqlLiteral::Integer(value) => value.to_string(),
+        SqlLiteral::String(value) => format!("'{}'", value.replace('\'', "''")),
+        SqlLiteral::Boolean(true) => "TRUE".to_string(),
+        SqlLiteral::Boolean(false) => "FALSE".to_string(),
+    }
+}
+
+fn render_binary_op(op: &BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Eq => "=",
+        BinaryOp::Ne => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::Le => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::Ge => ">=",
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::And => "AND",
+        BinaryOp::Or => "OR",
+        BinaryOp::Like => "LIKE",
+        BinaryOp::ILike => "ILIKE",
     }
 }
 
@@ -557,141 +1742,85 @@ fn render_filter(
     params: &mut Vec<String>,
     render_column: impl Fn(&str) -> String + Copy,
 ) -> String {
-    match filter {
-        Filter::Eq { column, param } => render_binary_filter(
+    let expression = PredicateExpr::from(filter);
+    render_expression(dialect, &expression, bind_index, params, render_column)
+}
+
+fn render_expression(
+    dialect: &impl Dialect,
+    expression: &PredicateExpr,
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+    render_column: impl Fn(&str) -> String + Copy,
+) -> String {
+    match expression {
+        PredicateExpr::Compare { left, op, right } => render_comparison_expression(
             dialect,
-            render_column(column),
-            "=",
-            param,
+            render_column(left.name()),
+            op,
+            right,
             bind_index,
             params,
         ),
-        Filter::Ne { column, param } => render_binary_filter(
-            dialect,
-            render_column(column),
-            "!=",
-            param,
-            bind_index,
-            params,
-        ),
-        Filter::Lt { column, param } => render_binary_filter(
-            dialect,
-            render_column(column),
-            "<",
-            param,
-            bind_index,
-            params,
-        ),
-        Filter::Le { column, param } => render_binary_filter(
-            dialect,
-            render_column(column),
-            "<=",
-            param,
-            bind_index,
-            params,
-        ),
-        Filter::Gt { column, param } => render_binary_filter(
-            dialect,
-            render_column(column),
-            ">",
-            param,
-            bind_index,
-            params,
-        ),
-        Filter::Ge { column, param } => render_binary_filter(
-            dialect,
-            render_column(column),
-            ">=",
-            param,
-            bind_index,
-            params,
-        ),
-        Filter::Like { column, param } => render_binary_filter(
-            dialect,
-            render_column(column),
-            "LIKE",
-            param,
-            bind_index,
-            params,
-        ),
-        Filter::ILike { column, param } => {
-            render_binary_filter(
-                dialect,
-                format!("LOWER({})", render_column(column)),
-                "LIKE",
-                param,
-                bind_index,
-                params,
-            )
-            .replace(" LIKE ", " LIKE LOWER(")
-                + ")"
-        }
-        Filter::In {
-            column,
+        PredicateExpr::InList {
+            left,
             params: names,
-        } => render_in_filter(
+            negated,
+        } => render_in_expression(
             dialect,
-            render_column(column),
-            "IN",
+            render_column(left.name()),
+            *negated,
             names,
             bind_index,
             params,
         ),
-        Filter::NotIn {
-            column,
-            params: names,
-        } => render_in_filter(
-            dialect,
-            render_column(column),
-            "NOT IN",
-            names,
-            bind_index,
-            params,
-        ),
-        Filter::IsNull { column } => format!("{} IS NULL", render_column(column)),
-        Filter::IsNotNull { column } => format!("{} IS NOT NULL", render_column(column)),
-        Filter::And(filters) => {
-            render_filter_group(dialect, "AND", filters, bind_index, params, render_column)
+        PredicateExpr::NullCheck { expr, negated } => {
+            let operator = if *negated { "IS NOT NULL" } else { "IS NULL" };
+            format!("{} {operator}", render_column(expr.name()))
         }
-        Filter::Or(filters) => {
-            render_filter_group(dialect, "OR", filters, bind_index, params, render_column)
+        PredicateExpr::Bool { op, exprs } => {
+            render_bool_expression(dialect, op, exprs, bind_index, params, render_column)
         }
     }
 }
 
-fn render_binary_filter(
+fn render_comparison_expression(
     dialect: &impl Dialect,
     column: String,
-    operator: &str,
-    param: &str,
+    operator: &ComparisonOp,
+    param: &BindParam,
     bind_index: &mut usize,
     params: &mut Vec<String>,
 ) -> String {
-    params.push(param.to_string());
+    params.push(param.name().to_string());
     let placeholder = dialect.placeholder(*bind_index);
     *bind_index += 1;
-    format!("{column} {operator} {placeholder}")
+    if operator == &ComparisonOp::ILike {
+        return format!("LOWER({column}) LIKE LOWER({placeholder})");
+    }
+    format!("{} {} {placeholder}", column, operator.sql_operator())
 }
 
-fn render_in_filter(
+fn render_in_expression(
     dialect: &impl Dialect,
     column: String,
-    operator: &str,
-    names: &[String],
+    negated: bool,
+    names: &[BindParam],
     bind_index: &mut usize,
     params: &mut Vec<String>,
 ) -> String {
+    let operator = if negated { "NOT IN" } else { "IN" };
     if names.is_empty() {
-        return if operator == "IN" {
-            "1 = 0".to_string()
-        } else {
+        return if negated {
             "1 = 1".to_string()
+        } else {
+            "1 = 0".to_string()
         };
     }
     let placeholders = names
         .iter()
         .map(|name| {
-            params.push(name.clone());
+            params.push(name.name().to_string());
             let placeholder = dialect.placeholder(*bind_index);
             *bind_index += 1;
             placeholder
@@ -701,19 +1830,19 @@ fn render_in_filter(
     format!("{column} {operator} ({placeholders})")
 }
 
-fn render_filter_group(
+fn render_bool_expression(
     dialect: &impl Dialect,
-    operator: &str,
-    filters: &[Filter],
+    operator: &BoolOp,
+    expressions: &[PredicateExpr],
     bind_index: &mut usize,
     params: &mut Vec<String>,
     render_column: impl Fn(&str) -> String + Copy,
 ) -> String {
-    let rendered = filters
+    let rendered = expressions
         .iter()
-        .map(|filter| render_filter(dialect, filter, bind_index, params, render_column))
+        .map(|expression| render_expression(dialect, expression, bind_index, params, render_column))
         .collect::<Vec<_>>()
-        .join(&format!(" {operator} "));
+        .join(&format!(" {} ", operator.sql_operator()));
     format!("({rendered})")
 }
 

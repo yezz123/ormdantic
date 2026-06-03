@@ -6,18 +6,18 @@ SQL AST and query compiler for Ormdantic.
 
 ## Public API
 
-| Item | Purpose |
-| --- | --- |
-| `QueryOperation` | Describes the compiled operation kind. |
-| `CompiledQuery` | SQL text, ordered parameter names, and operation kind. |
-| `TableRef` | Table reference used by query AST nodes. |
-| `SelectColumn` | Selected column and alias metadata. |
-| `JoinedSelectColumn` | Selected column metadata for joined relationship result aliases. |
-| `Filter` | Predicate AST for equality, comparison, `IN`, `LIKE`, null checks, and boolean composition. |
-| `SortDirection` | Ascending or descending ordering. |
-| `OrderBy` | Ordered column expression. |
-| `JoinSpec` | LEFT JOIN metadata for relationship queries. |
-| `QueryAst` | Insert, update, upsert, delete, select, and count AST with `compile`. |
+| Item                 | Purpose                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `QueryOperation`     | Describes the compiled operation kind.                                                      |
+| `CompiledQuery`      | SQL text, ordered parameter names, and operation kind.                                      |
+| `TableRef`           | Table reference used by query AST nodes.                                                    |
+| `SelectColumn`       | Selected column and alias metadata.                                                         |
+| `JoinedSelectColumn` | Selected column metadata for joined relationship result aliases.                            |
+| `Filter`             | Predicate AST for equality, comparison, `IN`, `LIKE`, null checks, and boolean composition. |
+| `SortDirection`      | Ascending or descending ordering.                                                           |
+| `OrderBy`            | Ordered column expression.                                                                  |
+| `JoinSpec`           | LEFT JOIN metadata for relationship queries.                                                |
+| `QueryAst`           | Insert, update, upsert, delete, select, and count AST with `compile`.                       |
 
 ## Dependencies
 

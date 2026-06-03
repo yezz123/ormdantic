@@ -8,40 +8,29 @@ description = "asynchronous ORM that uses pydantic models to represent database 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [
-    { name = "Yasser Tahiri", email = "hello@yezz.me" },
-]
-keywords = [
-    "orm",
-    "pydantic",
-    "asyncio",
-    "rust",
-    "sql",
-    "sqlalchemy",
-]
+authors = [{ name = "Yasser Tahiri", email = "hello@yezz.me" }]
+keywords = ["orm", "pydantic", "asyncio", "rust", "sql", "sqlalchemy"]
 
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Information Technology",
-    "Framework :: AsyncIO",
-    "Framework :: Pydantic",
-    "Framework :: Pydantic :: 2",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3 :: Only",
-    "Topic :: Internet :: WWW/HTTP :: Session",
-    "Topic :: Database",
-    "Typing :: Typed",
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Framework :: AsyncIO",
+  "Framework :: Pydantic",
+  "Framework :: Pydantic :: 2",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Internet :: WWW/HTTP :: Session",
+  "Topic :: Database",
+  "Typing :: Typed",
 ]
 
-dependencies = [
-    "pydantic>=2.0.0"
-]
+dependencies = ["pydantic>=2.0.0"]
 
 dynamic = ["version"]
 
@@ -54,43 +43,36 @@ Documentation = "https://ormdantic.yezz.me/"
 Funding = 'https://github.com/sponsors/yezz123'
 
 [project.optional-dependencies]
-sqlite = [
-]
-postgresql = [
-]
+sqlite = []
+postgresql = []
 
 [dependency-groups]
 testing = [
-    "pytest==8.2.2",
-    "pytest-asyncio==0.23.7",
-    "pytest-cov==7.1.0",
-    "python-decouple",
-    "pytest-pretty",
+  "pytest==8.2.2",
+  "pytest-asyncio==0.23.7",
+  "pytest-cov==7.1.0",
+  "python-decouple",
+  "pytest-pretty",
 ]
-linting = [
-    "pre-commit==4.6.0",
-    "mypy==2.1.0",
-    "ruff",
-    "black",
-]
+linting = ["pre-commit==4.6.0", "mypy==2.1.0", "ruff", "black"]
 docs = [
-    "cairosvg >=2.8.2",
-    "griffe-typingdoc >=0.3.0",
-    "griffe-warnings-deprecated >=1.1.0",
-    "markdown-include-variants >=0.0.8",
-    "mdx-include >=1.4.1",
-    "mkdocstrings[python] >=1.0.3",
-    "pillow >=11.3.0",
-    "pyyaml >=5.3.1",
-    "zensical>=0.0.42",
+  "cairosvg >=2.8.2",
+  "griffe-typingdoc >=0.3.0",
+  "griffe-warnings-deprecated >=1.1.0",
+  "markdown-include-variants >=0.0.8",
+  "mdx-include >=1.4.1",
+  "mkdocstrings[python] >=1.0.3",
+  "pillow >=11.3.0",
+  "pyyaml >=5.3.1",
+  "zensical>=0.0.42",
 ]
 dev = [
-    { include-group = "testing" },
-    { include-group = "linting" },
-    { include-group = "docs" },
-    "pytest-benchmark",
-    "maturin>=1,<2",
-    "pytest-codspeed>=5.0.3",
+  { include-group = "testing" },
+  { include-group = "linting" },
+  { include-group = "docs" },
+  "pytest-benchmark",
+  "maturin>=1,<2",
+  "pytest-codspeed>=5.0.3",
 ]
 
 [tool.hatch.version]
@@ -109,17 +91,17 @@ known_third_party = ["pydantic", "typing_extensions"]
 [tool.ruff.lint]
 mccabe = { max-complexity = 14 }
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "C",  # flake8-comprehensions
-    "B",  # flake8-bugbear
+  "E", # pycodestyle errors
+  "W", # pycodestyle warnings
+  "F", # pyflakes
+  "I", # isort
+  "C", # flake8-comprehensions
+  "B", # flake8-bugbear
 ]
 ignore = [
-    "E501",  # line too long, handled by black
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
+  "E501", # line too long, handled by black
+  "B008", # do not perform function calls in argument defaults
+  "C901", # too complex
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -138,9 +120,9 @@ context = '${CONTEXT}'
 
 [tool.coverage.paths]
 source = [
-    'ormdantic/',
-    '/Users/runner/work/ormdantic/ormdantic/ormdantic/',
-    'D:\a\ormdantic\ormdantic\ormdantic',
+  'ormdantic/',
+  '/Users/runner/work/ormdantic/ormdantic/ormdantic/',
+  'D:\a\ormdantic\ormdantic\ormdantic',
 ]
 
 [tool.mypy]
@@ -155,20 +137,18 @@ ignore_missing_imports = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = [
-    'dotenv.*',
-]
+module = ['dotenv.*']
 ignore_missing_imports = true
 
 [tool.coverage.report]
 precision = 2
 exclude_lines = [
-    "pragma: no cover",
-    "raise NotImplementedError",
-    "raise NotImplemented",
-    "@overload",
-    "if TYPE_CHECKING:",
-    "if __name__ == .__main__.:",
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "raise NotImplemented",
+  "@overload",
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
 ]
 
 [tool.pytest.ini_options]

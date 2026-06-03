@@ -25,10 +25,10 @@ Ormdantic is a library for interacting with Asynchronous <abbr title='Also calle
 
 The key features are:
 
-* **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-* **Compatible**: It combines Pydantic models and Rust query compilation/execution to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-* **Extensible**: You have Ormdantic's Rust internals underneath.
-* **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
+- **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
+- **Compatible**: It combines Pydantic models and Rust query compilation/execution to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
+- **Extensible**: You have Ormdantic's Rust internals underneath.
+- **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
 
 ## Requirements
 
@@ -78,9 +78,9 @@ To create tables decorate a pydantic model with the `database.table` decorator, 
 
 #### Table Restrictions
 
-* Tables must have a single column primary key.
-* The primary key column must be the first column.
-* Relationships must `union-type` the foreign model and that models primary key.
+- Tables must have a single column primary key.
+- The primary key column must be the first column.
+- Relationships must `union-type` the foreign model and that models primary key.
 
 ```python
 from uuid import uuid4
@@ -100,7 +100,7 @@ Now after we create the table, we can initialize the database with the table and
 
 #### Init()
 
-* Register models as ORM models and initialize the database.
+- Register models as ORM models and initialize the database.
 
 We use `database.init` will Populate relations information and create the tables.
 
@@ -150,7 +150,7 @@ As we know, in SQL, we can search for data using different methods, ex. `WHERE`,
 
 In Ormdantic, we can search for data using the `database.find_one` or `database.find_many` methods.
 
-* `Find_one`  used to find a Model instance by Primary Key, its could also find with `depth` parameter.
+- `Find_one` used to find a Model instance by Primary Key, its could also find with `depth` parameter.
 
 ```python
      # Find one
@@ -162,7 +162,7 @@ In Ormdantic, we can search for data using the `database.find_one` or `database.
      print(find_coffee.flavor.name)
 ```
 
-* `Find_many` used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
+- `Find_many` used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
 
 ```python
      # Find many
@@ -215,7 +215,7 @@ To count the number of rows of a table or in a result set you can use the `count
      print(count)
 ```
 
-* It's support also `Where` and `Depth`
+- It's support also `Where` and `Depth`
 
 ```python
      count_advanced = await database[Coffee].count(

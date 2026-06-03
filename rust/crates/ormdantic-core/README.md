@@ -6,13 +6,13 @@ Shared primitives for the Ormdantic Rust workspace.
 
 ## Public API
 
-| Item | Purpose |
-| --- | --- |
-| `OrmdanticResult<T>` | Workspace-wide alias for `Result<T, OrmdanticError>`. |
-| `TableId` | Opaque table registry identifier. |
-| `ColumnId` | Opaque column registry identifier. |
-| `RelationshipId` | Opaque relationship registry identifier. |
-| `OrmdanticError` | Shared validation, dialect, SQL compilation, and hydration error enum. |
+| Item                 | Purpose                                                                |
+| -------------------- | ---------------------------------------------------------------------- |
+| `OrmdanticResult<T>` | Workspace-wide alias for `Result<T, OrmdanticError>`.                  |
+| `TableId`            | Opaque table registry identifier.                                      |
+| `ColumnId`           | Opaque column registry identifier.                                     |
+| `RelationshipId`     | Opaque relationship registry identifier.                               |
+| `OrmdanticError`     | Shared validation, dialect, SQL compilation, and hydration error enum. |
 
 ## Dependencies
 

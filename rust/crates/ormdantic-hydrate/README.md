@@ -6,11 +6,11 @@ Row hydration planning for Ormdantic.
 
 ## Public API
 
-| Item | Purpose |
-| --- | --- |
-| `FlatHydrationPlan` | Maps result aliases to model column names and tracks the primary-key column index. |
-| `ResultColumn` | Parsed table path and column name from a result alias. |
-| `ResultShape` | Root table, selected columns, relationship paths, and array paths for joined results. |
+| Item                | Purpose                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| `FlatHydrationPlan` | Maps result aliases to model column names and tracks the primary-key column index.    |
+| `ResultColumn`      | Parsed table path and column name from a result alias.                                |
+| `ResultShape`       | Root table, selected columns, relationship paths, and array paths for joined results. |
 
 ## Dependencies
 

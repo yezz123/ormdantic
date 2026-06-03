@@ -29,10 +29,35 @@ def validate_table_map(table_map: Map) -> int | None:
     """Validate current Python table metadata through Rust when available."""
     if _ormdantic is None or not hasattr(_ormdantic, "validate_schema_tables"):
         return None
-    tables = [
-        (table.tablename, table.pk, list(table.columns))
-        for table in table_map.name_to_data.values()
-    ]
+    tables = []
+    for table in table_map.name_to_data.values():
+        columns = [
+            column_descriptor(table_map, table, field_name, field)
+            for field_name, field in model_fields(table.model).items()
+            if field_name not in table.back_references
+        ]
+        relationships = []
+        for field_name, relationship in table.relationships.items():
+            related = table_map.name_to_data[relationship.foreign_table]
+            relationships.append(
+                (
+                    field_name,
+                    relationship.foreign_table,
+                    related.pk,
+                    relationship.back_references,
+                )
+            )
+        tables.append(
+            (
+                table.model.__name__,
+                table.tablename,
+                table.pk,
+                columns,
+                index_descriptors(table),
+                table.unique_constraints,
+                relationships,
+            )
+        )
     return int(_ormdantic.validate_schema_tables(tables))
 
 
@@ -73,7 +98,7 @@ def column_descriptor(
     str | None,
     int | None,
     bool,
-    list[str],
+    list[tuple[str, str, str]],
 ]:
     """Return a compact Rust schema descriptor for one model field."""
     relationship = table.relationships.get(field_name)
@@ -153,21 +178,23 @@ def field_kind(field: FieldMetadata) -> str:
     return "json"
 
 
-def check_constraints(field_name: str, field: FieldMetadata) -> list[str]:
-    """Return DDL check constraints for a Pydantic field."""
+def check_constraints(
+    field_name: str, field: FieldMetadata
+) -> list[tuple[str, str, str]]:
+    """Return structured DDL check constraints for a Pydantic field."""
     checks = []
     if field.ge is not None:
-        checks.append(f"{field_name} >= {field.ge}")
+        checks.append(("comparison", ">=", str(field.ge)))
     if field.gt is not None:
-        checks.append(f"{field_name} > {field.gt}")
+        checks.append(("comparison", ">", str(field.gt)))
     if field.le is not None:
-        checks.append(f"{field_name} <= {field.le}")
+        checks.append(("comparison", "<=", str(field.le)))
     if field.lt is not None:
-        checks.append(f"{field_name} < {field.lt}")
+        checks.append(("comparison", "<", str(field.lt)))
     if field.min_length is not None:
-        checks.append(f"LENGTH({field_name}) >= {field.min_length}")
+        checks.append(("length", ">=", str(field.min_length)))
     if field.max_length is not None:
-        checks.append(f"LENGTH({field_name}) <= {field.max_length}")
+        checks.append(("length", "<=", str(field.max_length)))
     return checks
 
 

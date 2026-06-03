@@ -1,0 +1,22 @@
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  precision: 2
+  range: '90...100'
+  status:
+    patch: false
+    project: false
+
+flags:
+  python:
+    paths:
+      - ormdantic/
+    carryforward: true
+  rust:
+    paths:
+      - rust/
+    carryforward: true
+
+comment:
+  layout: 'header, diff, flags, files, footer'

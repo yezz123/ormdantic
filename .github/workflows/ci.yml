@@ -52,6 +52,46 @@ jobs:
         env:
           DATABASE_URL: sqlite:///db.sqlite3
 
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
+
+      - run: uv sync --group dev
+      - run: uv run --group dev maturin develop
+      - run: bash scripts/test.sh
+        env:
+          CONTEXT: py312-ubuntu-coverage
+          DATABASE_URL: sqlite:///db.sqlite3
+      - run: bash scripts/coverage-rust.sh
+
+      - uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          flags: python
+          name: python-coverage
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - uses: codecov/codecov-action@v5
+        with:
+          files: target/coverage/rust.lcov
+          flags: rust
+          name: rust-coverage
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   database-services:
     runs-on: ubuntu-latest
     services:
@@ -119,7 +159,7 @@ jobs:
 
   check:
     if: always()
-    needs: [lint, tests, database-services]
+    needs: [lint, tests, coverage, database-services]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1

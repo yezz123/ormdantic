@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "rust/crates/ormdantic-core",
-    "rust/crates/ormdantic-schema",
-    "rust/crates/ormdantic-hydrate",
-    "rust/crates/ormdantic-dialects",
-    "rust/crates/ormdantic-engine",
-    "rust/crates/ormdantic-sql",
-    "rust/crates/ormdantic-py",
+  "rust/crates/ormdantic-core",
+  "rust/crates/ormdantic-schema",
+  "rust/crates/ormdantic-hydrate",
+  "rust/crates/ormdantic-dialects",
+  "rust/crates/ormdantic-engine",
+  "rust/crates/ormdantic-sql",
+  "rust/crates/ormdantic-py",
 ]
 resolver = "2"
 
