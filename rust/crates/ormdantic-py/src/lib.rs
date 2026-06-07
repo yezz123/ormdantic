@@ -16,9 +16,9 @@ use ormdantic_schema::{
     TableDef, UniqueConstraintDef,
 };
 use ormdantic_sql::{
-    CompiledQuery, DdlAst, Expr, Filter, JoinSpec, JoinedSelectColumn, OrderBy, Projection,
-    QueryAst, QueryOperation, SelectAst, SelectColumn, SelectInPlan as SqlSelectInPlan,
-    SortDirection, TableRef, TableSource,
+    BinaryOp, CompiledQuery, DdlAst, DmlAst, Expr, Filter, JoinSpec, JoinedSelectColumn, OrderBy,
+    OrderExpr, OrderNulls, Projection, QueryAst, QueryOperation, SelectAst, SelectColumn,
+    SelectInPlan as SqlSelectInPlan, SortDirection, SqlLiteral, TableRef, TableSource, UnaryOp,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -781,6 +781,40 @@ impl PyTableHandle {
         )
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let params = bind_values(py, compiled.params(), values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
+    fn select_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let query = query.downcast::<PyDict>()?;
+        let compiled = select_ast_from_payload(py, query)?
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let empty_values = PyDict::new(py);
+        let values = match query.get_item("values")? {
+            Some(values) => values.downcast::<PyDict>()?.clone(),
+            None => empty_values,
+        };
+        let params = bind_values(py, compiled.params(), &values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
+    fn update_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let query = query.downcast::<PyDict>()?;
+        let compiled = update_ast_from_payload(py, query)?
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let empty_values = PyDict::new(py);
+        let values = match query.get_item("values")? {
+            Some(values) => values.downcast::<PyDict>()?.clone(),
+            None => empty_values,
+        };
+        let params = bind_values(py, compiled.params(), &values)?;
         self.execute_compiled(py, compiled, params)
     }
 }
@@ -1605,6 +1639,329 @@ fn compile_expression_query(
         .compile(&dialect)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     compiled_query_to_dict(py, compiled)
+}
+
+#[pyfunction]
+fn compile_typed_expression_query(
+    py: Python<'_>,
+    dialect: &str,
+    query: &Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
+    let query = query.downcast::<PyDict>()?;
+    let dialect =
+        AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let compiled = select_ast_from_payload(py, query)?
+        .compile(&dialect)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let result = PyDict::new(py);
+    result.set_item("sql", compiled.sql())?;
+    result.set_item("params", compiled.params())?;
+    result.set_item("operation", operation_name(compiled.operation()))?;
+    if let Some(values) = query.get_item("values")? {
+        result.set_item("values", values)?;
+    }
+    Ok(result.into_any().unbind())
+}
+
+#[pyfunction]
+fn compile_typed_update_query(
+    py: Python<'_>,
+    dialect: &str,
+    query: &Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
+    let query = query.downcast::<PyDict>()?;
+    let dialect =
+        AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let compiled = update_ast_from_payload(py, query)?
+        .compile(&dialect)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let result = PyDict::new(py);
+    result.set_item("sql", compiled.sql())?;
+    result.set_item("params", compiled.params())?;
+    result.set_item("operation", operation_name(compiled.operation()))?;
+    if let Some(values) = query.get_item("values")? {
+        result.set_item("values", values)?;
+    }
+    Ok(result.into_any().unbind())
+}
+
+fn select_ast_from_payload(py: Python<'_>, query: &Bound<'_, PyDict>) -> PyResult<SelectAst> {
+    let table: String = required_item(query, "table")?.extract()?;
+    let projections = required_item(query, "projections")?.extract::<Vec<Py<PyAny>>>()?;
+    let mut select =
+        SelectAst::new(parse_projections(py, projections)?).from(TableSource::table(table));
+
+    if let Some(where_expr) = query.get_item("where")? {
+        select = select.where_expr(parse_expression(where_expr)?);
+    }
+    if let Some(group_by) = query.get_item("group_by")? {
+        select = select.group_by(parse_expression_list(py, group_by)?);
+    }
+    if let Some(having) = query.get_item("having")? {
+        select = select.having(parse_expression(having)?);
+    }
+    if let Some(order_by) = query.get_item("order_by")? {
+        select = select.order_by(parse_order_expressions(py, order_by)?);
+    }
+    if let Some(distinct) = query.get_item("distinct")? {
+        select = select.distinct(distinct.extract()?);
+    }
+    if let Some(limit) = query.get_item("limit")? {
+        select = select.limit(limit.extract()?);
+    }
+    if let Some(offset) = query.get_item("offset")? {
+        select = select.offset(offset.extract()?);
+    }
+    Ok(select)
+}
+
+fn update_ast_from_payload(py: Python<'_>, query: &Bound<'_, PyDict>) -> PyResult<DmlAst> {
+    let table: String = required_item(query, "table")?.extract()?;
+    let assignments = required_item(query, "assignments")?
+        .extract::<Vec<Py<PyAny>>>()?
+        .into_iter()
+        .map(|assignment| {
+            let assignment = assignment.bind(py).downcast::<PyDict>()?;
+            Ok((
+                required_item(assignment, "column")?.extract::<String>()?,
+                parse_expression(required_item(assignment, "expr")?)?,
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let where_expr = query.get_item("where")?.map(parse_expression).transpose()?;
+    Ok(DmlAst::Update {
+        table: TableSource::table(table),
+        assignments,
+        where_expr,
+        returning: Vec::new(),
+    })
+}
+
+fn parse_projections(py: Python<'_>, projections: Vec<Py<PyAny>>) -> PyResult<Vec<Projection>> {
+    projections
+        .into_iter()
+        .map(|projection| {
+            let projection = projection.bind(py).downcast::<PyDict>()?;
+            let expr = parse_expression(required_item(projection, "expr")?)?;
+            match projection.get_item("alias")? {
+                Some(alias) => Ok(Projection::aliased(expr, alias.extract::<String>()?)),
+                None => Ok(Projection::new(expr)),
+            }
+        })
+        .collect()
+}
+
+fn parse_expression_list(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Vec<Expr>> {
+    value
+        .extract::<Vec<Py<PyAny>>>()?
+        .into_iter()
+        .map(|expr| parse_expression(expr.bind(py).clone()))
+        .collect()
+}
+
+fn parse_order_expressions(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Vec<OrderExpr>> {
+    value
+        .extract::<Vec<Py<PyAny>>>()?
+        .into_iter()
+        .map(|order| {
+            let order_payload = order.bind(py).downcast::<PyDict>()?;
+            let expr = parse_expression(required_item(order_payload, "expr")?)?;
+            let direction: String = required_item(order_payload, "direction")?.extract()?;
+            let mut order_expr = OrderExpr::new(expr, parse_sort_direction(&direction)?);
+            if let Some(nulls) = order_payload.get_item("nulls")? {
+                order_expr = order_expr.nulls(parse_order_nulls(&nulls.extract::<String>()?)?);
+            }
+            Ok(order_expr)
+        })
+        .collect()
+}
+
+fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
+    let expr = expr.downcast::<PyDict>()?;
+    let kind: String = required_item(expr, "kind")?.extract()?;
+    match kind.as_str() {
+        "column" => {
+            let name: String = required_item(expr, "name")?.extract()?;
+            match expr.get_item("table")? {
+                Some(table) => Ok(Expr::qualified_column(table.extract::<String>()?, name)),
+                None => Ok(Expr::column(name)),
+            }
+        }
+        "param" => Ok(Expr::param(
+            required_item(expr, "name")?.extract::<String>()?,
+        )),
+        "literal" => parse_literal_expr(required_item(expr, "value")?),
+        "raw_safe" => Ok(Expr::RawSafe(required_item(expr, "sql")?.extract()?)),
+        "binary" => Ok(Expr::Binary {
+            left: Box::new(parse_expression(required_item(expr, "left")?)?),
+            op: parse_binary_op(&required_item(expr, "op")?.extract::<String>()?)?,
+            right: Box::new(parse_expression(required_item(expr, "right")?)?),
+        }),
+        "unary" => Ok(Expr::Unary {
+            op: parse_unary_op(&required_item(expr, "op")?.extract::<String>()?)?,
+            expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+        }),
+        "function" => {
+            let args = match expr.get_item("args")? {
+                Some(args) => args
+                    .extract::<Vec<Py<PyAny>>>()?
+                    .into_iter()
+                    .map(|arg| parse_expression(arg.bind(expr.py()).clone()))
+                    .collect::<PyResult<Vec<_>>>()?,
+                None => Vec::new(),
+            };
+            Ok(Expr::Function {
+                name: required_item(expr, "name")?.extract()?,
+                args,
+                over: None,
+            })
+        }
+        "between" => Ok(Expr::Between {
+            expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+            low: Box::new(parse_expression(required_item(expr, "low")?)?),
+            high: Box::new(parse_expression(required_item(expr, "high")?)?),
+        }),
+        "in_list" => {
+            let values = required_item(expr, "values")?
+                .extract::<Vec<Py<PyAny>>>()?
+                .into_iter()
+                .map(|value| parse_expression(value.bind(expr.py()).clone()))
+                .collect::<PyResult<Vec<_>>>()?;
+            let negated = expr
+                .get_item("negated")?
+                .map(|value| value.extract::<bool>())
+                .transpose()?
+                .unwrap_or(false);
+            Ok(Expr::InList {
+                expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+                values,
+                negated,
+            })
+        }
+        "in_subquery" => {
+            let negated = expr
+                .get_item("negated")?
+                .map(|value| value.extract::<bool>())
+                .transpose()?
+                .unwrap_or(false);
+            let subquery_payload = required_item(expr, "subquery")?;
+            let subquery = subquery_payload.downcast::<PyDict>()?;
+            Ok(Expr::InSubquery {
+                expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+                subquery: Box::new(select_ast_from_payload(expr.py(), subquery)?),
+                negated,
+            })
+        }
+        "exists" => {
+            let subquery_payload = required_item(expr, "subquery")?;
+            let subquery = subquery_payload.downcast::<PyDict>()?;
+            Ok(Expr::Exists(Box::new(select_ast_from_payload(
+                expr.py(),
+                subquery,
+            )?)))
+        }
+        "case" => {
+            let whens = required_item(expr, "whens")?
+                .extract::<Vec<Py<PyAny>>>()?
+                .into_iter()
+                .map(|when| {
+                    let when = when.bind(expr.py()).downcast::<PyDict>()?;
+                    Ok((
+                        parse_expression(required_item(when, "when")?)?,
+                        parse_expression(required_item(when, "then")?)?,
+                    ))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            let else_expr = match expr.get_item("else")? {
+                Some(value) if value.is_none() => None,
+                Some(value) => Some(Box::new(parse_expression(value)?)),
+                None => None,
+            };
+            Ok(Expr::Case { whens, else_expr })
+        }
+        "cast" => Ok(Expr::Cast {
+            expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+            type_name: required_item(expr, "type")?.extract()?,
+        }),
+        "tuple" => {
+            let values = required_item(expr, "values")?
+                .extract::<Vec<Py<PyAny>>>()?
+                .into_iter()
+                .map(|value| parse_expression(value.bind(expr.py()).clone()))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(Expr::Tuple(values))
+        }
+        other => Err(PyValueError::new_err(format!(
+            "unsupported expression kind '{other}'"
+        ))),
+    }
+}
+
+fn parse_literal_expr(value: Bound<'_, PyAny>) -> PyResult<Expr> {
+    if value.is_none() {
+        return Ok(Expr::Literal(SqlLiteral::Null));
+    }
+    if let Ok(value) = value.extract::<bool>() {
+        return Ok(Expr::Literal(SqlLiteral::Boolean(value)));
+    }
+    if let Ok(value) = value.extract::<i64>() {
+        return Ok(Expr::Literal(SqlLiteral::Integer(value)));
+    }
+    if let Ok(value) = value.extract::<String>() {
+        return Ok(Expr::Literal(SqlLiteral::String(value)));
+    }
+    Err(PyValueError::new_err(
+        "literal expressions support None, bool, int, and str values",
+    ))
+}
+
+fn parse_binary_op(op: &str) -> PyResult<BinaryOp> {
+    match op {
+        "eq" => Ok(BinaryOp::Eq),
+        "ne" => Ok(BinaryOp::Ne),
+        "lt" => Ok(BinaryOp::Lt),
+        "le" => Ok(BinaryOp::Le),
+        "gt" => Ok(BinaryOp::Gt),
+        "ge" => Ok(BinaryOp::Ge),
+        "add" => Ok(BinaryOp::Add),
+        "sub" => Ok(BinaryOp::Sub),
+        "mul" => Ok(BinaryOp::Mul),
+        "div" => Ok(BinaryOp::Div),
+        "and" => Ok(BinaryOp::And),
+        "or" => Ok(BinaryOp::Or),
+        "like" => Ok(BinaryOp::Like),
+        "ilike" => Ok(BinaryOp::ILike),
+        other => Err(PyValueError::new_err(format!(
+            "unsupported binary operator '{other}'"
+        ))),
+    }
+}
+
+fn parse_unary_op(op: &str) -> PyResult<UnaryOp> {
+    match op {
+        "not" => Ok(UnaryOp::Not),
+        "neg" => Ok(UnaryOp::Neg),
+        "is_null" => Ok(UnaryOp::IsNull),
+        "is_not_null" => Ok(UnaryOp::IsNotNull),
+        other => Err(PyValueError::new_err(format!(
+            "unsupported unary operator '{other}'"
+        ))),
+    }
+}
+
+fn parse_order_nulls(nulls: &str) -> PyResult<OrderNulls> {
+    match nulls {
+        "first" | "FIRST" => Ok(OrderNulls::First),
+        "last" | "LAST" => Ok(OrderNulls::Last),
+        other => Err(PyValueError::new_err(format!(
+            "unsupported null ordering '{other}'"
+        ))),
+    }
+}
+
+fn required_item<'py>(dict: &Bound<'py, PyDict>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+    dict.get_item(key)?
+        .ok_or_else(|| PyValueError::new_err(format!("expression payload missing '{key}'")))
 }
 
 #[pyfunction]
@@ -2504,6 +2861,8 @@ fn _ormdantic(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compile_upsert, m)?)?;
     m.add_function(wrap_pyfunction!(compile_delete_pk, m)?)?;
     m.add_function(wrap_pyfunction!(compile_expression_query, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_typed_expression_query, m)?)?;
+    m.add_function(wrap_pyfunction!(compile_typed_update_query, m)?)?;
     m.add_function(wrap_pyfunction!(compile_schema_diff, m)?)?;
     m.add_function(wrap_pyfunction!(reflect_schema, m)?)?;
     m.add_function(wrap_pyfunction!(compile_selectin_plan, m)?)?;
