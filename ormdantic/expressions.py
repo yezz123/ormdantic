@@ -10,7 +10,9 @@ from typing import Any, Literal, Protocol, Sequence
 class SerializableExpression(Protocol):
     """Expression node that can be serialized for the Rust SQL AST."""
 
-    def to_expression_payload(self, ctx: SerializationContext | None = None) -> dict[str, Any]:
+    def to_expression_payload(
+        self, ctx: SerializationContext | None = None
+    ) -> dict[str, Any]:
         """Serialize this expression into a stable Python-to-Rust payload."""
 
 
@@ -34,7 +36,9 @@ class SqlExpression:
     kind: str
     data: dict[str, Any] = field(default_factory=dict)
 
-    def to_expression_payload(self, ctx: SerializationContext | None = None) -> dict[str, Any]:
+    def to_expression_payload(
+        self, ctx: SerializationContext | None = None
+    ) -> dict[str, Any]:
         ctx = ctx or SerializationContext()
         kind = self.kind
         if kind in {"column", "param", "literal", "raw_safe"}:
@@ -72,7 +76,8 @@ class SqlExpression:
                 "kind": "in_list",
                 "expr": expression_payload(self.data["expr"], ctx),
                 "values": [
-                    expression_payload(value, ctx) for value in self.data.get("values", ())
+                    expression_payload(value, ctx)
+                    for value in self.data.get("values", ())
                 ],
                 "negated": self.data.get("negated", False),
             }
@@ -114,7 +119,8 @@ class SqlExpression:
             return {
                 "kind": "tuple",
                 "values": [
-                    expression_payload(value, ctx) for value in self.data.get("values", ())
+                    expression_payload(value, ctx)
+                    for value in self.data.get("values", ())
                 ],
             }
         raise ValueError(f"unsupported expression kind '{kind}'")
@@ -123,11 +129,15 @@ class SqlExpression:
         """Alias this expression when used as a projection."""
         return ProjectionExpression(self, alias)
 
-    def asc(self, *, nulls: Literal["first", "last"] | None = None) -> "OrderExpression":
+    def asc(
+        self, *, nulls: Literal["first", "last"] | None = None
+    ) -> "OrderExpression":
         """Order by this expression ascending."""
         return OrderExpression(self, "asc", nulls)
 
-    def desc(self, *, nulls: Literal["first", "last"] | None = None) -> "OrderExpression":
+    def desc(
+        self, *, nulls: Literal["first", "last"] | None = None
+    ) -> "OrderExpression":
         """Order by this expression descending."""
         return OrderExpression(self, "desc", nulls)
 
@@ -342,7 +352,9 @@ class BoundValue:
 
     value: Any
 
-    def to_expression_payload(self, ctx: SerializationContext | None = None) -> dict[str, Any]:
+    def to_expression_payload(
+        self, ctx: SerializationContext | None = None
+    ) -> dict[str, Any]:
         ctx = ctx or SerializationContext()
         return {"kind": "param", "name": ctx.bind(self.value)}
 
@@ -390,7 +402,9 @@ class QueryExpression:
             "children": [child.to_filter_tree() for child in self.children],
         }
 
-    def to_expression_payload(self, ctx: SerializationContext | None = None) -> dict[str, Any]:
+    def to_expression_payload(
+        self, ctx: SerializationContext | None = None
+    ) -> dict[str, Any]:
         if self.expr is None:
             raise ValueError("query expression does not have a typed SQL expression")
         return self.expr.to_expression_payload(ctx)
@@ -456,11 +470,15 @@ class SelectExpressionQuery:
         if self.where is not None:
             payload["where"] = self.where.to_expression_payload(ctx)
         if self.group_by:
-            payload["group_by"] = [expression_payload(expr, ctx) for expr in self.group_by]
+            payload["group_by"] = [
+                expression_payload(expr, ctx) for expr in self.group_by
+            ]
         if self.having is not None:
             payload["having"] = self.having.to_expression_payload(ctx)
         if self.order_by:
-            payload["order_by"] = [order.to_order_payload(ctx) for order in self.order_by]
+            payload["order_by"] = [
+                order.to_order_payload(ctx) for order in self.order_by
+            ]
         if self.limit is not None:
             payload["limit"] = self.limit
         if self.offset is not None:
@@ -554,9 +572,7 @@ def exists(query: SelectExpressionQuery) -> QueryExpression:
 
 
 def binary(op: str, left: Any, right: Any) -> SqlExpression:
-    return SqlExpression(
-        "binary", {"op": op, "left": left, "right": right}
-    )
+    return SqlExpression("binary", {"op": op, "left": left, "right": right})
 
 
 def predicate(op: str, left: SqlExpression, right: Any) -> QueryExpression:
@@ -569,7 +585,9 @@ def predicate(op: str, left: SqlExpression, right: Any) -> QueryExpression:
 
 def not_(expr: QueryExpression) -> QueryExpression:
     """Negate a boolean expression."""
-    return QueryExpression("leaf", expr=SqlExpression("unary", {"op": "not", "expr": expr}))
+    return QueryExpression(
+        "leaf", expr=SqlExpression("unary", {"op": "not", "expr": expr})
+    )
 
 
 def group(expr: QueryExpression) -> QueryExpression:
@@ -582,12 +600,16 @@ def column(name: str, *, table: str | None = None) -> ColumnExpression:
     return ColumnExpression(name, table)
 
 
-def projection(expr: SerializableExpression, alias: str | None = None) -> ProjectionExpression:
+def projection(
+    expr: SerializableExpression, alias: str | None = None
+) -> ProjectionExpression:
     """Create a selectable projection."""
     return ProjectionExpression(expr, alias)
 
 
-def assignment(column_name: str, expr: SerializableExpression | Any) -> AssignmentExpression:
+def assignment(
+    column_name: str, expr: SerializableExpression | Any
+) -> AssignmentExpression:
     """Create a typed UPDATE assignment."""
     return AssignmentExpression(column_name, expr)
 

@@ -109,7 +109,9 @@ def test_projection_group_literal_and_min_max_helpers_compile() -> None:
         projection(min(column("total")), "minimum_total"),
         max(column("total")).as_("maximum_total"),
         literal("orders").as_("source"),
-        where=group(column("status").istartswith("pa") | column("status").iendswith("ed")),
+        where=group(
+            column("status").istartswith("pa") | column("status").iendswith("ed")
+        ),
         order_by=[max(column("total")).asc(nulls="first")],
         distinct=True,
     )

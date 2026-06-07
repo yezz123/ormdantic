@@ -117,7 +117,9 @@ async def test_expression_facade_preserves_boolean_grouping_and_count(tmp_path) 
 
 
 @pytest.mark.asyncio
-async def test_table_select_executes_grouped_aggregate_expression_query(tmp_path) -> None:
+async def test_table_select_executes_grouped_aggregate_expression_query(
+    tmp_path,
+) -> None:
     db = Ormdantic(f"sqlite:///{tmp_path / 'expression_select.sqlite3'}")
 
     @db.table(pk="id")
