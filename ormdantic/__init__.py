@@ -12,7 +12,27 @@ from ormdantic.errors import (
     UndefinedBackReferenceError,
 )
 from ormdantic.events import EventRegistry
-from ormdantic.expressions import QueryExpression, column
+from ormdantic.expressions import (
+    QueryExpression,
+    assignment,
+    avg,
+    case,
+    cast,
+    column,
+    count,
+    exists,
+    group,
+    literal,
+    max,
+    min,
+    not_,
+    projection,
+    raw_sql_safe,
+    select_query,
+    sum,
+    tuple_,
+    update_query,
+)
 from ormdantic.loaders import joined, lazy, selectin
 from ormdantic.orm import Ormdantic
 from ormdantic.table import Order, Table
@@ -29,6 +49,23 @@ __all__ = [
     "EventRegistry",
     "QueryExpression",
     "column",
+    "projection",
+    "assignment",
+    "select_query",
+    "update_query",
+    "case",
+    "cast",
+    "exists",
+    "tuple_",
+    "count",
+    "sum",
+    "avg",
+    "min",
+    "max",
+    "not_",
+    "group",
+    "literal",
+    "raw_sql_safe",
     "association_proxy",
     "hybrid_property",
     "joined",
