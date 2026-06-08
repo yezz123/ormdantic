@@ -33,7 +33,16 @@ from ormdantic.expressions import (
     tuple_,
     update_query,
 )
-from ormdantic.loaders import joined, lazy, selectin
+from ormdantic.loaders import (
+    joined,
+    joinedload,
+    lazy,
+    lazyload,
+    load,
+    noload,
+    selectin,
+    selectinload,
+)
 from ormdantic.orm import Ormdantic
 from ormdantic.table import Order, Table
 
@@ -69,7 +78,12 @@ __all__ = [
     "association_proxy",
     "hybrid_property",
     "joined",
+    "joinedload",
     "selectin",
+    "selectinload",
     "lazy",
+    "lazyload",
+    "noload",
+    "load",
     "runtime_capabilities",
 ]
