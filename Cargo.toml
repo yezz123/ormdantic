@@ -31,3 +31,14 @@ pyo3 = "0.26"
 lto = "fat"
 codegen-units = 1
 strip = true
+
+[profile.bench]
+debug = true
+strip = false
+
+# This is separate to benchmarks because `bench` ends up building testing
+# harnesses into code, as it's a special cargo profile.
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false
