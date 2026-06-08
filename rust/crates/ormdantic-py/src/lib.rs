@@ -1484,7 +1484,7 @@ fn validate_schema_tables(tables: &Bound<'_, PyAny>) -> PyResult<usize> {
                     indexes,
                     unique_constraints,
                     relationships,
-                ))
+                )?)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?;
         }
     } else {
@@ -1510,7 +1510,10 @@ fn runtime_table_def(
     indexes: Vec<RuntimeIndex>,
     unique_constraints: Vec<Vec<String>>,
     relationships: Vec<RuntimeRelationship>,
-) -> TableDef {
+) -> PyResult<TableDef> {
+    let mut foreign_keys = Vec::new();
+    let mut check_constraints = Vec::new();
+    let mut unique_column_constraints = Vec::new();
     let columns = columns
         .into_iter()
         .map(
@@ -1520,29 +1523,52 @@ fn runtime_table_def(
                 nullable,
                 primary_key,
                 foreign_table,
-                _foreign_column,
+                foreign_column,
                 _max_length,
-                _unique,
-                _checks,
+                unique,
+                checks,
             )| {
+                if unique {
+                    unique_column_constraints.push(vec![name.clone()]);
+                }
+                if let (Some(foreign_table), Some(foreign_column)) =
+                    (foreign_table.clone(), foreign_column)
+                {
+                    foreign_keys.push(ForeignKeyDef::new(
+                        vec![name.clone()],
+                        foreign_table.clone(),
+                        vec![foreign_column],
+                    ));
+                }
+                for check in checks {
+                    check_constraints.push(
+                        CheckConstraintDef::new(render_check_constraint(&name, &check)?).named(
+                            format!(
+                                "{tablename}_{name}_{}_check",
+                                check_constraint_suffix(&check)?
+                            ),
+                        ),
+                    );
+                }
                 let kind = foreign_table
                     .map(|target_table| FieldKind::ForeignKey { target_table })
                     .unwrap_or_else(|| field_kind_from_runtime(&kind));
-                ColumnDef::new(name, kind)
+                Ok(ColumnDef::new(name, kind)
                     .nullable(nullable)
-                    .primary_key(primary_key)
+                    .primary_key(primary_key))
             },
         )
-        .collect::<Vec<_>>();
+        .collect::<PyResult<Vec<_>>>()?;
     let indexes = indexes
         .into_iter()
-        .map(|(name, columns, _unique)| IndexDef::new(name, columns))
+        .map(|(name, columns, unique)| IndexDef::new(name, columns).unique(unique))
         .collect::<Vec<_>>();
     let unique_constraints = unique_constraints
         .into_iter()
+        .chain(unique_column_constraints)
         .enumerate()
         .map(|(idx, columns)| {
-            UniqueConstraintDef::new(format!("{tablename}_unique_constraint_{idx}"), columns)
+            UniqueConstraintDef::new(format!("{tablename}_unique_{idx}"), columns)
         })
         .collect::<Vec<_>>();
     let relationships = relationships
@@ -1561,7 +1587,7 @@ fn runtime_table_def(
             }
         })
         .collect::<Vec<_>>();
-    TableDef::from_parts(
+    Ok(TableDef::from_parts(
         tablename,
         model_key,
         primary_key,
@@ -1570,6 +1596,8 @@ fn runtime_table_def(
         unique_constraints,
         relationships,
     )
+    .with_check_constraints(check_constraints)
+    .with_foreign_keys(foreign_keys))
 }
 
 fn field_kind_from_runtime(kind: &str) -> FieldKind {
@@ -1590,8 +1618,8 @@ fn field_kind_from_runtime(kind: &str) -> FieldKind {
     }
 }
 
-fn schema_def_from_runtime(tables: Vec<RuntimeTableSpec>) -> SchemaDef {
-    SchemaDef::from_tables(
+fn schema_def_from_runtime(tables: Vec<RuntimeTableSpec>) -> PyResult<SchemaDef> {
+    Ok(SchemaDef::from_tables(
         tables
             .into_iter()
             .map(
@@ -1615,8 +1643,8 @@ fn schema_def_from_runtime(tables: Vec<RuntimeTableSpec>) -> SchemaDef {
                     )
                 },
             )
-            .collect(),
-    )
+            .collect::<PyResult<Vec<_>>>()?,
+    ))
 }
 
 fn compiled_queries_to_list(py: Python<'_>, queries: Vec<CompiledQuery>) -> PyResult<Py<PyAny>> {
@@ -2222,8 +2250,8 @@ fn compile_schema_diff(
     from_schema: Vec<RuntimeTableSpec>,
     to_schema: Vec<RuntimeTableSpec>,
 ) -> PyResult<Py<PyAny>> {
-    let from = SchemaSnapshot::new(schema_def_from_runtime(from_schema));
-    let to = SchemaSnapshot::new(schema_def_from_runtime(to_schema));
+    let from = SchemaSnapshot::new(schema_def_from_runtime(from_schema)?);
+    let to = SchemaSnapshot::new(schema_def_from_runtime(to_schema)?);
     let diff =
         SchemaDiffer::diff(&from, &to).map_err(|error| PyValueError::new_err(error.to_string()))?;
     let dialect =
