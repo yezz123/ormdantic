@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from ormdantic import Ormdantic, association_proxy, column, hybrid_property
+from ormdantic import Ormdantic, association_proxy, column, count, hybrid_property, sum
 from ormdantic.migrations import MigrationOperation, MigrationPlan
 
 
@@ -114,6 +114,54 @@ async def test_expression_facade_preserves_boolean_grouping_and_count(tmp_path) 
         where=(column("name") == "mocha") | (column("name") == "latte")
     )
     assert repeated_column_count == 2
+
+
+@pytest.mark.asyncio
+async def test_table_select_executes_grouped_aggregate_expression_query(
+    tmp_path,
+) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'expression_select.sqlite3'}")
+
+    @db.table(pk="id")
+    class Order(BaseModel):
+        id: str
+        customer_id: str
+        status: str
+        total: int
+        deleted_at: str | None = None
+
+    await db.init()
+    await db[Order].insert(Order(id="1", customer_id="alice", status="paid", total=25))
+    await db[Order].insert(Order(id="2", customer_id="alice", status="paid", total=40))
+    await db[Order].insert(Order(id="3", customer_id="bob", status="paid", total=10))
+    await db[Order].insert(Order(id="4", customer_id="bob", status="draft", total=100))
+
+    total = sum(column("total"))
+    result = await db[Order].select(
+        column("customer_id"),
+        total.as_("total_sum"),
+        count().as_("row_count"),
+        where=column("status").in_(["paid"]) & column("deleted_at").is_null(),
+        group_by=[column("customer_id")],
+        having=total >= 20,
+        order_by=[total.desc(nulls="last"), column("customer_id").asc()],
+    )
+
+    assert [column[0] for column in result.cursor.description] == [
+        "customer_id",
+        "total_sum",
+        "row_count",
+    ]
+    assert list(result) == [("alice", 65, 2)]
+
+    await db[Order].update_where(
+        column("total").set(column("total") + 5),
+        where=column("customer_id") == "alice",
+    )
+    updated = await db[Order].find_many(
+        where=column("customer_id") == "alice", order_by=["id"]
+    )
+    assert [order.total for order in updated.data] == [30, 45]
 
 
 def test_event_removal_and_association_hybrid_descriptors() -> None:

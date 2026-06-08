@@ -8,7 +8,17 @@ from typing import Any, Generic
 
 from ormdantic.engine import NativeResult
 from ormdantic.events import EventRegistry
-from ormdantic.expressions import QueryExpression
+from ormdantic.expressions import (
+    AssignmentExpression,
+    OrderExpression,
+    ProjectionExpression,
+    QueryExpression,
+    SelectExpressionQuery,
+    SerializableExpression,
+    UpdateExpressionQuery,
+    select_query,
+    update_query,
+)
 from ormdantic.loaders import LoaderOption, loader_depth
 from ormdantic.models import Map, OrmTable, Result
 from ormdantic.serializer import OrmSerializer
@@ -129,6 +139,66 @@ class Table(Generic[ModelType]):
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
         ).scalar()
+
+    async def select(
+        self,
+        *projections: ProjectionExpression | SerializableExpression,
+        query: SelectExpressionQuery | None = None,
+        where: QueryExpression | None = None,
+        group_by: list[SerializableExpression] | None = None,
+        having: QueryExpression | None = None,
+        order_by: list[OrderExpression] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        distinct: bool = False,
+    ) -> NativeResult:
+        """Execute a typed projection query and return raw projected rows."""
+        if query is None:
+            query = select_query(
+                self.tablename,
+                *projections,
+                where=where,
+                group_by=group_by or (),
+                having=having,
+                order_by=order_by or (),
+                limit=limit,
+                offset=offset,
+                distinct=distinct,
+            )
+        elif projections:
+            raise ValueError("pass either query= or projection arguments, not both")
+        payload = query.to_query_payload()
+        if payload["table"] != self.tablename:
+            raise ValueError(
+                f"typed query targets table '{payload['table']}', not '{self.tablename}'"
+            )
+        result = self._rust_handle.select_expression(payload)
+        return NativeResult(
+            columns=list(result["columns"]),
+            rows=[tuple(row) for row in result["rows"]],
+        )
+
+    async def update_where(
+        self,
+        *assignments: AssignmentExpression,
+        query: UpdateExpressionQuery | None = None,
+        where: QueryExpression | None = None,
+    ) -> NativeResult:
+        """Execute a typed UPDATE expression query."""
+        if query is None:
+            query = update_query(self.tablename, *assignments, where=where)
+        elif assignments:
+            raise ValueError("pass either query= or assignment arguments, not both")
+        payload = query.to_query_payload()
+        if payload["table"] != self.tablename:
+            raise ValueError(
+                f"typed update targets table '{payload['table']}', not '{self.tablename}'"
+            )
+        result = self._rust_handle.update_expression(payload)
+        return NativeResult(
+            columns=list(result["columns"]),
+            rows=[tuple(row) for row in result["rows"]],
+        )
 
     def _deserialize(
         self, result: dict[str, Any], *, is_array: bool, depth: int
