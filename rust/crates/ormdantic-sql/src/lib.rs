@@ -892,6 +892,52 @@ impl JoinedSelectColumn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinedFilter {
+    table_alias: String,
+    filter: Filter,
+}
+
+impl JoinedFilter {
+    pub fn new(table_alias: impl Into<String>, filter: Filter) -> Self {
+        Self {
+            table_alias: table_alias.into(),
+            filter,
+        }
+    }
+
+    pub fn table_alias(&self) -> &str {
+        &self.table_alias
+    }
+
+    pub fn filter(&self) -> &Filter {
+        &self.filter
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinedOrderBy {
+    table_alias: String,
+    order_by: OrderBy,
+}
+
+impl JoinedOrderBy {
+    pub fn new(table_alias: impl Into<String>, order_by: OrderBy) -> Self {
+        Self {
+            table_alias: table_alias.into(),
+            order_by,
+        }
+    }
+
+    pub fn table_alias(&self) -> &str {
+        &self.table_alias
+    }
+
+    pub fn order_by(&self) -> &OrderBy {
+        &self.order_by
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryAst {
     Select {
         table: TableRef,
@@ -906,7 +952,9 @@ pub enum QueryAst {
         columns: Vec<JoinedSelectColumn>,
         joins: Vec<JoinSpec>,
         filters: Vec<Filter>,
+        relationship_filters: Vec<JoinedFilter>,
         order_by: Vec<OrderBy>,
+        relationship_order_by: Vec<JoinedOrderBy>,
         limit: Option<usize>,
         offset: Option<usize>,
     },
@@ -950,11 +998,22 @@ impl QueryAst {
                 columns,
                 joins,
                 filters,
+                relationship_filters,
                 order_by,
+                relationship_order_by,
                 limit,
                 offset,
             } => compile_joined_select(
-                dialect, table, columns, joins, filters, order_by, *limit, *offset,
+                dialect,
+                table,
+                columns,
+                joins,
+                filters,
+                relationship_filters,
+                order_by,
+                relationship_order_by,
+                *limit,
+                *offset,
             ),
             Self::Count { table, filters } => compile_count(dialect, table, filters),
             Self::Insert { table, columns } => compile_insert(dialect, table, columns),
@@ -1485,12 +1544,15 @@ fn compile_joined_select(
     columns: &[JoinedSelectColumn],
     joins: &[JoinSpec],
     filters: &[Filter],
+    relationship_filters: &[JoinedFilter],
     order_by: &[OrderBy],
+    relationship_order_by: &[JoinedOrderBy],
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> OrmdanticResult<CompiledQuery> {
     require_joined_select_columns(columns)?;
     let mut bind_index = 1;
+    let mut params = Vec::new();
     let selected = columns
         .iter()
         .map(|column| joined_selected_column(dialect, column))
@@ -1517,10 +1579,34 @@ fn compile_joined_select(
             join.right_alias(),
             join.right_column(),
         ));
+        for filter in relationship_filters
+            .iter()
+            .filter(|filter| filter.table_alias() == join.alias())
+        {
+            sql.push_str(" AND ");
+            sql.push_str(&render_filter(
+                dialect,
+                filter.filter(),
+                &mut bind_index,
+                &mut params,
+                |column| qualified_alias_column(dialect, join.alias(), column),
+            ));
+        }
     }
-    let params =
-        append_filters_with_alias(dialect, &mut sql, filters, &mut bind_index, table.name());
-    append_ordering_with_alias(dialect, &mut sql, order_by, table.name());
+    params.extend(append_filters_with_alias(
+        dialect,
+        &mut sql,
+        filters,
+        &mut bind_index,
+        table.name(),
+    ));
+    append_joined_ordering(
+        dialect,
+        &mut sql,
+        order_by,
+        table.name(),
+        relationship_order_by,
+    );
     if let Some(limit) = limit {
         sql.push_str(&format!(" LIMIT {limit}"));
     }
@@ -1846,32 +1932,39 @@ fn render_bool_expression(
     format!("({rendered})")
 }
 
-fn append_ordering_with_alias(
+fn append_joined_ordering(
     dialect: &impl Dialect,
     sql: &mut String,
     order_by: &[OrderBy],
     table_alias: &str,
+    relationship_order_by: &[JoinedOrderBy],
 ) {
-    if order_by.is_empty() {
+    if order_by.is_empty() && relationship_order_by.is_empty() {
         return;
     }
 
-    let rendered = order_by
+    let mut rendered = order_by
         .iter()
-        .map(|order| {
-            let direction = match order.direction() {
-                SortDirection::Asc => "ASC",
-                SortDirection::Desc => "DESC",
-            };
-            format!(
-                "{} {direction}",
-                qualified_alias_column(dialect, table_alias, order.column())
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+        .map(|order| render_order_for_alias(dialect, table_alias, order))
+        .collect::<Vec<_>>();
+    rendered.extend(
+        relationship_order_by
+            .iter()
+            .map(|order| render_order_for_alias(dialect, order.table_alias(), order.order_by())),
+    );
     sql.push_str(" ORDER BY ");
-    sql.push_str(&rendered);
+    sql.push_str(&rendered.join(", "));
+}
+
+fn render_order_for_alias(dialect: &impl Dialect, table_alias: &str, order: &OrderBy) -> String {
+    let direction = match order.direction() {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+    format!(
+        "{} {direction}",
+        qualified_alias_column(dialect, table_alias, order.column())
+    )
 }
 
 fn require_columns(columns: &[String], operation: &str) -> OrmdanticResult<()> {
@@ -2027,7 +2120,9 @@ mod tests {
                 column: "id".to_string(),
                 param: "id".to_string(),
             }],
+            relationship_filters: Vec::new(),
             order_by: Vec::new(),
+            relationship_order_by: Vec::new(),
             limit: None,
             offset: None,
         }
