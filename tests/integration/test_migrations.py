@@ -124,8 +124,8 @@ def test_generated_diff_sql_renders_supported_dialects() -> None:
         "postgresql": ['ALTER TABLE "flavor" ADD COLUMN "rating" INTEGER'],
         "mysql": ["ALTER TABLE `flavor` ADD COLUMN `rating` INTEGER"],
         "mariadb": ["ALTER TABLE `flavor` ADD COLUMN `rating` INTEGER"],
-        "mssql": ["ALTER TABLE [flavor] ADD COLUMN [rating] INTEGER"],
-        "oracle": ['ALTER TABLE "flavor" ADD COLUMN "rating" INTEGER'],
+        "mssql": ["ALTER TABLE [flavor] ADD [rating] INTEGER"],
+        "oracle": ['ALTER TABLE "flavor" ADD ("rating" INTEGER)'],
     }
     for dialect, sql in expected.items():
         assert (
