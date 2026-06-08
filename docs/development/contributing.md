@@ -159,7 +159,7 @@ First, make sure you set up your environment as described above, that will
 install all the requirements.
 
 The documentation uses
-<a href="https://www.mkdocs.org/" class="external-link" target="_blank">MkDocs</a>.
+<a href="https://zensical.org/" class="external-link" target="_blank">Zensical</a>.
 
 All the documentation is in Markdown format in the directory `./docs`.
 
@@ -167,10 +167,16 @@ All the documentation is in Markdown format in the directory `./docs`.
 
 To Build ormdantic Documentation we need the following packages, which are:
 
-- `mkdocs` - The tool that builds the documentation.
-- `mkdocs-material` - The theme that ormdantic uses.
-- `mkdocs-markdownextradata-plugin` - The plugin that allows to add extra data
-  to the documentation.
+- `zensical` - The tool and theme that builds the documentation.
+- `mkdocstrings` - The plugin that renders API reference pages.
+- `mdx-include` and `markdown-include-variants` - Extensions for reusable
+  documentation snippets.
+
+Build the documentation with:
+
+```console
+$ uv run --group docs zensical build --strict
+```
 
 ## Testing
 
