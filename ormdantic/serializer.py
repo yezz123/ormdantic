@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ormdantic._introspect import is_dict_annotation, is_list_annotation, model_field
 from ormdantic.hydration import hydrate_flat_payload, hydrate_joined_payload
+from ormdantic.loaders import LoaderOption, path_parts
 from ormdantic.models import Map, OrmTable
 from ormdantic.types import ModelType, SerializedType
 
@@ -15,7 +16,7 @@ from ormdantic.types import ModelType, SerializedType
 class ResultSchema(BaseModel):
     """Model to describe the schema of a model result."""
 
-    table_data: OrmTable | None = None  # type: ignore
+    table_data: OrmTable[Any] | None = None
     is_array: bool
     references: dict[str, "ResultSchema"] = Field(default_factory=lambda: {})
 
@@ -25,31 +26,40 @@ class OrmSerializer(Generic[SerializedType]):
 
     def __init__(
         self,
-        table_data: OrmTable,  # type: ignore
+        table_data: OrmTable[Any],
         table_map: Map,
         result_set: Any,
         is_array: bool,
         depth: int,
+        load_paths: tuple[str, ...] | None = None,
+        load_options: tuple[LoaderOption, ...] = (),
     ) -> None:
         self._table_data = table_data
         self._table_map = table_map
         self._result_set = result_set
         self._is_array = is_array
         self._depth = depth
+        self._load_paths = load_paths
+        self._load_options = load_options
+        self._identity_map: dict[tuple[type[BaseModel], Any], BaseModel] = {}
+        self._building_identities: set[tuple[type[BaseModel], Any]] = set()
+        result_schema = (
+            self._get_path_result_schema(
+                table_data, self._path_tree(load_paths), is_array
+            )
+            if load_paths is not None
+            else self._get_result_schema(table_data, depth, is_array)
+        )
         self._result_schema = ResultSchema(
             is_array=is_array,
-            references={
-                table_data.tablename: self._get_result_schema(
-                    table_data, depth, is_array
-                )
-            },
+            references={table_data.tablename: result_schema},
         )
         self._columns = [it[0] for it in self._result_set.cursor.description]
         self._return_dict: dict[str, Any] = {}
 
     def deserialize(self) -> SerializedType:
         """Deserialize the result set into Python models."""
-        if self._depth <= 0:
+        if self._depth <= 0 and self._load_paths is None:
             return self._deserialize_flat()
         self._return_dict = (
             hydrate_joined_payload(
@@ -62,18 +72,18 @@ class OrmSerializer(Generic[SerializedType]):
         )
         if not self._return_dict:
             return None  # type: ignore
+        root_schema = self._result_schema.references[self._table_data.tablename]
+        prepared = self._prep_result(self._return_dict, self._result_schema)[
+            self._table_data.tablename
+        ]
         if self._result_schema.is_array:
-            return [
-                self._table_data.model(**record)
-                for record in self._prep_result(self._return_dict, self._result_schema)[
-                    self._table_data.tablename
-                ]  # type: ignore
+            result = [
+                self._build_model(record, root_schema, cache_identity=False)
+                for record in prepared
             ]
-        return self._table_data.model(
-            **self._prep_result(self._return_dict, self._result_schema)[
-                self._table_data.tablename
-            ]
-        )
+            return cast(SerializedType, self._apply_loader_options(result))
+        model = self._build_model(prepared, root_schema, cache_identity=False)
+        return cast(SerializedType, self._apply_loader_options(model))
 
     def _deserialize_flat(self) -> SerializedType:
         rows = [tuple(row) for row in self._result_set]
@@ -138,6 +148,9 @@ class OrmSerializer(Generic[SerializedType]):
                 continue
             if table_data := schema.table_data:
                 node[key] = self._sql_type_to_py(table_data.model, key, val)
+        for key, ref_schema in schema.references.items():
+            if key not in node and not ref_schema.is_array:
+                node[key] = None
         return node
 
     def _get_result_schema(
@@ -164,6 +177,157 @@ class OrmSerializer(Generic[SerializedType]):
                 is not None
             },
         )
+
+    def _get_path_result_schema(
+        self,
+        table_data: OrmTable,  # type: ignore
+        path_tree: dict[str, Any],
+        is_array: bool,
+    ) -> ResultSchema:
+        references = {}
+        for column, subtree in path_tree.items():
+            rel = table_data.relationships.get(column)
+            if rel is None:
+                continue
+            references[column] = self._get_path_result_schema(
+                table_data=self._table_map.name_to_data[rel.foreign_table],
+                path_tree=subtree,
+                is_array=rel.back_references is not None,
+            )
+        return ResultSchema(
+            table_data=table_data,
+            is_array=is_array,
+            references=references,
+        )
+
+    @staticmethod
+    def _path_tree(load_paths: tuple[str, ...]) -> dict[str, Any]:
+        tree: dict[str, Any] = {}
+        for path in load_paths:
+            node = tree
+            for part in path.replace("/", ".").split("."):
+                if not part:
+                    continue
+                node = node.setdefault(part, {})
+        return tree
+
+    def _build_model(
+        self,
+        record: dict[str, Any],
+        schema: ResultSchema,
+        *,
+        cache_identity: bool = True,
+    ) -> BaseModel:
+        table_data = schema.table_data
+        if table_data is None:
+            raise ValueError("result schema node is missing table metadata")
+
+        identity = self._identity_for(record, table_data)
+        cached = self._identity_map.get(identity) if identity is not None else None
+        if cached is not None:
+            if identity in self._building_identities:
+                cache_identity = False
+            else:
+                self._merge_relationships(cached, record, schema)
+                return cached
+
+        model = table_data.model(**record)
+        if identity is not None and cache_identity:
+            self._identity_map[identity] = model
+            self._building_identities.add(identity)
+        try:
+            self._merge_relationships(model, record, schema)
+        finally:
+            if identity is not None and cache_identity:
+                self._building_identities.discard(identity)
+        return model
+
+    def _merge_relationships(
+        self, model: BaseModel, record: dict[str, Any], schema: ResultSchema
+    ) -> None:
+        for key, ref_schema in schema.references.items():
+            if key not in record:
+                continue
+            value = record[key]
+            if value is None:
+                object.__setattr__(model, key, None)
+            elif ref_schema.is_array:
+                object.__setattr__(
+                    model,
+                    key,
+                    [self._build_model(item, ref_schema) for item in value],
+                )
+            else:
+                object.__setattr__(model, key, self._build_model(value, ref_schema))
+
+    @staticmethod
+    def _identity_for(
+        record: dict[str, Any], table_data: OrmTable[Any]
+    ) -> tuple[type[BaseModel], Any] | None:
+        value = record.get(table_data.pk)
+        if value is None:
+            return None
+        return (table_data.model, value)
+
+    def _apply_loader_options(self, result: Any) -> Any:
+        if not self._load_options:
+            return result
+        roots = result if isinstance(result, list) else [result]
+        for option in self._load_options:
+            if not option.filter_by and not option.order_by:
+                continue
+            parts = path_parts(option.path)
+            for root in roots:
+                self._apply_loader_option(root, parts, option)
+        return result
+
+    def _apply_loader_option(
+        self, model: Any, parts: tuple[str, ...], option: LoaderOption
+    ) -> None:
+        if model is None or not parts:
+            return
+        relationship = parts[0]
+        value = getattr(model, relationship, None)
+        if len(parts) == 1:
+            object.__setattr__(
+                model,
+                relationship,
+                self._filter_and_order_relationship(value, option),
+            )
+            return
+        if isinstance(value, list):
+            for item in value:
+                self._apply_loader_option(item, parts[1:], option)
+        else:
+            self._apply_loader_option(value, parts[1:], option)
+
+    def _filter_and_order_relationship(self, value: Any, option: LoaderOption) -> Any:
+        if isinstance(value, list):
+            items = [
+                item for item in value if self._matches_loader_filter(item, option)
+            ]
+            for column in reversed(option.order_by):
+                descending = column.startswith("-")
+                key = column[1:] if descending else column
+                items.sort(
+                    key=lambda item: (
+                        getattr(item, key, None) is None,
+                        getattr(item, key, None),
+                    ),
+                    reverse=descending,
+                )
+            return items
+        if value is None:
+            return None
+        return value if self._matches_loader_filter(value, option) else None
+
+    @staticmethod
+    def _matches_loader_filter(value: Any, option: LoaderOption) -> bool:
+        for column, expected in (option.filter_by or {}).items():
+            actual = getattr(value, column, None)
+            if actual != expected and str(actual) != str(expected):
+                return False
+        return True
 
     @staticmethod
     def _sql_type_to_py(model_type: type[ModelType], column: str, value: Any) -> Any:
