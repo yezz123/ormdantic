@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import sys
+
 import pytest
 from pydantic import BaseModel, Field
 
@@ -53,10 +56,8 @@ def test_schema_snapshot_roundtrip_diff_and_dry_run() -> None:
     assert diff.has_unsafe_operations
     assert not diff.has_destructive_operations
 
-    plan = new_db.migrations.generate_plan(old_snapshot, roundtrip, dialect="sqlite")
-    assert 'ALTER TABLE "flavor" ADD COLUMN "code" TEXT NOT NULL' in plan.dry_run()
-    assert any("ADD CONSTRAINT" in sql for sql in plan.dry_run())
-    assert plan.has_unsafe_operations
+    with pytest.raises(ValueError, match="require table rebuild"):
+        new_db.migrations.generate_plan(old_snapshot, roundtrip, dialect="sqlite")
 
 
 @pytest.mark.asyncio
@@ -170,7 +171,11 @@ async def test_migration_artifacts_apply_directory_and_squash(tmp_path) -> None:
     second_artifact.write(second_path)
 
     roundtrip = MigrationArtifact.read(second_path)
-    assert roundtrip.to_dict() == second_artifact.to_dict()
+    assert roundtrip.revision == second_artifact.revision
+    assert [operation.sql for operation in roundtrip.operations] == [
+        operation.sql for operation in second_artifact.operations
+    ]
+    assert roundtrip.checksum == second_artifact.checksum
 
     db = Ormdantic(f"sqlite:///{tmp_path / 'artifact.sqlite3'}")
     assert await db.migrations.apply_directory(migrations_dir) == [
@@ -238,3 +243,129 @@ def test_migration_cli_create_preview_and_apply(tmp_path, capsys) -> None:
     url = f"sqlite:///{tmp_path / 'cli.sqlite3'}"
     assert main(["migrations", "apply", url, str(artifact_path)]) == 0
     assert "applied" in capsys.readouterr().out
+    assert main(["migrations", "status", url]) == 0
+    assert "dirty: False" in capsys.readouterr().out
+    assert main(["migrations", "history", url]) == 0
+    history_output = capsys.readouterr().out
+    assert "001_cli" in history_output
+    assert "applied" in history_output
+    assert main(["migrations", "current", url]) == 0
+    assert "001_cli" in capsys.readouterr().out
+    assert (
+        main(["migrations", "check", str(tmp_path), "--pattern", "*001_cli*.toml"]) == 0
+    )
+    assert "ok" in capsys.readouterr().out
+    assert main(["migrations", "rollback", url, str(artifact_path)]) == 0
+    assert "rolled-back" in capsys.readouterr().out
+    assert main(["migrations", "repair", url, "--clear-dirty"]) == 0
+    assert "repaired:" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_rollback_requires_explicit_down_sql(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'rollback_guard.sqlite3'}")
+    plan = MigrationPlan(
+        operations=[MigrationOperation("CREATE TABLE rollback_guard (id TEXT)")]
+    )
+    assert await db.migrations.apply("001", plan) is True
+    with pytest.raises(ValueError, match="rollback SQL is unavailable"):
+        await db.migrations.rollback("001", plan)
+
+
+@pytest.mark.asyncio
+async def test_migration_history_checksum_dirty_and_repair(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'history.sqlite3'}")
+    plan = MigrationPlan(
+        operations=[MigrationOperation("CREATE TABLE history_table (id TEXT)")],
+        rollback_operations=[MigrationOperation("DROP TABLE history_table")],
+    )
+    assert await db.migrations.apply("001", plan, checksum="checksum-a") is True
+    history = await db.migrations.history()
+    assert history[-1].checksum == "checksum-a"
+    assert history[-1].status == "applied"
+    assert history[-1].dirty is False
+    with pytest.raises(ValueError, match="already applied with checksum"):
+        await db.migrations.apply("001", plan, checksum="checksum-b")
+
+    failing = MigrationPlan([MigrationOperation("CREATE TABLE broken (")])
+    with pytest.raises(ValueError):
+        await db.migrations.apply("002", failing, checksum="checksum-c")
+    assert await db.migrations.is_dirty() is True
+    with pytest.raises(ValueError, match="run repair"):
+        await db.migrations.apply(
+            "003",
+            MigrationPlan([MigrationOperation("CREATE TABLE blocked (id TEXT)")]),
+        )
+    repaired = await db.migrations.repair(clear_dirty=True)
+    assert repaired >= 1
+    assert await db.migrations.is_dirty() is False
+
+
+def test_live_autogenerate_from_sqlite(tmp_path) -> None:
+    url = f"sqlite:///{tmp_path / 'autogen.sqlite3'}"
+    db = Ormdantic(url)
+
+    @db.table("flavor", pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+        rating: int | None = None
+
+    runtime = importlib.import_module("ormdantic._ormdantic")
+    runtime.execute_native(
+        url, "CREATE TABLE flavor (id TEXT PRIMARY KEY, name TEXT NOT NULL)", []
+    )
+    artifact = db.migrations.autogenerate("001_auto", description="autogen")
+    assert artifact is not None
+    assert any("ADD COLUMN" in operation.sql for operation in artifact.operations)
+    assert artifact.description == "autogen"
+    assert artifact.checksum
+
+
+def test_migration_cli_autogenerate_command(tmp_path, capsys) -> None:
+    url = f"sqlite:///{tmp_path / 'cli_autogen.sqlite3'}"
+    runtime = importlib.import_module("ormdantic._ormdantic")
+    runtime.execute_native(
+        url, "CREATE TABLE flavor (id TEXT PRIMARY KEY, name TEXT NOT NULL)", []
+    )
+
+    module_name = "migrations_cli_fixture"
+    module_path = tmp_path / f"{module_name}.py"
+    module_path.write_text(
+        "\n".join(
+            [
+                "from pydantic import BaseModel",
+                "from ormdantic import Ormdantic",
+                f"db = Ormdantic({url!r})",
+                "@db.table('flavor', pk='id')",
+                "class Flavor(BaseModel):",
+                "    id: str",
+                "    name: str",
+                "    rating: int | None = None",
+                "",
+            ]
+        )
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        artifact_path = tmp_path / "001_auto.json"
+        assert (
+            main(
+                [
+                    "migrations",
+                    "autogenerate",
+                    f"{module_name}:db",
+                    "001_auto",
+                    "--out",
+                    str(artifact_path),
+                ]
+            )
+            == 0
+        )
+        assert artifact_path.exists()
+        assert MigrationArtifact.read(artifact_path).revision == "001_auto"
+    finally:
+        sys.path.remove(str(tmp_path))
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+    assert str(artifact_path) in capsys.readouterr().out
