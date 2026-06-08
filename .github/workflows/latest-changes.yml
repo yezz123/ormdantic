@@ -20,7 +20,9 @@ on:
         required: false
         default: 'false'
 
-permissions: {}
+permissions:
+  contents: write
+  pull-requests: read
 
 jobs:
   latest-changes:
