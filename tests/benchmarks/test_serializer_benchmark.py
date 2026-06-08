@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import BaseModel, Field
 
-from ormdantic import Ormdantic, column
+from ormdantic import Ormdantic, column, joinedload, selectinload
 from ormdantic.migrations import MigrationOperation, MigrationPlan
 from ormdantic.models import Map, OrmTable, Relationship
 from ormdantic.serializer import OrmSerializer
@@ -271,6 +271,85 @@ def test_runtime_crud_expression_benchmark(benchmark: Any) -> None:
         result = benchmark(lambda: asyncio.run(_runtime_crud_once(database_url)))
 
     assert result == 15
+
+
+async def _relationship_load_once(
+    database_url: str,
+    strategy: Any,
+    parent_count: int,
+    children_per_parent: int,
+) -> int:
+    db = Ormdantic(database_url)
+
+    @db.table(pk="id", back_references={"children": "parent"})
+    class BenchParent(BaseModel):
+        id: str
+        name: str
+        children: list[BenchChild] = Field(default_factory=list)
+
+    @db.table(pk="id")
+    class BenchChild(BaseModel):
+        id: str
+        name: str
+        parent: BenchParent | str
+
+    BenchParent.model_rebuild(_types_namespace={"BenchChild": BenchChild})
+    BenchChild.model_rebuild(_types_namespace={"BenchParent": BenchParent})
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+    parents = [
+        await db[BenchParent].insert(
+            BenchParent(id=f"parent-{index}", name=f"parent-{index}")
+        )
+        for index in range(parent_count)
+    ]
+    for parent in parents:
+        for child_index in range(children_per_parent):
+            await db[BenchChild].insert(
+                BenchChild(
+                    id=f"{parent.id}-child-{child_index}",
+                    name=f"child-{child_index}",
+                    parent=parent,
+                )
+            )
+
+    result = await db[BenchParent].find_many(load=[strategy("children")])
+    return sum(len(parent.children) for parent in result.data)
+
+
+@pytest.mark.parametrize(
+    ("parent_count", "children_per_parent"),
+    [(100, 5), (500, 10)],
+    ids=["medium", "large"],
+)
+@pytest.mark.parametrize(
+    "strategy",
+    [joinedload, selectinload],
+    ids=["joined", "selectin"],
+)
+def test_relationship_loader_strategy_benchmark(
+    benchmark: Any,
+    strategy: Any,
+    parent_count: int,
+    children_per_parent: int,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        database_url = f"sqlite:///{tmp}/relationship-loaders.sqlite3"
+
+        result = benchmark(
+            lambda: asyncio.run(
+                _relationship_load_once(
+                    database_url,
+                    strategy,
+                    parent_count,
+                    children_per_parent,
+                )
+            )
+        )
+
+    assert result == parent_count * children_per_parent
 
 
 async def _reflection_migration_once(database_url: str) -> int:
