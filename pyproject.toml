@@ -34,7 +34,11 @@ classifiers = [
     'Typing :: Typed',
 ]
 
-dependencies = ["pydantic>=2.0.0"]
+dependencies = [
+    "pydantic>=2.0.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "typer>=0.26.7",
+]
 
 dynamic = ['readme', 'version']
 
