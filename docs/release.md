@@ -15,6 +15,7 @@
 
 ### Upgrades
 
+* ⬆ Bump `ruff-pre-commit` from v0.15.15 to v0.15.16. PR [#253](https://github.com/yezz123/ormdantic/pull/253) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ Bump the python-packages group with 4 updates. PR [#208](https://github.com/yezz123/ormdantic/pull/208) by [@dependabot[bot]](https://github.com/apps/dependabot).
 - [pre-commit.ci] pre-commit autoupdate. PR [#209](https://github.com/yezz123/ormdantic/pull/209) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ☔ [pre-commit.ci] pre-commit autoupdate. PR [#210](https://github.com/yezz123/ormdantic/pull/210) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
