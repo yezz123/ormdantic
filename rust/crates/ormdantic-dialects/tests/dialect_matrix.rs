@@ -1,4 +1,5 @@
 use ormdantic_dialects::{AnyDialect, Dialect};
+use ormdantic_schema::{ColumnDef, FieldKind, SchemaOperation};
 
 #[test]
 fn accepts_sqlalchemy_style_connection_schemes() {
@@ -25,4 +26,38 @@ fn renders_driver_placeholder_styles() {
     assert_eq!(AnyDialect::parse("mysql").unwrap().placeholder(3), "?");
     assert_eq!(AnyDialect::parse("mssql").unwrap().placeholder(3), "@P3");
     assert_eq!(AnyDialect::parse("oracle").unwrap().placeholder(3), ":3");
+}
+
+#[test]
+fn renders_add_column_schema_operations_for_each_dialect() {
+    let column = ColumnDef::new("rating", FieldKind::Integer).nullable(true);
+    let operation = SchemaOperation::AddColumn {
+        table: "flavor".to_string(),
+        column,
+    };
+    let cases = [
+        (
+            "sqlite",
+            r#"ALTER TABLE "flavor" ADD COLUMN "rating" INTEGER"#,
+        ),
+        (
+            "postgresql",
+            r#"ALTER TABLE "flavor" ADD COLUMN "rating" INTEGER"#,
+        ),
+        ("mysql", "ALTER TABLE `flavor` ADD COLUMN `rating` INTEGER"),
+        (
+            "mariadb",
+            "ALTER TABLE `flavor` ADD COLUMN `rating` INTEGER",
+        ),
+        ("mssql", "ALTER TABLE [flavor] ADD [rating] INTEGER"),
+        ("oracle", r#"ALTER TABLE "flavor" ADD ("rating" INTEGER)"#),
+    ];
+
+    for (dialect, expected) in cases {
+        let sql = AnyDialect::parse(dialect)
+            .unwrap()
+            .compile_schema_operation(&operation)
+            .unwrap();
+        assert_eq!(sql, vec![expected.to_string()]);
+    }
 }
