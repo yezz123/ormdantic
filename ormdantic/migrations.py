@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import importlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 try:
     _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
@@ -296,8 +297,17 @@ class SchemaSnapshot:
         return cls.from_dict(json.loads(payload))
 
     @classmethod
-    def read(cls, path: str | PathLike[str]) -> "SchemaSnapshot":
-        return cls.from_json(Path(path).read_text())
+    def from_toml(cls, payload: str | bytes | bytearray) -> "SchemaSnapshot":
+        return cls.from_dict(_toml_loads(payload))
+
+    @classmethod
+    def read(
+        cls, path: str | PathLike[str], *, format: str | None = None
+    ) -> "SchemaSnapshot":
+        document = Path(path).read_text()
+        if _document_format(path, format) == "toml":
+            return cls.from_toml(document)
+        return cls.from_json(document)
 
     def to_runtime(self) -> list[RuntimeTableSpec]:
         return [table.to_runtime() for table in self.tables]
@@ -311,10 +321,16 @@ class SchemaSnapshot:
     def to_json(self, *, indent: int | None = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, sort_keys=True)
 
-    def write(self, path: str | PathLike[str]) -> None:
+    def to_toml(self) -> str:
+        return _toml_dumps(self.to_dict())
+
+    def write(self, path: str | PathLike[str], *, format: str | None = None) -> None:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(self.to_json())
+        if _document_format(path, format) == "toml":
+            output.write_text(self.to_toml())
+        else:
+            output.write_text(self.to_json())
 
 
 @dataclass(frozen=True)
@@ -491,8 +507,17 @@ class MigrationArtifact:
         return cls.from_dict(json.loads(payload))
 
     @classmethod
-    def read(cls, path: str | PathLike[str]) -> "MigrationArtifact":
-        return cls.from_json(Path(path).read_text())
+    def from_toml(cls, payload: str | bytes | bytearray) -> "MigrationArtifact":
+        return cls.from_dict(_toml_loads(payload))
+
+    @classmethod
+    def read(
+        cls, path: str | PathLike[str], *, format: str | None = None
+    ) -> "MigrationArtifact":
+        document = Path(path).read_text()
+        if _document_format(path, format) == "toml":
+            return cls.from_toml(document)
+        return cls.from_json(document)
 
     def to_plan(self) -> MigrationPlan:
         return MigrationPlan(
@@ -529,10 +554,16 @@ class MigrationArtifact:
     def to_json(self, *, indent: int | None = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, sort_keys=True)
 
-    def write(self, path: str | PathLike[str]) -> None:
+    def to_toml(self) -> str:
+        return _toml_dumps(self.to_dict())
+
+    def write(self, path: str | PathLike[str], *, format: str | None = None) -> None:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(self.to_json())
+        if _document_format(path, format) == "toml":
+            output.write_text(self.to_toml())
+        else:
+            output.write_text(self.to_json())
 
 
 class MigrationManager:
@@ -655,7 +686,7 @@ class MigrationManager:
         self,
         path: str | PathLike[str],
         *,
-        pattern: str = "*.json",
+        pattern: str | None = None,
         allow_destructive: bool = False,
     ) -> list[str]:
         """Apply migration artifacts in filename order."""
@@ -1128,8 +1159,20 @@ def _change_from_dict(payload: Mapping[str, Any]) -> MigrationChange:
         message=str(payload["message"]),
         unsafe=bool(payload.get("unsafe", False)),
         destructive=bool(payload.get("destructive", False)),
-        details=dict(payload.get("details", {})),
+        details=_normalize_change_details(dict(payload.get("details", {}))),
     )
+
+
+def _normalize_change_details(details: dict[str, Any]) -> dict[str, Any]:
+    if {"name", "kind", "nullable", "primary_key"} <= set(details):
+        details.setdefault("foreign_table", None)
+        details.setdefault("foreign_column", None)
+        details.setdefault("max_length", None)
+    for key in ("from", "to"):
+        value = details.get(key)
+        if isinstance(value, Mapping):
+            details[key] = _normalize_change_details(dict(value))
+    return details
 
 
 def _warning_to_dict(warning: MigrationWarning) -> dict[str, Any]:
@@ -1205,8 +1248,11 @@ def _validate_contiguous_artifacts(artifacts: Sequence[MigrationArtifact]) -> No
             )
 
 
-def _migration_files(path: str | PathLike[str], pattern: str) -> list[Path]:
-    return sorted(Path(path).glob(pattern))
+def _migration_files(path: str | PathLike[str], pattern: str | None) -> list[Path]:
+    directory = Path(path)
+    if pattern is None:
+        return sorted({*directory.glob("*.json"), *directory.glob("*.toml")})
+    return sorted(directory.glob(pattern))
 
 
 def _operation_payload(plan: MigrationPlan) -> list[tuple[str, tuple[Any, ...]]]:
@@ -1218,6 +1264,66 @@ def _operation_looks_destructive(sql: str) -> bool:
     if normalized.startswith(("DROP TABLE ", "TRUNCATE TABLE ", "DELETE FROM ")):
         return True
     return normalized.startswith("ALTER TABLE ") and " DROP " in normalized
+
+
+def _document_format(path: str | PathLike[str], format: str | None = None) -> str:
+    if format is not None:
+        normalized = format.lower().lstrip(".")
+    else:
+        normalized = Path(path).suffix.lower().lstrip(".") or "json"
+    if normalized not in {"json", "toml"}:
+        raise ValueError(f"unsupported migration document format '{normalized}'")
+    return normalized
+
+
+def _toml_loads(payload: str | bytes | bytearray) -> dict[str, Any]:
+    text = payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ModuleNotFoundError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "Reading TOML migration files on Python < 3.11 requires tomli"
+            ) from exc
+    return tomllib.loads(text)
+
+
+def _toml_dumps(payload: Mapping[str, Any]) -> str:
+    lines = [
+        f"{_toml_key(key)} = {_toml_value(value)}"
+        for key, value in payload.items()
+        if value is not None
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _toml_key(key: str) -> str:
+    if key.replace("_", "").replace("-", "").isalnum():
+        return key
+    return json.dumps(key)
+
+
+def _toml_value(value: Any) -> str:
+    if value is None:
+        raise ValueError("TOML does not support null values")
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, Mapping):
+        parts = [
+            f"{_toml_key(str(key))} = {_toml_value(item)}"
+            for key, item in value.items()
+            if item is not None
+        ]
+        return "{ " + ", ".join(parts) + " }"
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
+    raise TypeError(f"unsupported TOML value {value!r}")
 
 
 def _compile_schema_diff(

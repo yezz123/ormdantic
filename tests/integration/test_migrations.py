@@ -165,7 +165,7 @@ async def test_migration_artifacts_apply_directory_and_squash(tmp_path) -> None:
     migrations_dir = tmp_path / "migrations"
     migrations_dir.mkdir()
     first_path = migrations_dir / "001_initial.json"
-    second_path = migrations_dir / "002_rating.json"
+    second_path = migrations_dir / "002_rating.toml"
     first_artifact.write(first_path)
     second_artifact.write(second_path)
 
@@ -203,10 +203,11 @@ def test_migration_cli_create_preview_and_apply(tmp_path, capsys) -> None:
 
     new_snapshot = db.migrations.snapshot()
     old_path = tmp_path / "old.json"
-    new_path = tmp_path / "new.json"
-    artifact_path = tmp_path / "001_cli.json"
+    new_path = tmp_path / "new.toml"
+    artifact_path = tmp_path / "001_cli.toml"
     old_snapshot.write(old_path)
     new_snapshot.write(new_path)
+    assert SchemaSnapshot.read(new_path).to_dict() == new_snapshot.to_dict()
 
     assert (
         main(
@@ -222,11 +223,14 @@ def test_migration_cli_create_preview_and_apply(tmp_path, capsys) -> None:
                 "sqlite",
                 "--out",
                 str(artifact_path),
+                "--format",
+                "toml",
             ]
         )
         == 0
     )
     assert artifact_path.exists()
+    assert MigrationArtifact.read(artifact_path).revision == "001_cli"
 
     assert main(["migrations", "preview", str(artifact_path)]) == 0
     assert "CREATE TABLE" in capsys.readouterr().out
