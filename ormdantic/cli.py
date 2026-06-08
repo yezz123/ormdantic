@@ -12,6 +12,7 @@ import typer
 from ormdantic import Ormdantic
 from ormdantic.migrations import (
     MigrationArtifact,
+    MigrationPlan,
     SchemaSnapshot,
     create_migration_artifact,
     squash_migrations,
@@ -66,6 +67,20 @@ def snapshot_command(
     typer.echo(str(out))
 
 
+@migrations_app.command("init")
+def init_command(
+    url: Annotated[str, typer.Argument(help="Database URL.")],
+) -> None:
+    """Initialize migration history metadata on a database."""
+
+    async def init_history() -> None:
+        database = Ormdantic(url)
+        await database.migrations.ensure_revision_table()
+
+    asyncio.run(init_history())
+    typer.echo("initialized")
+
+
 @migrations_app.command("create")
 def create_command(
     revision: Annotated[str, typer.Argument(help="Migration revision identifier.")],
@@ -90,6 +105,18 @@ def create_command(
         bool,
         typer.Option("--interactive", "-i", help="Prompt before overwriting files."),
     ] = False,
+    message: Annotated[
+        str | None,
+        typer.Option("--message", "-m", help="Migration description."),
+    ] = None,
+    depends_on: Annotated[
+        list[str] | None,
+        typer.Option("--depends-on", help="Dependency revision."),
+    ] = None,
+    branch_label: Annotated[
+        list[str] | None,
+        typer.Option("--branch-label", help="Optional branch labels."),
+    ] = None,
 ) -> None:
     """Create a migration artifact from two snapshots."""
     artifact = create_migration_artifact(
@@ -97,6 +124,9 @@ def create_command(
         SchemaSnapshot.read(from_snapshot),
         SchemaSnapshot.read(to_snapshot),
         dialect=dialect,
+        description=message,
+        depends_on=depends_on,
+        branch_labels=branch_label,
     )
     _echo_warnings(artifact)
     _confirm_overwrite(out, interactive)
@@ -115,8 +145,73 @@ def preview_command(
     """Print SQL from a migration artifact."""
     migration = MigrationArtifact.read(artifact)
     statements = migration.rollback_operations if rollback else migration.operations
+    typer.echo(f"# revision: {migration.revision}")
+    if migration.dialect:
+        typer.echo(f"# dialect: {migration.dialect}")
+    typer.echo(
+        "# safety: "
+        f"unsafe={migration.to_plan().has_unsafe_operations} "
+        f"destructive={migration.to_plan().has_destructive_operations} "
+        f"requires_rebuild={migration.safety.get('requires_rebuild', False)}"
+    )
+    for warning in migration.warnings:
+        typer.secho(f"# warning: {warning.message}", fg=typer.colors.YELLOW)
     for statement in statements:
         typer.echo(statement.sql)
+
+
+@migrations_app.command("autogenerate")
+def autogenerate_command(
+    target: Annotated[
+        str,
+        typer.Argument(help="Import path like package.module:db."),
+    ],
+    revision: Annotated[str, typer.Argument(help="Migration revision identifier.")],
+    out: Annotated[
+        Path,
+        typer.Option("--out", "-o", help="Output migration artifact."),
+    ],
+    message: Annotated[
+        str | None,
+        typer.Option("--message", "-m", help="Migration description."),
+    ] = None,
+    include_table: Annotated[
+        list[str] | None,
+        typer.Option("--include-table", help="Glob for included table names."),
+    ] = None,
+    exclude_table: Annotated[
+        list[str] | None,
+        typer.Option("--exclude-table", help="Glob for excluded table names."),
+    ] = None,
+    schema: Annotated[
+        str | None,
+        typer.Option("--schema", help="Optional schema/namespace."),
+    ] = None,
+    format: Annotated[
+        str | None,
+        typer.Option("--format", "-f", help="Output format: json or toml."),
+    ] = None,
+    interactive: Annotated[
+        bool,
+        typer.Option("--interactive", "-i", help="Prompt before overwriting files."),
+    ] = False,
+) -> None:
+    """Generate migration artifact from live DB schema to current models."""
+    database = _load_database(target)
+    artifact = database.migrations.autogenerate(
+        revision,
+        description=message,
+        include_tables=include_table,
+        exclude_tables=exclude_table,
+        schema=schema,
+    )
+    if artifact is None:
+        typer.echo("no-op")
+        return
+    _echo_warnings(artifact)
+    _confirm_overwrite(out, interactive)
+    artifact.write(out, format=format)
+    typer.echo(str(out))
 
 
 @migrations_app.command("apply")
@@ -182,6 +277,166 @@ def apply_dir_command(
 
     for revision in asyncio.run(apply_many()):
         typer.echo(revision)
+
+
+@migrations_app.command("status")
+def status_command(
+    url: Annotated[str, typer.Argument(help="Database URL.")],
+) -> None:
+    """Print migration dirty state and current revision."""
+
+    async def fetch_status() -> dict[str, Any]:
+        database = Ormdantic(url)
+        return await database.migrations.status()
+
+    status = asyncio.run(fetch_status())
+    typer.echo(f"dirty: {status['dirty']}")
+    typer.echo(f"current: {status['current'] or 'none'}")
+    typer.echo(f"applied: {len(status['applied'])}")
+
+
+@migrations_app.command("history")
+def history_command(
+    url: Annotated[str, typer.Argument(help="Database URL.")],
+) -> None:
+    """Print migration revision history."""
+
+    async def fetch_history() -> list[Any]:
+        database = Ormdantic(url)
+        return await database.migrations.history()
+
+    for entry in asyncio.run(fetch_history()):
+        typer.echo(
+            f"{entry.revision}\t{entry.status}\tdirty={entry.dirty}\t"
+            f"checksum={entry.checksum or '-'}\tat={entry.applied_at or '-'}"
+        )
+
+
+@migrations_app.command("current")
+def current_command(
+    url: Annotated[str, typer.Argument(help="Database URL.")],
+) -> None:
+    """Print current applied revision."""
+
+    async def fetch_current() -> Any:
+        database = Ormdantic(url)
+        return await database.migrations.current()
+
+    current = asyncio.run(fetch_current())
+    typer.echo(current.revision if current else "")
+
+
+@migrations_app.command("rollback")
+def rollback_command(
+    url: Annotated[str, typer.Argument(help="Database URL.")],
+    artifact: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Migration artifact file (optional when using --revision)."
+        ),
+    ] = None,
+    revision: Annotated[
+        str | None,
+        typer.Option("--revision", help="Revision to rollback from directory."),
+    ] = None,
+    directory: Annotated[
+        Path | None,
+        typer.Option("--dir", help="Directory to resolve --revision artifacts."),
+    ] = None,
+    allow_destructive: Annotated[
+        bool,
+        typer.Option("--allow-destructive", help="Allow destructive rollback SQL."),
+    ] = False,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive",
+            "-i",
+            help="Prompt before destructive rollback SQL is executed.",
+        ),
+    ] = False,
+) -> None:
+    """Roll back one applied migration artifact."""
+    target_artifact = artifact
+    if target_artifact is None:
+        if revision is None or directory is None:
+            raise typer.BadParameter(
+                "Provide either an artifact path or --revision with --dir."
+            )
+        target_artifact = _artifact_for_revision(directory, revision)
+    migration = MigrationArtifact.read(target_artifact)
+    allow = _confirm_rollback_destructive(migration, allow_destructive, interactive)
+
+    async def rollback_one() -> bool:
+        database = Ormdantic(url)
+        return await database.migrations.rollback_artifact(
+            migration,
+            allow_destructive=allow,
+        )
+
+    rolled_back = asyncio.run(rollback_one())
+    typer.echo("rolled-back" if rolled_back else "skipped")
+
+
+@migrations_app.command("repair")
+def repair_command(
+    url: Annotated[str, typer.Argument(help="Database URL.")],
+    revision: Annotated[
+        str | None,
+        typer.Option("--revision", help="Revision to repair (defaults to all)."),
+    ] = None,
+    status: Annotated[
+        str | None,
+        typer.Option(
+            "--status", help="Force status value (applied/failed/rolled_back)."
+        ),
+    ] = None,
+    clear_dirty: Annotated[
+        bool,
+        typer.Option("--clear-dirty/--keep-dirty", help="Clear dirty marker."),
+    ] = True,
+    checksum: Annotated[
+        str | None,
+        typer.Option("--checksum", help="Override checksum for repaired revisions."),
+    ] = None,
+) -> None:
+    """Repair dirty migration metadata entries."""
+
+    async def repair_rows() -> int:
+        database = Ormdantic(url)
+        return await database.migrations.repair(
+            revision=revision,
+            status=status,
+            clear_dirty=clear_dirty,
+            checksum=checksum,
+        )
+
+    repaired = asyncio.run(repair_rows())
+    typer.echo(f"repaired: {repaired}")
+
+
+@migrations_app.command("check")
+def check_command(
+    directory: Annotated[
+        Path,
+        typer.Argument(help="Directory containing migration artifacts."),
+    ],
+    pattern: Annotated[
+        str | None,
+        typer.Option("--pattern", help="Optional glob pattern."),
+    ] = None,
+) -> None:
+    """Validate migration artifact checksums and parseability."""
+    files = (
+        sorted(directory.glob(pattern))
+        if pattern is not None
+        else sorted({*directory.glob("*.json"), *directory.glob("*.toml")})
+    )
+    for path in files:
+        artifact = MigrationArtifact.read(path)
+        artifact.validate_checksum()
+        _ = artifact.to_plan()
+    typer.echo(f"ok ({len(files)} files)")
 
 
 @migrations_app.command("squash")
@@ -263,6 +518,35 @@ def _confirm_destructive(
             default=False,
         )
     return allow_destructive
+
+
+def _confirm_rollback_destructive(
+    artifact: MigrationArtifact,
+    allow_destructive: bool,
+    interactive: bool,
+) -> bool:
+    rollback_plan = MigrationPlan(operations=list(artifact.rollback_operations))
+    if allow_destructive or not rollback_plan.has_destructive_operations:
+        return allow_destructive
+    if interactive:
+        return typer.confirm(
+            "This rollback contains destructive SQL. Continue?",
+            default=False,
+        )
+    return allow_destructive
+
+
+def _artifact_for_revision(directory: Path, revision: str) -> Path:
+    files = sorted({*directory.glob("*.json"), *directory.glob("*.toml")})
+    for path in files:
+        if path.stem.startswith(revision):
+            return path
+        artifact = MigrationArtifact.read(path)
+        if artifact.revision == revision:
+            return path
+    raise FileNotFoundError(
+        f"could not find migration artifact for revision '{revision}' in {directory}"
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
