@@ -1,33 +1,37 @@
----
-hide:
-  - navigation
----
-
 # Release Notes
 
 ## Latest Changes
 
-- ⬆ Bump pypa/gh-action-pypi-publish from 1.10.1 to 1.10.2. PR [#222](https://github.com/yezz123/ormdantic/pull/222) by [@dependabot[bot]](https://github.com/apps/dependabot).
+### Features
+
+- ✨ Migrate to Rust integration with ORM, SQL support, and documentation. PR [#235](https://github.com/yezz123/ormdantic/pull/235) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance query handling with new expression methods and tests. PR [#250](https://github.com/yezz123/ormdantic/pull/250) by [@yezz123](https://github.com/yezz123).
 
 ### Refactors
 
 - ♻️ Refactor demo project to use Class notion. PR [#215](https://github.com/yezz123/ormdantic/pull/215) by [@yezz123](https://github.com/yezz123).
+- ♻️ Enhance schema, transaction features, and Rust integration. PR [#239](https://github.com/yezz123/ormdantic/pull/239) by [@yezz123](https://github.com/yezz123).
 
 ### Upgrades
 
-- ⬆ Bump pypa/gh-action-pypi-publish from 1.12.2 to 1.12.4. PR [#228](https://github.com/yezz123/ormdantic/pull/228) by [@dependabot[bot]](https://github.com/apps/dependabot).
-- ⬆ Bump codecov/codecov-action from 4 to 5. PR [#226](https://github.com/yezz123/ormdantic/pull/226) by [@dependabot[bot]](https://github.com/apps/dependabot).
-- ⬆ Bump pypa/gh-action-pypi-publish from 1.9.0 to 1.10.1. PR [#221](https://github.com/yezz123/ormdantic/pull/221) by [@dependabot[bot]](https://github.com/apps/dependabot).
-- ⬆ Bump the python-packages group with 2 updates. PR [#218](https://github.com/yezz123/ormdantic/pull/218) by [@dependabot[bot]](https://github.com/apps/dependabot).
-- ⬆ Bump `ruff-pre-commit` from v0.4.9 to v0.4.10. PR [#217](https://github.com/yezz123/ormdantic/pull/217) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-- ⬆ Bump the python-packages group with 4 updates. PR [#216](https://github.com/yezz123/ormdantic/pull/216) by [@dependabot[bot]](https://github.com/apps/dependabot).
-- ⬆ Bump `ruff-pre-commit` from v0.4.8 to v0.4.9. PR [#214](https://github.com/yezz123/ormdantic/pull/214) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump the python-packages group with 4 updates. PR [#208](https://github.com/yezz123/ormdantic/pull/208) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- [pre-commit.ci] pre-commit autoupdate. PR [#209](https://github.com/yezz123/ormdantic/pull/209) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ☔ [pre-commit.ci] pre-commit autoupdate. PR [#210](https://github.com/yezz123/ormdantic/pull/210) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- [pre-commit.ci] pre-commit autoupdate. PR [#211](https://github.com/yezz123/ormdantic/pull/211) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ Bump `ruff-pre-commit` from v0.4.7 to v0.4.8. PR [#212](https://github.com/yezz123/ormdantic/pull/212) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ Bump pypa/gh-action-pypi-publish from 1.8.14 to 1.9.0. PR [#213](https://github.com/yezz123/ormdantic/pull/213) by [@dependabot[bot]](https://github.com/apps/dependabot).
-- [pre-commit.ci] pre-commit autoupdate. PR [#211](https://github.com/yezz123/ormdantic/pull/211) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-- ☔ [pre-commit.ci] pre-commit autoupdate. PR [#210](https://github.com/yezz123/ormdantic/pull/210) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-- [pre-commit.ci] pre-commit autoupdate. PR [#209](https://github.com/yezz123/ormdantic/pull/209) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-- ⬆ Bump the python-packages group with 4 updates. PR [#208](https://github.com/yezz123/ormdantic/pull/208) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump `ruff-pre-commit` from v0.4.8 to v0.4.9. PR [#214](https://github.com/yezz123/ormdantic/pull/214) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump the python-packages group with 4 updates. PR [#216](https://github.com/yezz123/ormdantic/pull/216) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump `ruff-pre-commit` from v0.4.9 to v0.4.10. PR [#217](https://github.com/yezz123/ormdantic/pull/217) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump the python-packages group with 2 updates. PR [#218](https://github.com/yezz123/ormdantic/pull/218) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump pypa/gh-action-pypi-publish from 1.9.0 to 1.10.1. PR [#221](https://github.com/yezz123/ormdantic/pull/221) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump pypa/gh-action-pypi-publish from 1.10.1 to 1.10.2. PR [#222](https://github.com/yezz123/ormdantic/pull/222) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump pypa/gh-action-pypi-publish from 1.10.2 to 1.12.2. PR [#225](https://github.com/yezz123/ormdantic/pull/225) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump codecov/codecov-action from 4 to 5. PR [#226](https://github.com/yezz123/ormdantic/pull/226) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump pypa/gh-action-pypi-publish from 1.12.2 to 1.12.4. PR [#228](https://github.com/yezz123/ormdantic/pull/228) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump the python-packages group with 4 updates. PR [#236](https://github.com/yezz123/ormdantic/pull/236) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump the python-packages group with 3 updates. PR [#237](https://github.com/yezz123/ormdantic/pull/237) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ [pre-commit.ci] pre-commit autoupdate. PR [#238](https://github.com/yezz123/ormdantic/pull/238) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 
 ## 1.7.0
 

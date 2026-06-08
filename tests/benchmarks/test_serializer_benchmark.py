@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import BaseModel, Field
 
-from ormdantic import Ormdantic, column
+from ormdantic import Ormdantic, column, joinedload, selectinload
 from ormdantic.migrations import MigrationOperation, MigrationPlan
 from ormdantic.models import Map, OrmTable, Relationship
 from ormdantic.serializer import OrmSerializer
@@ -40,8 +40,31 @@ class _BenchMany(BaseModel):
     one: _BenchOne | UUID
 
 
+class _BenchAuthor(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    name: str
+    books: list[_BenchBook] = Field(default_factory=list)
+
+
+class _BenchBook(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    title: str
+    author: _BenchAuthor | UUID
+    pages: list[_BenchPage] = Field(default_factory=list)
+
+
+class _BenchPage(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    body: str
+    position: int
+    book: _BenchBook | UUID
+
+
 _BenchOne.model_rebuild()
 _BenchMany.model_rebuild()
+_BenchAuthor.model_rebuild()
+_BenchBook.model_rebuild()
+_BenchPage.model_rebuild()
 
 
 @dataclass
@@ -116,6 +139,53 @@ def _many_table() -> OrmTable[_BenchMany]:
     )
 
 
+def _author_table() -> OrmTable[_BenchAuthor]:
+    return OrmTable[_BenchAuthor](
+        model=_BenchAuthor,
+        tablename="bench_authors",
+        pk="id",
+        indexed=[],
+        unique=[],
+        unique_constraints=[],
+        columns=["id", "name"],
+        relationships={
+            "books": Relationship(foreign_table="bench_books", back_references="author")
+        },
+        back_references={"books": "author"},
+    )
+
+
+def _book_table() -> OrmTable[_BenchBook]:
+    return OrmTable[_BenchBook](
+        model=_BenchBook,
+        tablename="bench_books",
+        pk="id",
+        indexed=[],
+        unique=[],
+        unique_constraints=[],
+        columns=["id", "title", "author"],
+        relationships={
+            "author": Relationship(foreign_table="bench_authors"),
+            "pages": Relationship(foreign_table="bench_pages", back_references="book"),
+        },
+        back_references={"pages": "book"},
+    )
+
+
+def _page_table() -> OrmTable[_BenchPage]:
+    return OrmTable[_BenchPage](
+        model=_BenchPage,
+        tablename="bench_pages",
+        pk="id",
+        indexed=[],
+        unique=[],
+        unique_constraints=[],
+        columns=["id", "body", "position", "book"],
+        relationships={"book": Relationship(foreign_table="bench_books")},
+        back_references={},
+    )
+
+
 def _flat_rows(row_count: int) -> list[tuple[Any, ...]]:
     return [(str(uuid4()), f"flavor-{index}", index) for index in range(row_count)]
 
@@ -148,6 +218,31 @@ def _one_to_many_rows(
                     parent_id,
                 )
             )
+    return rows
+
+
+def _nested_joined_rows(
+    author_count: int, books_per_author: int, pages_per_book: int
+) -> list[tuple[Any, ...]]:
+    rows = []
+    for author_index in range(author_count):
+        author_id = str(uuid4())
+        for book_index in range(books_per_author):
+            book_id = str(uuid4())
+            for page_index in range(pages_per_book):
+                rows.append(
+                    (
+                        author_id,
+                        f"author-{author_index}",
+                        book_id,
+                        f"book-{author_index}-{book_index}",
+                        author_id,
+                        str(uuid4()),
+                        f"page-{page_index}",
+                        page_index,
+                        book_id,
+                    )
+                )
     return rows
 
 
@@ -215,6 +310,44 @@ def _deserialize_one_to_many(rows: list[tuple[Any, ...]]) -> list[_BenchOne]:
     ).deserialize()
 
 
+def _deserialize_nested_joined(
+    rows: list[tuple[Any, ...]], load_options: tuple[Any, ...] = ()
+) -> list[_BenchAuthor]:
+    author = _author_table()
+    book = _book_table()
+    page = _page_table()
+    result = _FakeResult(
+        [
+            "bench_authors\\id",
+            "bench_authors\\name",
+            "bench_authors/books\\id",
+            "bench_authors/books\\title",
+            "bench_authors/books\\author",
+            "bench_authors/books/pages\\id",
+            "bench_authors/books/pages\\body",
+            "bench_authors/books/pages\\position",
+            "bench_authors/books/pages\\book",
+        ],
+        rows,
+    )
+    return OrmSerializer[list[_BenchAuthor]](
+        table_data=author,
+        table_map=Map(
+            name_to_data={
+                author.tablename: author,
+                book.tablename: book,
+                page.tablename: page,
+            },
+            model_to_data={},
+        ),
+        result_set=result,
+        is_array=True,
+        depth=0,
+        load_paths=("books.pages",),
+        load_options=load_options,
+    ).deserialize()
+
+
 @pytest.mark.parametrize("row_count", [1, 1_000, 10_000])
 def test_flat_serializer_benchmark(benchmark: Any, row_count: int) -> None:
     rows = _flat_rows(row_count)
@@ -240,6 +373,49 @@ def test_one_to_many_serializer_benchmark(benchmark: Any) -> None:
 
     assert len(result) == 100
     assert len(result[0].many) == 10
+
+
+@pytest.mark.parametrize(
+    ("author_count", "books_per_author", "pages_per_book"),
+    [(100, 3, 5), (250, 4, 8)],
+    ids=["medium", "large"],
+)
+def test_nested_serializer_path_benchmark(
+    benchmark: Any,
+    author_count: int,
+    books_per_author: int,
+    pages_per_book: int,
+) -> None:
+    rows = _nested_joined_rows(author_count, books_per_author, pages_per_book)
+
+    result = benchmark(_deserialize_nested_joined, rows)
+
+    assert len(result) == author_count
+    assert (
+        sum(len(author.books) for author in result) == author_count * books_per_author
+    )
+    assert (
+        sum(len(book.pages) for author in result for book in author.books)
+        == author_count * books_per_author * pages_per_book
+    )
+
+
+def test_nested_serializer_loader_option_benchmark(benchmark: Any) -> None:
+    rows = _nested_joined_rows(author_count=100, books_per_author=4, pages_per_book=8)
+    load_options = (
+        joinedload("books").sorted_by("-title"),
+        joinedload("books.pages").filter(position=3),
+    )
+
+    result = benchmark(_deserialize_nested_joined, rows, load_options)
+
+    assert len(result) == 100
+    assert result[0].books[0].title.endswith("-3")
+    assert all(
+        len(book.pages) == 1 and book.pages[0].position == 3
+        for author in result
+        for book in author.books
+    )
 
 
 async def _runtime_crud_once(database_url: str) -> int:
@@ -271,6 +447,197 @@ def test_runtime_crud_expression_benchmark(benchmark: Any) -> None:
         result = benchmark(lambda: asyncio.run(_runtime_crud_once(database_url)))
 
     assert result == 15
+
+
+async def _relationship_load_once(
+    database_url: str,
+    strategy: Any,
+    parent_count: int,
+    children_per_parent: int,
+) -> int:
+    db = Ormdantic(database_url)
+
+    @db.table(pk="id", back_references={"children": "parent"})
+    class BenchParent(BaseModel):
+        id: str
+        name: str
+        children: list[BenchChild] = Field(default_factory=list)
+
+    @db.table(pk="id")
+    class BenchChild(BaseModel):
+        id: str
+        name: str
+        parent: BenchParent | str
+
+    BenchParent.model_rebuild(_types_namespace={"BenchChild": BenchChild})
+    BenchChild.model_rebuild(_types_namespace={"BenchParent": BenchParent})
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+    parents = [
+        await db[BenchParent].insert(
+            BenchParent(id=f"parent-{index}", name=f"parent-{index}")
+        )
+        for index in range(parent_count)
+    ]
+    for parent in parents:
+        for child_index in range(children_per_parent):
+            await db[BenchChild].insert(
+                BenchChild(
+                    id=f"{parent.id}-child-{child_index}",
+                    name=f"child-{child_index}",
+                    parent=parent,
+                )
+            )
+
+    result = await db[BenchParent].find_many(load=[strategy("children")])
+    return sum(len(parent.children) for parent in result.data)
+
+
+@pytest.mark.parametrize(
+    ("parent_count", "children_per_parent"),
+    [(100, 5), (500, 10)],
+    ids=["medium", "large"],
+)
+@pytest.mark.parametrize(
+    "strategy",
+    [joinedload, selectinload],
+    ids=["joined", "selectin"],
+)
+def test_relationship_loader_strategy_benchmark(
+    benchmark: Any,
+    strategy: Any,
+    parent_count: int,
+    children_per_parent: int,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        database_url = f"sqlite:///{tmp}/relationship-loaders.sqlite3"
+
+        result = benchmark(
+            lambda: asyncio.run(
+                _relationship_load_once(
+                    database_url,
+                    strategy,
+                    parent_count,
+                    children_per_parent,
+                )
+            )
+        )
+
+    assert result == parent_count * children_per_parent
+
+
+async def _nested_relationship_load_once(
+    database_url: str,
+    root_strategy: Any,
+    nested_strategy: Any,
+    parent_count: int,
+    children_per_parent: int,
+    leaves_per_child: int,
+) -> int:
+    db = Ormdantic(database_url)
+
+    @db.table(pk="id", back_references={"children": "parent"})
+    class BenchNestedParent(BaseModel):
+        id: str
+        name: str
+        children: list[BenchNestedChild] = Field(default_factory=list)
+
+    @db.table(pk="id", back_references={"leaves": "child"})
+    class BenchNestedChild(BaseModel):
+        id: str
+        name: str
+        parent: BenchNestedParent | str
+        leaves: list[BenchNestedLeaf] = Field(default_factory=list)
+
+    @db.table(pk="id")
+    class BenchNestedLeaf(BaseModel):
+        id: str
+        label: str
+        rank: int
+        child: BenchNestedChild | str
+
+    types_namespace = {
+        "BenchNestedParent": BenchNestedParent,
+        "BenchNestedChild": BenchNestedChild,
+        "BenchNestedLeaf": BenchNestedLeaf,
+    }
+    BenchNestedParent.model_rebuild(_types_namespace=types_namespace)
+    BenchNestedChild.model_rebuild(_types_namespace=types_namespace)
+    BenchNestedLeaf.model_rebuild(_types_namespace=types_namespace)
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+    parents = [
+        await db[BenchNestedParent].insert(
+            BenchNestedParent(id=f"parent-{index}", name=f"parent-{index}")
+        )
+        for index in range(parent_count)
+    ]
+    for parent in parents:
+        for child_index in range(children_per_parent):
+            child = await db[BenchNestedChild].insert(
+                BenchNestedChild(
+                    id=f"{parent.id}-child-{child_index}",
+                    name=f"child-{child_index}",
+                    parent=parent,
+                )
+            )
+            for leaf_index in range(leaves_per_child):
+                await db[BenchNestedLeaf].insert(
+                    BenchNestedLeaf(
+                        id=f"{child.id}-leaf-{leaf_index}",
+                        label=f"leaf-{leaf_index}",
+                        rank=leaf_index,
+                        child=child,
+                    )
+                )
+
+    result = await db[BenchNestedParent].find_many(
+        load=[
+            root_strategy("children"),
+            nested_strategy("children.leaves").sorted_by("-rank"),
+        ]
+    )
+    return sum(len(child.leaves) for parent in result.data for child in parent.children)
+
+
+@pytest.mark.parametrize(
+    ("root_strategy", "nested_strategy"),
+    [
+        (joinedload, joinedload),
+        (joinedload, selectinload),
+        (selectinload, selectinload),
+    ],
+    ids=["joined-joined", "joined-selectin", "selectin-selectin"],
+)
+def test_nested_relationship_loader_strategy_benchmark(
+    benchmark: Any,
+    root_strategy: Any,
+    nested_strategy: Any,
+) -> None:
+    parent_count = 40
+    children_per_parent = 4
+    leaves_per_child = 4
+    with tempfile.TemporaryDirectory() as tmp:
+        database_url = f"sqlite:///{tmp}/nested-relationship-loaders.sqlite3"
+
+        result = benchmark(
+            lambda: asyncio.run(
+                _nested_relationship_load_once(
+                    database_url,
+                    root_strategy,
+                    nested_strategy,
+                    parent_count,
+                    children_per_parent,
+                    leaves_per_child,
+                )
+            )
+        )
+
+    assert result == parent_count * children_per_parent * leaves_per_child
 
 
 async def _reflection_migration_once(database_url: str) -> int:

@@ -16,9 +16,10 @@ use ormdantic_schema::{
     TableDef, UniqueConstraintDef,
 };
 use ormdantic_sql::{
-    BinaryOp, CompiledQuery, DdlAst, DmlAst, Expr, Filter, JoinSpec, JoinedSelectColumn, OrderBy,
-    OrderExpr, OrderNulls, Projection, QueryAst, QueryOperation, SelectAst, SelectColumn,
-    SelectInPlan as SqlSelectInPlan, SortDirection, SqlLiteral, TableRef, TableSource, UnaryOp,
+    BinaryOp, CompiledQuery, DdlAst, DmlAst, Expr, Filter, JoinSpec, JoinedFilter, JoinedOrderBy,
+    JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, Projection, QueryAst, QueryOperation,
+    SelectAst, SelectColumn, SelectInPlan as SqlSelectInPlan, SortDirection, SqlLiteral, TableRef,
+    TableSource, UnaryOp,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -28,7 +29,21 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 type FilterSpec = (String, String, Vec<String>);
+type RuntimeJoinedFilter = (String, Vec<FilterSpec>);
+type RuntimeJoinedOrder = (String, String, String);
 type RuntimeCheck = (String, String, String);
+
+struct RuntimeJoinedQuery {
+    filters: Vec<Filter>,
+    order_by: Vec<String>,
+    direction: SortDirection,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    paths: Vec<String>,
+    relationship_filters: Vec<RuntimeJoinedFilter>,
+    relationship_order_by: Vec<RuntimeJoinedOrder>,
+}
+
 const FILTER_OPERATORS: &[&str] = &[
     "eq",
     "ne",
@@ -725,6 +740,37 @@ impl PyTableHandle {
         self.execute_compiled(py, compiled, vec![py_to_db_value(py, primary_key)?])
     }
 
+    fn find_one_with_paths(
+        &self,
+        py: Python<'_>,
+        values: &Bound<'_, PyDict>,
+        paths: Vec<String>,
+        relationship_filters: Vec<RuntimeJoinedFilter>,
+        relationship_order_by: Vec<RuntimeJoinedOrder>,
+    ) -> PyResult<Py<PyAny>> {
+        let query = self.joined_query_for_paths(RuntimeJoinedQuery {
+            filters: vec![Filter::Eq {
+                column: self.table.primary_key.clone(),
+                param: self.table.primary_key.clone(),
+            }],
+            order_by: Vec::new(),
+            direction: SortDirection::Asc,
+            limit: None,
+            offset: None,
+            paths,
+            relationship_filters,
+            relationship_order_by,
+        })?;
+        let compiled = query
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let params = bind_values(py, compiled.params(), values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
     #[pyo3(signature = (filters, values, order_by, order_direction, limit=None, offset=None, depth=0))]
     #[allow(clippy::too_many_arguments)]
     fn find_many(
@@ -755,6 +801,53 @@ impl PyTableHandle {
         } else {
             self.joined_query(filter_params, order_by, direction, limit, offset, depth)?
         };
+        let compiled = query
+            .compile(
+                &AnyDialect::parse(&self.url)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let params = bind_values(py, compiled.params(), values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
+    #[pyo3(signature = (
+        filters,
+        values,
+        order_by,
+        order_direction,
+        limit=None,
+        offset=None,
+        paths=Vec::new(),
+        relationship_filters=Vec::new(),
+        relationship_order_by=Vec::new()
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn find_many_with_paths(
+        &self,
+        py: Python<'_>,
+        filters: &Bound<'_, PyAny>,
+        values: &Bound<'_, PyDict>,
+        order_by: Vec<String>,
+        order_direction: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+        paths: Vec<String>,
+        relationship_filters: Vec<RuntimeJoinedFilter>,
+        relationship_order_by: Vec<RuntimeJoinedOrder>,
+    ) -> PyResult<Py<PyAny>> {
+        let direction = parse_sort_direction(order_direction)?;
+        let filter_params = parse_filter_input(filters)?;
+        let query = self.joined_query_for_paths(RuntimeJoinedQuery {
+            filters: filter_params,
+            order_by,
+            direction,
+            limit,
+            offset,
+            paths,
+            relationship_filters,
+            relationship_order_by,
+        })?;
         let compiled = query
             .compile(
                 &AnyDialect::parse(&self.url)
@@ -898,10 +991,40 @@ impl PyTableHandle {
             columns: self.joined_columns(&self.table, depth, None),
             joins: self.join_specs(&self.table, depth, None),
             filters,
+            relationship_filters: Vec::new(),
             order_by: order_by
                 .into_iter()
                 .map(|column| OrderBy::new(column, direction.clone()))
                 .collect(),
+            relationship_order_by: Vec::new(),
+            limit,
+            offset,
+        })
+    }
+
+    fn joined_query_for_paths(&self, query: RuntimeJoinedQuery) -> PyResult<QueryAst> {
+        let RuntimeJoinedQuery {
+            filters,
+            order_by,
+            direction,
+            limit,
+            offset,
+            paths,
+            relationship_filters,
+            relationship_order_by,
+        } = query;
+        let included_paths = normalize_loader_paths(paths);
+        Ok(QueryAst::JoinedSelect {
+            table: TableRef::new(&self.table.table),
+            columns: self.joined_columns_for_paths(&self.table, &included_paths, None, None),
+            joins: self.join_specs_for_paths(&self.table, &included_paths, None, None),
+            filters,
+            relationship_filters: joined_filters(relationship_filters)?,
+            order_by: order_by
+                .into_iter()
+                .map(|column| OrderBy::new(column, direction.clone()))
+                .collect(),
+            relationship_order_by: joined_order_by(relationship_order_by)?,
             limit,
             offset,
         })
@@ -944,6 +1067,58 @@ impl PyTableHandle {
             };
             let relation_path = format!("{table_path}/{field}");
             columns.extend(self.joined_columns(related, depth - 1, Some(relation_path)));
+        }
+        columns
+    }
+
+    fn joined_columns_for_paths(
+        &self,
+        table: &RuntimeTable,
+        included_paths: &HashSet<String>,
+        table_path: Option<String>,
+        relative_path: Option<String>,
+    ) -> Vec<JoinedSelectColumn> {
+        let table_path = table_path.unwrap_or_else(|| table.table.clone());
+        let loaded_relation_fields = table
+            .relationships
+            .iter()
+            .filter_map(|(field, ..)| {
+                let relation_path = append_loader_path(relative_path.as_deref(), field);
+                loader_path_included(included_paths, &relation_path).then_some(field)
+            })
+            .collect::<HashSet<_>>();
+        let mut columns = table
+            .persisted_columns()
+            .into_iter()
+            .filter(|column| !loaded_relation_fields.contains(column))
+            .map(|column| {
+                JoinedSelectColumn::aliased(
+                    table_path.clone(),
+                    column.clone(),
+                    format!("{table_path}\\{column}"),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        for (field, foreign_table, _, _) in &table.relationships {
+            let relation_relative_path = append_loader_path(relative_path.as_deref(), field);
+            if !loader_path_included(included_paths, &relation_relative_path) {
+                continue;
+            }
+            let Some(related) = self
+                .tables
+                .values()
+                .find(|table| &table.table == foreign_table)
+            else {
+                continue;
+            };
+            let relation_table_path = format!("{table_path}/{field}");
+            columns.extend(self.joined_columns_for_paths(
+                related,
+                included_paths,
+                Some(relation_table_path),
+                Some(relation_relative_path),
+            ));
         }
         columns
     }
@@ -991,6 +1166,80 @@ impl PyTableHandle {
         }
         joins
     }
+
+    fn join_specs_for_paths(
+        &self,
+        table: &RuntimeTable,
+        included_paths: &HashSet<String>,
+        table_path: Option<String>,
+        relative_path: Option<String>,
+    ) -> Vec<JoinSpec> {
+        let table_path = table_path.unwrap_or_else(|| table.table.clone());
+        let mut joins = Vec::new();
+        for (field, foreign_table, foreign_column, back_reference) in &table.relationships {
+            let relation_relative_path = append_loader_path(relative_path.as_deref(), field);
+            if !loader_path_included(included_paths, &relation_relative_path) {
+                continue;
+            }
+            let Some(related) = self
+                .tables
+                .values()
+                .find(|table| &table.table == foreign_table)
+            else {
+                continue;
+            };
+            let relation_table_path = format!("{table_path}/{field}");
+            if let Some(back_reference) = back_reference {
+                joins.push(JoinSpec::left_join(
+                    foreign_table,
+                    &relation_table_path,
+                    &table_path,
+                    &table.primary_key,
+                    &relation_table_path,
+                    back_reference,
+                ));
+            } else {
+                joins.push(JoinSpec::left_join(
+                    foreign_table,
+                    &relation_table_path,
+                    &table_path,
+                    field,
+                    &relation_table_path,
+                    foreign_column,
+                ));
+            }
+            joins.extend(self.join_specs_for_paths(
+                related,
+                included_paths,
+                Some(relation_table_path),
+                Some(relation_relative_path),
+            ));
+        }
+        joins
+    }
+}
+
+fn normalize_loader_paths(paths: Vec<String>) -> HashSet<String> {
+    paths
+        .into_iter()
+        .map(|path| path.replace('.', "/"))
+        .map(|path| path.trim_matches('/').to_string())
+        .filter(|path| !path.is_empty())
+        .collect()
+}
+
+fn append_loader_path(prefix: Option<&str>, field: &str) -> String {
+    match prefix {
+        Some(prefix) if !prefix.is_empty() => format!("{prefix}/{field}"),
+        _ => field.to_string(),
+    }
+}
+
+fn loader_path_included(included_paths: &HashSet<String>, path: &str) -> bool {
+    included_paths.contains(path)
+        || included_paths
+            .iter()
+            .any(|included| included.starts_with(&format!("{path}/")))
 }
 
 #[pymethods]
@@ -1505,10 +1754,12 @@ fn compile_joined_find_many(
             )
             .collect(),
         filters: filter_specs(filter_columns)?,
+        relationship_filters: Vec::new(),
         order_by: order_columns
             .into_iter()
             .map(|column| OrderBy::new(column, direction.clone()))
             .collect(),
+        relationship_order_by: Vec::new(),
         limit,
         offset,
     };
@@ -2671,6 +2922,28 @@ fn filter_specs(filters: Vec<FilterSpec>) -> PyResult<Vec<Filter>> {
                     "unsupported filter operator '{other}'"
                 ))),
             }
+        })
+        .collect()
+}
+
+fn joined_filters(filters: Vec<RuntimeJoinedFilter>) -> PyResult<Vec<JoinedFilter>> {
+    let mut output = Vec::new();
+    for (table_alias, specs) in filters {
+        for filter in filter_specs(specs)? {
+            output.push(JoinedFilter::new(table_alias.clone(), filter));
+        }
+    }
+    Ok(output)
+}
+
+fn joined_order_by(order_by: Vec<RuntimeJoinedOrder>) -> PyResult<Vec<JoinedOrderBy>> {
+    order_by
+        .into_iter()
+        .map(|(table_alias, column, direction)| {
+            Ok(JoinedOrderBy::new(
+                table_alias,
+                OrderBy::new(column, parse_sort_direction(&direction)?),
+            ))
         })
         .collect()
 }

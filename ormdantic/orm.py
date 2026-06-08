@@ -17,6 +17,12 @@ from ormdantic.errors import (
     UndefinedBackReferenceError,
 )
 from ormdantic.events import EventHandler, EventRegistry
+from ormdantic.loaders import (
+    LoaderPathLike,
+    install_relationship_path_descriptor,
+    joinedload,
+    path_parts,
+)
 from ormdantic.migrations import MigrationManager
 from ormdantic.models import Map, OrmTable, Relationship
 from ormdantic.naming import snake_case
@@ -91,6 +97,9 @@ class Ormdantic:
         for table_data in self._table_map.name_to_data.values():
             rels = self.get(table_data)
             table_data.relationships = rels
+        for table_data in self._table_map.name_to_data.values():
+            for field_name in table_data.relationships:
+                install_relationship_path_descriptor(table_data.model, field_name)
         self._runtime = _ormdantic.PyDatabase(
             self._connection, self._runtime_table_specs()
         )
@@ -100,6 +109,7 @@ class Ormdantic:
                 table_map=self._table_map,
                 rust_handle=self._runtime.table(table_data.model.__name__),
                 events=self._events,
+                runtime=self._runtime,
             )
         await self.create_all()
 
@@ -152,14 +162,17 @@ class Ormdantic:
         """Clear event handlers for one event or all events."""
         self._events.clear(event)
 
-    async def load(self, model: ModelType, path: str) -> Any:
+    async def load(self, model: ModelType, path: LoaderPathLike) -> Any:
         """Explicitly load a relationship path for a model instance."""
         table = self._table_map.model_to_data[type(model)]
-        loaded = await self[type(model)].find_one(getattr(model, table.pk), depth=1)
+        normalized_path = ".".join(path_parts(path))
+        loaded = await self[type(model)].find_one(
+            getattr(model, table.pk), load=[joinedload(normalized_path)]
+        )
         if loaded is None:
             return None
         value: Any = loaded
-        for part in path.split("."):
+        for part in path_parts(normalized_path):
             value = getattr(value, part)
         return value
 

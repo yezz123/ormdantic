@@ -4,7 +4,7 @@ import asyncio
 
 from pydantic import BaseModel, Field
 
-from ormdantic import Ormdantic, lazy
+from ormdantic import Ormdantic, lazyload, selectinload
 
 db = Ormdantic("sqlite:///examples_relationships.sqlite3")
 
@@ -35,7 +35,11 @@ async def main() -> None:
     assert loaded is not None
     assert isinstance(loaded.flavor, Flavor)
 
-    shallow = await db[Coffee].find_one("coffee-1", load=[lazy("flavor")])
+    selected = await db[Coffee].find_one("coffee-1", load=[selectinload("flavor")])
+    assert selected is not None
+    assert selected.flavor == flavor
+
+    shallow = await db[Coffee].find_one("coffee-1", load=[lazyload("flavor")])
     assert shallow is not None
     assert await db.load(shallow, "flavor") == flavor
 
