@@ -46,6 +46,9 @@ Homepage = "https://github.com/yezz123/ormdantic"
 Documentation = "https://ormdantic.yezz.me/"
 Funding = 'https://github.com/sponsors/yezz123'
 
+[project.scripts]
+ormdantic = "ormdantic.cli:main"
+
 [project.optional-dependencies]
 sqlite = []
 postgresql = []
