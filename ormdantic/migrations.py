@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import importlib
 import json
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from fnmatch import fnmatch
 from os import PathLike
 from pathlib import Path
 from typing import Any
+
+from ormdantic import __version__
 
 try:
     _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
@@ -38,6 +43,13 @@ RuntimeTableSpec = tuple[
     list[list[str]],
     list[RuntimeRelationship],
 ]
+
+MIGRATION_TABLE = "ormdantic_migrations"
+MIGRATION_LOCK_NAME = "ormdantic:migration:lock"
+MIGRATION_STATUS_APPLIED = "applied"
+MIGRATION_STATUS_FAILED = "failed"
+MIGRATION_STATUS_ROLLED_BACK = "rolled_back"
+MIGRATION_ARTIFACT_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -358,6 +370,22 @@ class MigrationWarning:
 
 
 @dataclass(frozen=True)
+class MigrationHistoryEntry:
+    """One row from the durable migration history table."""
+
+    revision: str
+    description: str | None = None
+    checksum: str | None = None
+    applied_at: str | None = None
+    execution_time_ms: int | None = None
+    status: str = MIGRATION_STATUS_APPLIED
+    dirty: bool = False
+    artifact_version: int | None = None
+    ormdantic_version: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class SchemaDiff:
     """Structured schema diff output."""
 
@@ -396,6 +424,14 @@ class MigrationOperation:
     description: str | None = None
     unsafe: bool = False
     destructive: bool = False
+    kind: str = "statement"
+    table: str | None = None
+    object_name: str | None = None
+    reversible: bool = True
+    requires_lock: bool = True
+    requires_rebuild: bool = False
+    generated_rollback: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -406,9 +442,14 @@ class MigrationPlan:
     rollback_operations: list[MigrationOperation] = field(default_factory=list)
     diff: SchemaDiff = field(default_factory=SchemaDiff)
     warnings: list[MigrationWarning] = field(default_factory=list)
+    safety: dict[str, Any] = field(default_factory=dict)
 
     def is_empty(self) -> bool:
         return not self.operations
+
+    @property
+    def rollback_available(self) -> bool:
+        return bool(self.rollback_operations)
 
     @property
     def has_unsafe_operations(self) -> bool:
@@ -445,8 +486,18 @@ class MigrationArtifact:
     rollback_operations: list[MigrationOperation] = field(default_factory=list)
     diff: SchemaDiff = field(default_factory=SchemaDiff)
     warnings: list[MigrationWarning] = field(default_factory=list)
+    description: str | None = None
+    created_at: str = field(
+        default_factory=lambda: datetime.now(UTC).replace(microsecond=0).isoformat()
+    )
     dialect: str | None = None
-    version: int = 1
+    checksum: str | None = None
+    depends_on: list[str] = field(default_factory=list)
+    branch_labels: list[str] = field(default_factory=list)
+    safety: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    artifact_version: int = MIGRATION_ARTIFACT_VERSION
+    version: int = MIGRATION_ARTIFACT_VERSION
 
     @classmethod
     def from_plan(
@@ -457,8 +508,13 @@ class MigrationArtifact:
         to_snapshot: SchemaSnapshot,
         *,
         dialect: str | None = None,
+        description: str | None = None,
+        depends_on: Sequence[str] | None = None,
+        branch_labels: Sequence[str] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        created_at: str | None = None,
     ) -> "MigrationArtifact":
-        return cls(
+        artifact = cls(
             revision=revision,
             from_snapshot=from_snapshot,
             to_snapshot=to_snapshot,
@@ -475,12 +531,25 @@ class MigrationArtifact:
                 _warning_from_dict(_warning_to_dict(warning))
                 for warning in plan.warnings
             ],
+            description=description,
+            created_at=created_at
+            or datetime.now(UTC).replace(microsecond=0).isoformat(),
             dialect=dialect,
+            depends_on=[str(item) for item in depends_on or ()],
+            branch_labels=[str(item) for item in branch_labels or ()],
+            safety=dict(plan.safety),
+            metadata=dict(metadata or {}),
+            artifact_version=MIGRATION_ARTIFACT_VERSION,
+            version=MIGRATION_ARTIFACT_VERSION,
         )
+        return artifact.with_checksum()
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "MigrationArtifact":
-        return cls(
+        artifact_version = int(
+            payload.get("artifact_version", payload.get("version", 1))
+        )
+        artifact = cls(
             revision=str(payload["revision"]),
             from_snapshot=SchemaSnapshot.from_dict(payload["from_snapshot"]),
             to_snapshot=SchemaSnapshot.from_dict(payload["to_snapshot"]),
@@ -498,9 +567,25 @@ class MigrationArtifact:
             warnings=[
                 _warning_from_dict(warning) for warning in payload.get("warnings", [])
             ],
+            description=_optional_str(payload.get("description")),
+            created_at=str(
+                payload.get(
+                    "created_at",
+                    datetime.now(UTC).replace(microsecond=0).isoformat(),
+                )
+            ),
             dialect=_optional_str(payload.get("dialect")),
-            version=int(payload.get("version", 1)),
+            checksum=_optional_str(payload.get("checksum")),
+            depends_on=[str(item) for item in payload.get("depends_on", [])],
+            branch_labels=[str(item) for item in payload.get("branch_labels", [])],
+            safety=dict(payload.get("safety", {})),
+            metadata=dict(payload.get("metadata", {})),
+            artifact_version=artifact_version,
+            version=int(payload.get("version", artifact_version)),
         )
+        if artifact.checksum:
+            artifact.validate_checksum()
+        return artifact
 
     @classmethod
     def from_json(cls, payload: str | bytes | bytearray) -> "MigrationArtifact":
@@ -534,13 +619,20 @@ class MigrationArtifact:
                 _warning_from_dict(_warning_to_dict(warning))
                 for warning in self.warnings
             ],
+            safety=dict(self.safety),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
+            "artifact_version": self.artifact_version,
             "revision": self.revision,
+            "description": self.description,
+            "created_at": self.created_at,
             "dialect": self.dialect,
+            "checksum": self.checksum,
+            "depends_on": list(self.depends_on),
+            "branch_labels": list(self.branch_labels),
             "from_snapshot": self.from_snapshot.to_dict(),
             "to_snapshot": self.to_snapshot.to_dict(),
             "up": [_operation_to_dict(operation) for operation in self.operations],
@@ -549,6 +641,8 @@ class MigrationArtifact:
             ],
             "diff": _diff_to_dict(self.diff),
             "warnings": [_warning_to_dict(warning) for warning in self.warnings],
+            "safety": dict(self.safety),
+            "metadata": dict(self.metadata),
         }
 
     def to_json(self, *, indent: int | None = 2) -> str:
@@ -564,6 +658,42 @@ class MigrationArtifact:
             output.write_text(self.to_toml())
         else:
             output.write_text(self.to_json())
+
+    def with_checksum(self) -> "MigrationArtifact":
+        payload = dict(self.to_dict())
+        payload.pop("checksum", None)
+        checksum = _artifact_checksum(payload)
+        return MigrationArtifact(
+            revision=self.revision,
+            from_snapshot=self.from_snapshot,
+            to_snapshot=self.to_snapshot,
+            operations=self.operations,
+            rollback_operations=self.rollback_operations,
+            diff=self.diff,
+            warnings=self.warnings,
+            description=self.description,
+            created_at=self.created_at,
+            dialect=self.dialect,
+            checksum=checksum,
+            depends_on=self.depends_on,
+            branch_labels=self.branch_labels,
+            safety=self.safety,
+            metadata=self.metadata,
+            artifact_version=self.artifact_version,
+            version=self.version,
+        )
+
+    def validate_checksum(self) -> None:
+        if not self.checksum:
+            return
+        payload = dict(self.to_dict())
+        payload.pop("checksum", None)
+        expected = _artifact_checksum(payload)
+        if expected != self.checksum:
+            raise ValueError(
+                f"migration artifact checksum mismatch for revision {self.revision}: "
+                f"expected {self.checksum}, calculated {expected}"
+            )
 
 
 class MigrationManager:
@@ -589,9 +719,76 @@ class MigrationManager:
         )
         return before, after
 
+    @property
+    def _connection_url(self) -> str:
+        return str(self._database._connection)
+
+    def _dialect(self) -> str:
+        return _dialect_name(self._connection_url)
+
+    def _native_connection(self) -> Any:
+        rust = _require_migration_symbol("PyNativeConnection")
+        return rust.PyNativeConnection(self._connection_url)
+
     def snapshot(self) -> SchemaSnapshot:
         """Return a serializable snapshot for the currently registered models."""
         return SchemaSnapshot.from_database(self._database)
+
+    def live_snapshot(
+        self,
+        *,
+        include_tables: Sequence[str] | None = None,
+        exclude_tables: Sequence[str] | None = None,
+        schema: str | None = None,
+    ) -> SchemaSnapshot:
+        """Return a live schema snapshot reflected from the current database."""
+        return _reflect_schema_snapshot(
+            self._connection_url,
+            dialect=self._dialect(),
+            include_tables=include_tables,
+            exclude_tables=exclude_tables,
+            schema=schema,
+        )
+
+    def autogenerate(
+        self,
+        revision: str,
+        *,
+        dialect: str | None = None,
+        include_tables: Sequence[str] | None = None,
+        exclude_tables: Sequence[str] | None = None,
+        schema: str | None = None,
+        description: str | None = None,
+        depends_on: Sequence[str] | None = None,
+        branch_labels: Sequence[str] | None = None,
+        path: str | PathLike[str] | None = None,
+        skip_noop: bool = True,
+    ) -> MigrationArtifact | None:
+        """Generate a migration artifact by diffing live schema against models."""
+        before = self.live_snapshot(
+            include_tables=include_tables,
+            exclude_tables=exclude_tables,
+            schema=schema,
+        )
+        after = self.snapshot()
+        active_dialect = dialect or self._connection_url
+        plan = _build_plan(active_dialect, before, after)
+        if plan.is_empty() and skip_noop:
+            return None
+        artifact = MigrationArtifact.from_plan(
+            revision,
+            plan,
+            before,
+            after,
+            dialect=active_dialect,
+            description=description,
+            depends_on=depends_on,
+            branch_labels=branch_labels,
+            metadata={"autogenerated": True, "schema": schema},
+        )
+        if path is not None:
+            artifact.write(path)
+        return artifact
 
     def diff(
         self,
@@ -620,6 +817,9 @@ class MigrationManager:
         to_snapshot: SchemaSnapshot | Mapping[str, Any] | None = None,
         *,
         dialect: str | None = None,
+        description: str | None = None,
+        depends_on: Sequence[str] | None = None,
+        branch_labels: Sequence[str] | None = None,
         path: str | PathLike[str] | None = None,
     ) -> MigrationArtifact:
         """Generate a serializable migration artifact."""
@@ -629,6 +829,9 @@ class MigrationManager:
             before,
             after,
             dialect=dialect or self._database._connection,
+            description=description,
+            depends_on=depends_on,
+            branch_labels=branch_labels,
         )
         if path is not None:
             artifact.write(path)
@@ -649,12 +852,69 @@ class MigrationManager:
         ).dry_run()
 
     async def ensure_revision_table(self) -> None:
-        """Create the migration revision table when missing."""
-        self._database._ensure_runtime().ensure_revision_table()
+        """Create/upgrade the migration history table when missing."""
+        connection = self._native_connection()
+        _ensure_migration_history_table(connection, self._dialect())
 
     async def applied_revisions(self) -> list[str]:
-        """Return applied migration revisions."""
-        return list(self._database._ensure_runtime().applied_revisions())
+        """Return applied migration revisions ordered by apply time."""
+        return [
+            entry.revision
+            for entry in await self.history()
+            if entry.status == MIGRATION_STATUS_APPLIED and not entry.dirty
+        ]
+
+    async def history(self) -> list[MigrationHistoryEntry]:
+        """Return migration history rows."""
+        connection = self._native_connection()
+        dialect = self._dialect()
+        _ensure_migration_history_table(connection, dialect)
+        return _history_entries(connection, dialect)
+
+    async def current(self) -> MigrationHistoryEntry | None:
+        """Return the latest successfully applied revision."""
+        connection = self._native_connection()
+        dialect = self._dialect()
+        _ensure_migration_history_table(connection, dialect)
+        return _current_entry(connection, dialect)
+
+    async def is_dirty(self) -> bool:
+        """Return whether migration history is currently marked dirty."""
+        connection = self._native_connection()
+        dialect = self._dialect()
+        _ensure_migration_history_table(connection, dialect)
+        return _is_dirty(connection, dialect)
+
+    async def status(self) -> dict[str, Any]:
+        """Return current migration status metadata."""
+        current = await self.current()
+        return {
+            "dirty": await self.is_dirty(),
+            "current": current.revision if current else None,
+            "current_entry": current,
+            "applied": await self.applied_revisions(),
+        }
+
+    async def repair(
+        self,
+        *,
+        revision: str | None = None,
+        status: str | None = None,
+        clear_dirty: bool = True,
+        checksum: str | None = None,
+    ) -> int:
+        """Repair migration metadata after a failed/manual migration."""
+        connection = self._native_connection()
+        dialect = self._dialect()
+        _ensure_migration_history_table(connection, dialect)
+        return _repair_history(
+            connection,
+            dialect,
+            revision=revision,
+            status=status,
+            clear_dirty=clear_dirty,
+            checksum=checksum,
+        )
 
     async def apply_artifact(
         self,
@@ -664,10 +924,15 @@ class MigrationManager:
     ) -> bool:
         """Apply a migration artifact and record its revision."""
         migration = _coerce_artifact(artifact)
+        migration.validate_checksum()
         return await self.apply(
             migration.revision,
             migration.to_plan(),
             allow_destructive=allow_destructive,
+            checksum=migration.checksum,
+            description=migration.description,
+            artifact_version=migration.artifact_version,
+            metadata=migration.metadata,
         )
 
     async def apply_file(
@@ -690,14 +955,30 @@ class MigrationManager:
         allow_destructive: bool = False,
     ) -> list[str]:
         """Apply migration artifacts in filename order."""
+        if await self.is_dirty():
+            raise ValueError(
+                "migration history is dirty; run `ormdantic migrations repair` before apply-dir"
+            )
         applied = []
+        applied_set = set(await self.applied_revisions())
         for artifact_path in _migration_files(path, pattern):
             artifact = MigrationArtifact.read(artifact_path)
+            missing_dependencies = [
+                revision
+                for revision in artifact.depends_on
+                if revision not in applied_set
+            ]
+            if missing_dependencies:
+                raise ValueError(
+                    f"migration {artifact.revision} has missing dependencies: "
+                    + ", ".join(missing_dependencies)
+                )
             if await self.apply_artifact(
                 artifact,
                 allow_destructive=allow_destructive,
             ):
                 applied.append(artifact.revision)
+                applied_set.add(artifact.revision)
         return applied
 
     async def apply(
@@ -706,44 +987,130 @@ class MigrationManager:
         plan: MigrationPlan,
         *,
         allow_destructive: bool = False,
+        checksum: str | None = None,
+        description: str | None = None,
+        artifact_version: int = MIGRATION_ARTIFACT_VERSION,
+        metadata: Mapping[str, Any] | None = None,
     ) -> bool:
         """Apply a migration plan and record its revision.
 
         Returns ``False`` when the revision is already recorded.
         """
-        if revision in await self.applied_revisions():
+        connection = self._native_connection()
+        dialect = self._dialect()
+        _ensure_migration_history_table(connection, dialect)
+        if _is_dirty(connection, dialect):
+            raise ValueError(
+                "database is marked dirty from a failed migration; run repair before applying"
+            )
+        existing = _history_entry(connection, dialect, revision)
+        expected_checksum = checksum or _plan_checksum(revision, plan)
+        if (
+            existing is not None
+            and existing.status == MIGRATION_STATUS_APPLIED
+            and not existing.dirty
+        ):
+            if existing.checksum and existing.checksum != expected_checksum:
+                raise ValueError(
+                    f"revision {revision} already applied with checksum "
+                    f"{existing.checksum}, requested {expected_checksum}"
+                )
             return False
         if plan.has_destructive_operations and not allow_destructive:
             raise ValueError(
                 "migration contains destructive operations; pass "
                 "allow_destructive=True to apply it"
             )
-        self._database._ensure_runtime().apply_migration(
-            revision, _operation_payload(plan)
+        _raise_if_unsupported_sqlite_plan(dialect, plan.operations)
+        _run_migration_operations(
+            connection=connection,
+            dialect=dialect,
+            revision=revision,
+            operations=plan.operations,
+            status=MIGRATION_STATUS_APPLIED,
+            description=description,
+            checksum=expected_checksum,
+            artifact_version=artifact_version,
+            metadata=dict(metadata or {}),
         )
         return True
 
-    async def rollback(self, revision: str, plan: MigrationPlan) -> bool:
+    async def rollback(
+        self,
+        revision: str,
+        plan: MigrationPlan,
+        *,
+        allow_destructive: bool = False,
+        checksum: str | None = None,
+        description: str | None = None,
+        artifact_version: int = MIGRATION_ARTIFACT_VERSION,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> bool:
         """Run rollback SQL and remove a migration revision."""
-        if revision not in await self.applied_revisions():
+        connection = self._native_connection()
+        dialect = self._dialect()
+        _ensure_migration_history_table(connection, dialect)
+        existing = _history_entry(connection, dialect, revision)
+        if existing is None or existing.status != MIGRATION_STATUS_APPLIED:
             return False
-        operations = plan.rollback_operations or plan.operations
-        self._database._ensure_runtime().rollback_migration(
-            revision, _operation_payload(MigrationPlan(list(operations)))
+        if not plan.rollback_available:
+            raise ValueError(
+                "rollback SQL is unavailable for this migration; "
+                "provide explicit down SQL or generated rollback operations"
+            )
+        rollback_plan = MigrationPlan(
+            operations=list(plan.rollback_operations),
+            diff=plan.diff,
+            warnings=plan.warnings,
+            safety=plan.safety,
+        )
+        if rollback_plan.has_destructive_operations and not allow_destructive:
+            raise ValueError(
+                "rollback contains destructive operations; pass "
+                "allow_destructive=True to apply it"
+            )
+        _raise_if_unsupported_sqlite_plan(dialect, rollback_plan.operations)
+        _run_migration_operations(
+            connection=connection,
+            dialect=dialect,
+            revision=revision,
+            operations=rollback_plan.operations,
+            status=MIGRATION_STATUS_ROLLED_BACK,
+            description=description or existing.description,
+            checksum=checksum
+            or existing.checksum
+            or _plan_checksum(revision, rollback_plan),
+            artifact_version=artifact_version,
+            metadata=dict(metadata or {}),
         )
         return True
 
     async def rollback_artifact(
         self,
         artifact: MigrationArtifact | Mapping[str, Any] | str | PathLike[str],
+        *,
+        allow_destructive: bool = False,
     ) -> bool:
         """Roll back a migration artifact when rollback SQL is available."""
         migration = _coerce_artifact(artifact)
-        return await self.rollback(migration.revision, migration.to_plan())
+        return await self.rollback(
+            migration.revision,
+            migration.to_plan(),
+            allow_destructive=allow_destructive,
+            checksum=migration.checksum,
+            description=migration.description,
+            artifact_version=migration.artifact_version,
+            metadata=migration.metadata,
+        )
 
-    async def rollback_file(self, path: str | PathLike[str]) -> bool:
+    async def rollback_file(
+        self, path: str | PathLike[str], *, allow_destructive: bool = False
+    ) -> bool:
         """Roll back a migration artifact from disk."""
-        return await self.rollback_artifact(MigrationArtifact.read(path))
+        return await self.rollback_artifact(
+            MigrationArtifact.read(path),
+            allow_destructive=allow_destructive,
+        )
 
     def squash(
         self,
@@ -760,7 +1127,7 @@ class MigrationManager:
             revision,
             artifacts,
             dialect=dialect or self._database._connection,
-        )
+        ).with_checksum()
         if path is not None:
             artifact.write(path)
         return artifact
@@ -818,6 +1185,9 @@ def create_migration_artifact(
     to_snapshot: SchemaSnapshot | Mapping[str, Any],
     *,
     dialect: str,
+    description: str | None = None,
+    depends_on: Sequence[str] | None = None,
+    branch_labels: Sequence[str] | None = None,
 ) -> MigrationArtifact:
     """Generate a migration artifact from two snapshots."""
     before = _coerce_snapshot(from_snapshot)
@@ -829,6 +1199,9 @@ def create_migration_artifact(
         before,
         after,
         dialect=dialect,
+        description=description,
+        depends_on=depends_on,
+        branch_labels=branch_labels,
     )
 
 
@@ -851,18 +1224,54 @@ def squash_migrations(
     migration_dialect = dialect or migrations[0].dialect
     if migration_dialect is None:
         raise ValueError("dialect is required when migration artifacts omit dialect")
-    return create_migration_artifact(
+    squashed = create_migration_artifact(
         revision,
         migrations[0].from_snapshot,
         migrations[-1].to_snapshot,
         dialect=migration_dialect,
     )
+    covered_revisions = {migration.revision for migration in migrations}
+    depends_on = [
+        dependency
+        for migration in migrations
+        for dependency in migration.depends_on
+        if dependency not in covered_revisions
+    ]
+    branch_labels = sorted(
+        {label for migration in migrations for label in migration.branch_labels}
+    )
+    description = (
+        "; ".join(filter(None, [migration.description for migration in migrations]))
+        or f"squash {migrations[0].revision}..{migrations[-1].revision}"
+    )
+    return MigrationArtifact(
+        revision=squashed.revision,
+        from_snapshot=squashed.from_snapshot,
+        to_snapshot=squashed.to_snapshot,
+        operations=squashed.operations,
+        rollback_operations=squashed.rollback_operations,
+        diff=squashed.diff,
+        warnings=squashed.warnings,
+        description=description,
+        created_at=squashed.created_at,
+        dialect=squashed.dialect,
+        checksum=squashed.checksum,
+        depends_on=depends_on,
+        branch_labels=branch_labels,
+        safety=squashed.safety,
+        metadata={
+            "squashed_revisions": [migration.revision for migration in migrations],
+        },
+        artifact_version=MIGRATION_ARTIFACT_VERSION,
+        version=MIGRATION_ARTIFACT_VERSION,
+    ).with_checksum()
 
 
 def _build_plan(
     dialect: str, from_snapshot: SchemaSnapshot, to_snapshot: SchemaSnapshot
 ) -> MigrationPlan:
     schema_diff = diff_snapshots(from_snapshot, to_snapshot)
+    dialect_name = _dialect_name(dialect)
     compiled = _compile_schema_diff(
         dialect,
         from_snapshot,
@@ -874,18 +1283,9 @@ def _build_plan(
         from_snapshot,
     )
     warnings = list(schema_diff.warnings)
-    operations = [
-        MigrationOperation(
-            sql=str(item["sql"]),
-            values=tuple(item.get("params", ())),
-        )
-        for item in compiled
-    ]
+    operations = [_operation_from_compiled(item, dialect_name) for item in compiled]
     rollback_operations = [
-        MigrationOperation(
-            sql=str(item["sql"]),
-            values=tuple(item.get("params", ())),
-        )
+        _operation_from_compiled(item, dialect_name, generated_rollback=True)
         for item in rollback_compiled
     ]
     if schema_diff.has_destructive_operations:
@@ -895,7 +1295,15 @@ def _build_plan(
     elif schema_diff.has_unsafe_operations:
         for operation in operations:
             operation.unsafe = True
-    return MigrationPlan(operations, rollback_operations, schema_diff, warnings)
+    _raise_if_unsupported_sqlite_plan(dialect_name, operations)
+    safety = {
+        "dialect": dialect_name,
+        "unsafe": schema_diff.has_unsafe_operations,
+        "destructive": schema_diff.has_destructive_operations,
+        "requires_rebuild": any(op.requires_rebuild for op in operations),
+        "rollback_available": bool(rollback_operations),
+    }
+    return MigrationPlan(operations, rollback_operations, schema_diff, warnings, safety)
 
 
 def _diff_columns(
@@ -1216,6 +1624,14 @@ def _operation_to_dict(operation: MigrationOperation) -> dict[str, Any]:
         "description": operation.description,
         "unsafe": operation.unsafe,
         "destructive": operation.destructive,
+        "kind": operation.kind,
+        "table": operation.table,
+        "object_name": operation.object_name,
+        "reversible": operation.reversible,
+        "requires_lock": operation.requires_lock,
+        "requires_rebuild": operation.requires_rebuild,
+        "generated_rollback": operation.generated_rollback,
+        "metadata": dict(operation.metadata),
     }
 
 
@@ -1226,6 +1642,14 @@ def _operation_from_dict(payload: Mapping[str, Any]) -> MigrationOperation:
         description=_optional_str(payload.get("description")),
         unsafe=bool(payload.get("unsafe", False)),
         destructive=bool(payload.get("destructive", False)),
+        kind=str(payload.get("kind", "statement")),
+        table=_optional_str(payload.get("table")),
+        object_name=_optional_str(payload.get("object_name")),
+        reversible=bool(payload.get("reversible", True)),
+        requires_lock=bool(payload.get("requires_lock", True)),
+        requires_rebuild=bool(payload.get("requires_rebuild", False)),
+        generated_rollback=bool(payload.get("generated_rollback", False)),
+        metadata=dict(payload.get("metadata", {})),
     )
 
 
@@ -1255,8 +1679,728 @@ def _migration_files(path: str | PathLike[str], pattern: str | None) -> list[Pat
     return sorted(directory.glob(pattern))
 
 
+def _artifact_checksum(payload: Mapping[str, Any]) -> str:
+    canonical = _canonicalize_checksum_payload(payload)
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    import hashlib
+
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _plan_checksum(revision: str, plan: MigrationPlan) -> str:
+    payload = {
+        "revision": revision,
+        "operations": [_operation_to_dict(operation) for operation in plan.operations],
+        "rollback_operations": [
+            _operation_to_dict(operation) for operation in plan.rollback_operations
+        ],
+        "diff": _diff_to_dict(plan.diff),
+        "warnings": [_warning_to_dict(warning) for warning in plan.warnings],
+        "safety": dict(plan.safety),
+    }
+    return _artifact_checksum(payload)
+
+
+def _canonicalize_checksum_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if item is None:
+                continue
+            normalized[str(key)] = _canonicalize_checksum_payload(item)
+        return normalized
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_canonicalize_checksum_payload(item) for item in value]
+    return value
+
+
+def _dialect_name(value: str) -> str:
+    normalized = value.strip().lower()
+    if "://" in normalized:
+        normalized = normalized.split("://", 1)[0]
+    if "+" in normalized:
+        normalized = normalized.split("+", 1)[0]
+    aliases = {
+        "postgres": "postgresql",
+        "postgresql": "postgresql",
+        "psql": "postgresql",
+        "sqlite": "sqlite",
+        "mysql": "mysql",
+        "mariadb": "mariadb",
+        "mssql": "mssql",
+        "sqlserver": "mssql",
+        "oracle": "oracle",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _operation_from_compiled(
+    item: Mapping[str, Any],
+    dialect: str,
+    *,
+    generated_rollback: bool = False,
+) -> MigrationOperation:
+    sql = str(item["sql"])
+    metadata = _classify_sql_operation(sql)
+    return MigrationOperation(
+        sql=sql,
+        values=tuple(item.get("params", ())),
+        kind=str(metadata["kind"]),
+        table=_optional_str(metadata.get("table")),
+        object_name=_optional_str(metadata.get("object_name")),
+        reversible=bool(metadata.get("reversible", True)),
+        requires_lock=True,
+        requires_rebuild=bool(metadata.get("requires_rebuild", False)),
+        generated_rollback=generated_rollback,
+        metadata={
+            "dialect": dialect,
+            "classification": metadata,
+        },
+    )
+
+
+def _classify_sql_operation(sql: str) -> dict[str, Any]:
+    normalized = " ".join(sql.strip().split())
+    upper = normalized.upper()
+    kind = "statement"
+    table: str | None = None
+    object_name: str | None = None
+    requires_rebuild = False
+    reversible = True
+    destructive = False
+    unsafe = False
+
+    if upper.startswith("CREATE TABLE"):
+        kind = "create_table"
+        table = _sql_identifier_after(upper, "CREATE TABLE")
+    elif upper.startswith("DROP TABLE"):
+        kind = "drop_table"
+        table = _sql_identifier_after(upper, "DROP TABLE")
+        destructive = True
+        unsafe = True
+    elif upper.startswith("ALTER TABLE"):
+        kind = "alter_table"
+        table = _sql_identifier_after(upper, "ALTER TABLE")
+        unsafe = True
+        if " DROP COLUMN " in upper or " DROP CONSTRAINT " in upper:
+            destructive = True
+        if any(
+            clause in upper
+            for clause in (
+                " ADD CONSTRAINT ",
+                " DROP CONSTRAINT ",
+                " ALTER COLUMN ",
+                " DROP COLUMN ",
+            )
+        ):
+            requires_rebuild = True
+    elif upper.startswith("CREATE INDEX") or upper.startswith("CREATE UNIQUE INDEX"):
+        kind = "create_index"
+        unsafe = "UNIQUE" in upper
+    elif upper.startswith("DROP INDEX"):
+        kind = "drop_index"
+        unsafe = True
+    elif upper.startswith("INSERT INTO"):
+        kind = "insert"
+        table = _sql_identifier_after(upper, "INSERT INTO")
+        reversible = False
+        unsafe = True
+    elif upper.startswith("UPDATE"):
+        kind = "update"
+        table = _sql_identifier_after(upper, "UPDATE")
+        reversible = False
+        unsafe = True
+    elif upper.startswith("DELETE FROM"):
+        kind = "delete"
+        table = _sql_identifier_after(upper, "DELETE FROM")
+        reversible = False
+        destructive = True
+        unsafe = True
+
+    return {
+        "kind": kind,
+        "table": table,
+        "object_name": object_name,
+        "requires_rebuild": requires_rebuild,
+        "reversible": reversible,
+        "destructive": destructive,
+        "unsafe": unsafe,
+    }
+
+
+def _sql_identifier_after(statement: str, prefix: str) -> str | None:
+    remainder = statement[len(prefix) :].strip()
+    if remainder.startswith("IF EXISTS"):
+        remainder = remainder[len("IF EXISTS") :].strip()
+    if remainder.startswith("IF NOT EXISTS"):
+        remainder = remainder[len("IF NOT EXISTS") :].strip()
+    if not remainder:
+        return None
+    token = remainder.split(" ", 1)[0].strip()
+    return token.strip('`"[]')
+
+
+def _raise_if_unsupported_sqlite_plan(
+    dialect: str, operations: Sequence[MigrationOperation]
+) -> None:
+    if _dialect_name(dialect) != "sqlite":
+        return
+    blocked = [operation for operation in operations if operation.requires_rebuild]
+    if not blocked:
+        return
+    snippets = ", ".join(operation.sql for operation in blocked[:3])
+    if len(blocked) > 3:
+        snippets += ", ..."
+    raise ValueError(
+        "sqlite migration includes operations that require table rebuild support "
+        f"(not yet automatic): {snippets}"
+    )
+
+
 def _operation_payload(plan: MigrationPlan) -> list[tuple[str, tuple[Any, ...]]]:
     return [(operation.sql, operation.values) for operation in plan.operations]
+
+
+def _quote_ident(dialect: str, identifier: str) -> str:
+    name = identifier.replace("\x00", "")
+    dialect_name = _dialect_name(dialect)
+    if dialect_name in {"mysql", "mariadb"}:
+        return f"`{name.replace('`', '``')}`"
+    if dialect_name == "mssql":
+        return f"[{name.replace(']', ']]')}]"
+    return f'"{name.replace(chr(34), chr(34) * 2)}"'
+
+
+def _sql_literal(value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, Mapping | list | tuple):
+        value = json.dumps(value, sort_keys=True)
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
+def _query_rows(
+    connection: Any, sql: str, params: Sequence[Any] | None = None
+) -> list[list[Any]]:
+    result = connection.execute(sql, list(params or ()))
+    if not isinstance(result, Mapping):
+        return []
+    rows = result.get("rows", [])
+    if not isinstance(rows, Sequence):
+        return []
+    return [list(row) for row in rows if isinstance(row, Sequence)]
+
+
+def _query_rows_url(rust_module: Any, url: str, sql: str) -> list[list[Any]]:
+    result = rust_module.execute_native(url, sql, [])
+    if not isinstance(result, Mapping):
+        return []
+    rows = result.get("rows", [])
+    if not isinstance(rows, Sequence):
+        return []
+    return [list(row) for row in rows if isinstance(row, Sequence)]
+
+
+def _query_scalar(
+    connection: Any, sql: str, params: Sequence[Any] | None = None
+) -> Any:
+    rows = _query_rows(connection, sql, params)
+    if not rows:
+        return None
+    if not rows[0]:
+        return None
+    return rows[0][0]
+
+
+def _db_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return value != 0
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "t", "true", "yes", "y"}
+
+
+def _migration_table_column_defs(dialect: str) -> list[tuple[str, str, str | None]]:
+    text_type = "TEXT"
+    if _dialect_name(dialect) == "mssql":
+        text_type = "NVARCHAR(2048)"
+    if _dialect_name(dialect) == "oracle":
+        text_type = "VARCHAR2(2048)"
+    return [
+        ("revision", f"{text_type} PRIMARY KEY", None),
+        ("description", text_type, None),
+        ("checksum", text_type, None),
+        ("applied_at", text_type, None),
+        ("execution_time_ms", "INTEGER", None),
+        ("status", text_type, _sql_literal(MIGRATION_STATUS_APPLIED)),
+        ("dirty", "INTEGER", "0"),
+        ("artifact_version", "INTEGER", None),
+        ("ormdantic_version", text_type, None),
+        ("metadata", text_type, None),
+    ]
+
+
+def _ensure_migration_history_table(connection: Any, dialect: str) -> None:
+    table = _quote_ident(dialect, MIGRATION_TABLE)
+    columns = _migration_table_column_defs(dialect)
+    create_columns = ", ".join(
+        f"{_quote_ident(dialect, name)} {column_type}"
+        + (f" DEFAULT {default}" if default is not None else "")
+        for name, column_type, default in columns
+    )
+    connection.execute(f"CREATE TABLE IF NOT EXISTS {table} ({create_columns})", [])
+    for name, column_type, default in columns[1:]:
+        statement = (
+            f"ALTER TABLE {table} ADD COLUMN {_quote_ident(dialect, name)} {column_type}"
+            + (f" DEFAULT {default}" if default is not None else "")
+        )
+        try:
+            connection.execute(statement, [])
+        except Exception as exc:
+            if not _is_duplicate_column_error(exc):
+                raise
+    connection.execute(
+        f"UPDATE {table} SET {_quote_ident(dialect, 'status')} = "
+        f"{_sql_literal(MIGRATION_STATUS_APPLIED)} WHERE {_quote_ident(dialect, 'status')} IS NULL",
+        [],
+    )
+    connection.execute(
+        f"UPDATE {table} SET {_quote_ident(dialect, 'dirty')} = 0 "
+        f"WHERE {_quote_ident(dialect, 'dirty')} IS NULL",
+        [],
+    )
+    connection.execute(
+        f"UPDATE {table} SET {_quote_ident(dialect, 'artifact_version')} = "
+        f"{MIGRATION_ARTIFACT_VERSION} WHERE {_quote_ident(dialect, 'artifact_version')} IS NULL",
+        [],
+    )
+
+
+def _is_duplicate_column_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return ("duplicate" in message and "column" in message) or (
+        "already exists" in message and "column" in message
+    )
+
+
+def _history_entries(connection: Any, dialect: str) -> list[MigrationHistoryEntry]:
+    table = _quote_ident(dialect, MIGRATION_TABLE)
+    columns = [
+        "revision",
+        "description",
+        "checksum",
+        "applied_at",
+        "execution_time_ms",
+        "status",
+        "dirty",
+        "artifact_version",
+        "ormdantic_version",
+        "metadata",
+    ]
+    selected = ", ".join(_quote_ident(dialect, name) for name in columns)
+    rows = _query_rows(
+        connection,
+        f"SELECT {selected} FROM {table} ORDER BY {_quote_ident(dialect, 'applied_at')}, "
+        f"{_quote_ident(dialect, 'revision')}",
+    )
+    history: list[MigrationHistoryEntry] = []
+    for row in rows:
+        metadata: dict[str, Any] = {}
+        if len(row) >= 10 and row[9]:
+            try:
+                metadata = dict(json.loads(str(row[9])))
+            except Exception:
+                metadata = {"raw": str(row[9])}
+        history.append(
+            MigrationHistoryEntry(
+                revision=str(row[0]),
+                description=_optional_str(row[1] if len(row) > 1 else None),
+                checksum=_optional_str(row[2] if len(row) > 2 else None),
+                applied_at=_optional_str(row[3] if len(row) > 3 else None),
+                execution_time_ms=_optional_int(row[4] if len(row) > 4 else None),
+                status=str(
+                    row[5] if len(row) > 5 and row[5] else MIGRATION_STATUS_APPLIED
+                ),
+                dirty=_db_truthy(row[6] if len(row) > 6 else None),
+                artifact_version=_optional_int(row[7] if len(row) > 7 else None),
+                ormdantic_version=_optional_str(row[8] if len(row) > 8 else None),
+                metadata=metadata,
+            )
+        )
+    return history
+
+
+def _history_entry(
+    connection: Any, dialect: str, revision: str
+) -> MigrationHistoryEntry | None:
+    for entry in _history_entries(connection, dialect):
+        if entry.revision == revision:
+            return entry
+    return None
+
+
+def _current_entry(connection: Any, dialect: str) -> MigrationHistoryEntry | None:
+    for entry in reversed(_history_entries(connection, dialect)):
+        if entry.status == MIGRATION_STATUS_APPLIED and not entry.dirty:
+            return entry
+    return None
+
+
+def _is_dirty(connection: Any, dialect: str) -> bool:
+    return any(entry.dirty for entry in _history_entries(connection, dialect))
+
+
+def _repair_history(
+    connection: Any,
+    dialect: str,
+    *,
+    revision: str | None,
+    status: str | None,
+    clear_dirty: bool,
+    checksum: str | None,
+) -> int:
+    entries = _history_entries(connection, dialect)
+    updated = 0
+    for entry in entries:
+        if revision is not None and entry.revision != revision:
+            continue
+        payload = MigrationHistoryEntry(
+            revision=entry.revision,
+            description=entry.description,
+            checksum=checksum if checksum is not None else entry.checksum,
+            applied_at=entry.applied_at,
+            execution_time_ms=entry.execution_time_ms,
+            status=status or entry.status,
+            dirty=False if clear_dirty else entry.dirty,
+            artifact_version=entry.artifact_version,
+            ormdantic_version=entry.ormdantic_version,
+            metadata=entry.metadata,
+        )
+        _write_history_entry(connection, dialect, payload)
+        updated += 1
+    return updated
+
+
+def _write_history_entry(
+    connection: Any, dialect: str, entry: MigrationHistoryEntry
+) -> None:
+    table = _quote_ident(dialect, MIGRATION_TABLE)
+    revision_column = _quote_ident(dialect, "revision")
+    connection.execute(
+        f"DELETE FROM {table} WHERE {revision_column} = {_sql_literal(entry.revision)}",
+        [],
+    )
+    columns = [
+        "revision",
+        "description",
+        "checksum",
+        "applied_at",
+        "execution_time_ms",
+        "status",
+        "dirty",
+        "artifact_version",
+        "ormdantic_version",
+        "metadata",
+    ]
+    values = [
+        entry.revision,
+        entry.description,
+        entry.checksum,
+        entry.applied_at,
+        entry.execution_time_ms,
+        entry.status,
+        entry.dirty,
+        entry.artifact_version,
+        entry.ormdantic_version,
+        entry.metadata or None,
+    ]
+    rendered_values = ", ".join(_sql_literal(value) for value in values)
+    rendered_columns = ", ".join(_quote_ident(dialect, column) for column in columns)
+    connection.execute(
+        f"INSERT INTO {table} ({rendered_columns}) VALUES ({rendered_values})",
+        [],
+    )
+
+
+def _dialect_supports_transactional_ddl(dialect: str) -> bool:
+    return _dialect_name(dialect) in {"sqlite", "postgresql"}
+
+
+def _acquire_migration_lock(connection: Any, dialect: str) -> str | None:
+    dialect_name = _dialect_name(dialect)
+    if dialect_name == "postgresql":
+        acquired = _query_scalar(
+            connection,
+            "SELECT pg_try_advisory_lock(hashtext('ormdantic_migration_lock'))",
+        )
+        if not _db_truthy(acquired):
+            raise ValueError(
+                "failed to acquire postgres advisory migration lock; another migration may be running"
+            )
+        return "SELECT pg_advisory_unlock(hashtext('ormdantic_migration_lock'))"
+    if dialect_name in {"mysql", "mariadb"}:
+        acquired = _query_scalar(
+            connection,
+            f"SELECT GET_LOCK({_sql_literal(MIGRATION_LOCK_NAME)}, 30)",
+        )
+        if not _db_truthy(acquired):
+            raise ValueError(
+                "failed to acquire mysql migration lock; another migration may be running"
+            )
+        return f"SELECT RELEASE_LOCK({_sql_literal(MIGRATION_LOCK_NAME)})"
+    if dialect_name == "mssql":
+        connection.execute(
+            "EXEC sp_getapplock @Resource = 'ormdantic_migration_lock', "
+            "@LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 30000",
+            [],
+        )
+        return (
+            "EXEC sp_releaseapplock @Resource = 'ormdantic_migration_lock', "
+            "@LockOwner = 'Session'"
+        )
+    return None
+
+
+def _run_migration_operations(
+    *,
+    connection: Any,
+    dialect: str,
+    revision: str,
+    operations: Sequence[MigrationOperation],
+    status: str,
+    description: str | None,
+    checksum: str | None,
+    artifact_version: int,
+    metadata: Mapping[str, Any],
+) -> None:
+    _ensure_migration_history_table(connection, dialect)
+    transaction_open = False
+    release_lock_sql = _acquire_migration_lock(connection, dialect)
+    start = time.perf_counter()
+    now = datetime.now(UTC).replace(microsecond=0).isoformat()
+    try:
+        if _dialect_supports_transactional_ddl(dialect):
+            if _dialect_name(dialect) == "sqlite":
+                connection.execute("BEGIN IMMEDIATE", [])
+            else:
+                connection.begin()
+            transaction_open = True
+        pending = MigrationHistoryEntry(
+            revision=revision,
+            description=description,
+            checksum=checksum,
+            applied_at=now,
+            execution_time_ms=None,
+            status=status,
+            dirty=True,
+            artifact_version=artifact_version,
+            ormdantic_version=__version__,
+            metadata={
+                "phase": "running",
+                "operation_count": len(operations),
+                **dict(metadata),
+            },
+        )
+        _write_history_entry(connection, dialect, pending)
+        for operation in operations:
+            connection.execute(operation.sql, list(operation.values))
+        if transaction_open:
+            connection.commit()
+            transaction_open = False
+        elapsed = int((time.perf_counter() - start) * 1000)
+        _write_history_entry(
+            connection,
+            dialect,
+            MigrationHistoryEntry(
+                revision=revision,
+                description=description,
+                checksum=checksum,
+                applied_at=now,
+                execution_time_ms=elapsed,
+                status=status,
+                dirty=False,
+                artifact_version=artifact_version,
+                ormdantic_version=__version__,
+                metadata={
+                    "phase": "completed",
+                    "operation_count": len(operations),
+                    **dict(metadata),
+                },
+            ),
+        )
+    except Exception:
+        if transaction_open:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+        elapsed = int((time.perf_counter() - start) * 1000)
+        _write_history_entry(
+            connection,
+            dialect,
+            MigrationHistoryEntry(
+                revision=revision,
+                description=description,
+                checksum=checksum,
+                applied_at=now,
+                execution_time_ms=elapsed,
+                status=MIGRATION_STATUS_FAILED,
+                dirty=True,
+                artifact_version=artifact_version,
+                ormdantic_version=__version__,
+                metadata={
+                    "phase": "failed",
+                    "operation_count": len(operations),
+                    **dict(metadata),
+                },
+            ),
+        )
+        raise
+    finally:
+        if release_lock_sql:
+            try:
+                connection.execute(release_lock_sql, [])
+            except Exception:
+                pass
+
+
+def _reflect_schema_snapshot(
+    url: str,
+    *,
+    dialect: str,
+    include_tables: Sequence[str] | None,
+    exclude_tables: Sequence[str] | None,
+    schema: str | None,
+) -> SchemaSnapshot:
+    if _dialect_name(dialect) != "sqlite":
+        raise ValueError(
+            "live autogenerate currently supports sqlite URLs; "
+            "other dialects are supported for artifact apply/history"
+        )
+    return _reflect_sqlite_snapshot(
+        url,
+        include_tables=include_tables,
+        exclude_tables=exclude_tables,
+        schema=schema,
+    )
+
+
+def _reflect_sqlite_snapshot(
+    url: str,
+    *,
+    include_tables: Sequence[str] | None,
+    exclude_tables: Sequence[str] | None,
+    schema: str | None,
+) -> SchemaSnapshot:
+    if schema is not None and schema not in {"main", ""}:
+        raise ValueError("sqlite reflection only supports the main schema")
+    rust = _require_migration_symbol("PyDatabase")
+    runtime = rust.PyDatabase(url, [])
+    tables = []
+    for table_name in sorted(str(name) for name in runtime.table_names()):
+        if table_name.startswith("sqlite_"):
+            continue
+        if table_name == MIGRATION_TABLE:
+            continue
+        if not _table_matches_filters(table_name, include_tables, exclude_tables):
+            continue
+        columns_info = list(runtime.columns(table_name))
+        foreign_keys = list(runtime.foreign_keys(table_name))
+        foreign_map = {
+            str(item["from"]): (str(item["table"]), str(item["to"]))
+            for item in foreign_keys
+            if item.get("from") and item.get("table") and item.get("to")
+        }
+        index_rows = list(runtime.indexes(table_name))
+        indexes: list[IndexSnapshot] = []
+        unique_constraints: list[list[str]] = []
+        for index_row in index_rows:
+            if not index_row.get("name"):
+                continue
+            index_name = str(index_row["name"])
+            if index_name.startswith("sqlite_autoindex_"):
+                continue
+            unique = _db_truthy(index_row.get("unique"))
+            indexes.append(IndexSnapshot(name=index_name, columns=[], unique=unique))
+        columns: list[ColumnSnapshot] = []
+        primary_key = "id"
+        for item in columns_info:
+            column_name = str(item["name"])
+            column_type = _normalize_sqlite_type(item.get("type"))
+            pk = _db_truthy(item.get("primary_key"))
+            if pk and primary_key == "id":
+                primary_key = column_name
+            foreign_table, foreign_column = foreign_map.get(column_name, (None, None))
+            columns.append(
+                ColumnSnapshot(
+                    name=column_name,
+                    kind=column_type,
+                    nullable=_db_truthy(item.get("nullable")) and not pk,
+                    primary_key=pk,
+                    foreign_table=foreign_table,
+                    foreign_column=foreign_column,
+                    unique=False,
+                )
+            )
+        if (
+            columns
+            and primary_key == "id"
+            and not any(column.primary_key for column in columns)
+        ):
+            primary_key = columns[0].name
+        tables.append(
+            TableSnapshot(
+                model_key=table_name,
+                name=table_name,
+                primary_key=primary_key,
+                columns=columns,
+                indexes=indexes,
+                unique_constraints=unique_constraints,
+                relationships=[],
+            )
+        )
+    return SchemaSnapshot(tables=tables, version=MIGRATION_ARTIFACT_VERSION)
+
+
+def _normalize_sqlite_type(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    if not text:
+        return "str"
+    if "INT" in text:
+        return "int"
+    if any(token in text for token in ("CHAR", "CLOB", "TEXT")):
+        return "str"
+    if "BLOB" in text:
+        return "bytes"
+    if any(token in text for token in ("REAL", "FLOA", "DOUB")):
+        return "float"
+    if "BOOL" in text:
+        return "bool"
+    return text.lower()
+
+
+def _table_matches_filters(
+    table_name: str,
+    include_tables: Sequence[str] | None,
+    exclude_tables: Sequence[str] | None,
+) -> bool:
+    if include_tables:
+        if not any(fnmatch(table_name, pattern) for pattern in include_tables):
+            return False
+    if exclude_tables and any(
+        fnmatch(table_name, pattern) for pattern in exclude_tables
+    ):
+        return False
+    return True
 
 
 def _operation_looks_destructive(sql: str) -> bool:
