@@ -329,7 +329,6 @@ class SqlExpression:
         return self._legacy_filter(operator, value)
 
 
-@dataclass(frozen=True, eq=False, init=False)
 class ColumnExpression(SqlExpression):
     """Column helper for building query expressions."""
 
