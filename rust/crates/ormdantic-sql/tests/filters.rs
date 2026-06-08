@@ -150,7 +150,9 @@ fn compiles_joined_boolean_filters_against_root_alias() {
                 column: "strength".to_string(),
             },
         ])],
+        relationship_filters: Vec::new(),
         order_by: Vec::new(),
+        relationship_order_by: Vec::new(),
         limit: None,
         offset: None,
     }

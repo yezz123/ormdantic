@@ -111,7 +111,9 @@ fn bench_joined_compilation(c: &mut Criterion) {
                         column: "id".to_string(),
                         param: "id".to_string(),
                     }],
+                    relationship_filters: Vec::new(),
                     order_by: vec![],
+                    relationship_order_by: Vec::new(),
                     limit: None,
                     offset: None,
                 }
