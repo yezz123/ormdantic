@@ -7,13 +7,15 @@ import json
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from fnmatch import fnmatch
 from os import PathLike
 from pathlib import Path
 from typing import Any
 
 from ormdantic import __version__
+
+UTC = timezone.utc
 
 try:
     _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
@@ -907,7 +909,7 @@ class MigrationManager:
         connection = self._native_connection()
         dialect = self._dialect()
         _ensure_migration_history_table(connection, dialect)
-        return _repair_history(
+        repaired = _repair_history(
             connection,
             dialect,
             revision=revision,
@@ -915,6 +917,8 @@ class MigrationManager:
             clear_dirty=clear_dirty,
             checksum=checksum,
         )
+        _commit_migration_history_if_needed(connection, dialect)
+        return repaired
 
     async def apply_artifact(
         self,
@@ -1288,6 +1292,23 @@ def _build_plan(
         _operation_from_compiled(item, dialect_name, generated_rollback=True)
         for item in rollback_compiled
     ]
+    requires_rebuild = any(op.requires_rebuild for op in operations)
+    rollback_requires_rebuild = any(op.requires_rebuild for op in rollback_operations)
+    if dialect_name == "sqlite":
+        operations = _rewrite_sqlite_rebuild_operations(
+            operations,
+            from_snapshot,
+            to_snapshot,
+            destructive=schema_diff.has_destructive_operations,
+            unsafe=schema_diff.has_unsafe_operations,
+        )
+        rollback_operations = _rewrite_sqlite_rebuild_operations(
+            rollback_operations,
+            to_snapshot,
+            from_snapshot,
+            destructive=schema_diff.has_destructive_operations,
+            unsafe=schema_diff.has_unsafe_operations,
+        )
     if schema_diff.has_destructive_operations:
         for operation in operations:
             operation.unsafe = True
@@ -1300,7 +1321,8 @@ def _build_plan(
         "dialect": dialect_name,
         "unsafe": schema_diff.has_unsafe_operations,
         "destructive": schema_diff.has_destructive_operations,
-        "requires_rebuild": any(op.requires_rebuild for op in operations),
+        "requires_rebuild": requires_rebuild,
+        "rollback_requires_rebuild": rollback_requires_rebuild,
         "rollback_available": bool(rollback_operations),
     }
     return MigrationPlan(operations, rollback_operations, schema_diff, warnings, safety)
@@ -1761,6 +1783,182 @@ def _operation_from_compiled(
     )
 
 
+def _rewrite_sqlite_rebuild_operations(
+    operations: list[MigrationOperation],
+    from_snapshot: SchemaSnapshot,
+    to_snapshot: SchemaSnapshot,
+    *,
+    destructive: bool,
+    unsafe: bool,
+) -> list[MigrationOperation]:
+    affected_tables = [
+        table
+        for table in dict.fromkeys(
+            operation.table for operation in operations if operation.requires_rebuild
+        )
+        if table
+    ]
+    if not affected_tables:
+        return operations
+
+    rewritten: list[MigrationOperation] = []
+    emitted_rebuilds: set[str] = set()
+    for operation in operations:
+        if operation.table in affected_tables:
+            if operation.table not in emitted_rebuilds:
+                rewritten.extend(
+                    _sqlite_rebuild_table_operations(
+                        operation.table,
+                        from_snapshot,
+                        to_snapshot,
+                        destructive=destructive,
+                        unsafe=unsafe,
+                    )
+                )
+                emitted_rebuilds.add(operation.table)
+            continue
+        rewritten.append(operation)
+    return rewritten
+
+
+def _sqlite_rebuild_table_operations(
+    table_name: str,
+    from_snapshot: SchemaSnapshot,
+    to_snapshot: SchemaSnapshot,
+    *,
+    destructive: bool,
+    unsafe: bool,
+) -> list[MigrationOperation]:
+    before = {table.name: table for table in from_snapshot.tables}.get(table_name)
+    after = {table.name: table for table in to_snapshot.tables}.get(table_name)
+    if before is None or after is None:
+        raise ValueError(f"cannot rebuild unknown sqlite table '{table_name}'")
+
+    temp_name = _sqlite_rebuild_table_name(table_name)
+    temp_table = _table_snapshot_with_name(after, temp_name, indexes=[])
+    temp_create = _compile_table_create_sql("sqlite", temp_table)[0]
+    final_index_sql = _compile_table_create_sql("sqlite", after)[1:]
+    common_columns = [
+        column.name
+        for column in after.columns
+        if any(column.name == old_column.name for old_column in before.columns)
+    ]
+    operations = [
+        MigrationOperation(
+            f"DROP TABLE IF EXISTS {_quote_ident('sqlite', temp_name)}",
+            description=f"drop stale rebuild table for {table_name}",
+            unsafe=True,
+            destructive=False,
+            kind="sqlite_rebuild_table",
+            table=table_name,
+            object_name=temp_name,
+            metadata={"sqlite_rebuild": True, "phase": "drop_temp"},
+        ),
+        MigrationOperation(
+            temp_create,
+            description=f"create rebuild table for {table_name}",
+            unsafe=unsafe,
+            destructive=False,
+            kind="sqlite_rebuild_table",
+            table=table_name,
+            object_name=temp_name,
+            metadata={"sqlite_rebuild": True, "phase": "create_temp"},
+        ),
+    ]
+    if common_columns:
+        selected = ", ".join(
+            _quote_ident("sqlite", column) for column in common_columns
+        )
+        operations.append(
+            MigrationOperation(
+                f"INSERT INTO {_quote_ident('sqlite', temp_name)} ({selected}) "
+                f"SELECT {selected} FROM {_quote_ident('sqlite', table_name)}",
+                description=f"copy rows for sqlite rebuild of {table_name}",
+                unsafe=True,
+                destructive=False,
+                kind="sqlite_rebuild_table",
+                table=table_name,
+                object_name=temp_name,
+                metadata={
+                    "sqlite_rebuild": True,
+                    "phase": "copy_rows",
+                    "columns": list(common_columns),
+                },
+            )
+        )
+    operations.extend(
+        [
+            MigrationOperation(
+                f"DROP TABLE {_quote_ident('sqlite', table_name)}",
+                description=f"drop old table for sqlite rebuild of {table_name}",
+                unsafe=True,
+                destructive=destructive,
+                kind="sqlite_rebuild_table",
+                table=table_name,
+                object_name=table_name,
+                metadata={"sqlite_rebuild": True, "phase": "drop_old"},
+            ),
+            MigrationOperation(
+                f"ALTER TABLE {_quote_ident('sqlite', temp_name)} "
+                f"RENAME TO {_quote_ident('sqlite', table_name)}",
+                description=f"rename rebuilt table {table_name}",
+                unsafe=unsafe,
+                destructive=False,
+                kind="sqlite_rebuild_table",
+                table=table_name,
+                object_name=temp_name,
+                metadata={"sqlite_rebuild": True, "phase": "rename"},
+            ),
+        ]
+    )
+    operations.extend(
+        MigrationOperation(
+            sql,
+            description=f"recreate index for sqlite rebuild of {table_name}",
+            unsafe=unsafe,
+            destructive=False,
+            kind="sqlite_rebuild_table",
+            table=table_name,
+            metadata={"sqlite_rebuild": True, "phase": "create_index"},
+        )
+        for sql in final_index_sql
+    )
+    return operations
+
+
+def _sqlite_rebuild_table_name(table_name: str) -> str:
+    safe = "".join(
+        char if char.isalnum() or char == "_" else "_" for char in table_name
+    )
+    return f"__ormdantic_rebuild_{safe}"
+
+
+def _table_snapshot_with_name(
+    table: TableSnapshot,
+    name: str,
+    *,
+    indexes: Sequence[IndexSnapshot] | None = None,
+) -> TableSnapshot:
+    return TableSnapshot(
+        model_key=table.model_key,
+        name=name,
+        primary_key=table.primary_key,
+        columns=list(table.columns),
+        indexes=list(table.indexes if indexes is None else indexes),
+        unique_constraints=[list(columns) for columns in table.unique_constraints],
+        relationships=list(table.relationships),
+    )
+
+
+def _compile_table_create_sql(dialect: str, table: TableSnapshot) -> list[str]:
+    compiled = _compile_schema_diff(
+        dialect,
+        SchemaSnapshot.empty(),
+        SchemaSnapshot(tables=[table]),
+    )
+    return [str(item["sql"]) for item in compiled]
+
+
 def _classify_sql_operation(sql: str) -> dict[str, Any]:
     normalized = " ".join(sql.strip().split())
     upper = normalized.upper()
@@ -1774,15 +1972,15 @@ def _classify_sql_operation(sql: str) -> dict[str, Any]:
 
     if upper.startswith("CREATE TABLE"):
         kind = "create_table"
-        table = _sql_identifier_after(upper, "CREATE TABLE")
+        table = _sql_identifier_after(normalized, "CREATE TABLE")
     elif upper.startswith("DROP TABLE"):
         kind = "drop_table"
-        table = _sql_identifier_after(upper, "DROP TABLE")
+        table = _sql_identifier_after(normalized, "DROP TABLE")
         destructive = True
         unsafe = True
     elif upper.startswith("ALTER TABLE"):
         kind = "alter_table"
-        table = _sql_identifier_after(upper, "ALTER TABLE")
+        table = _sql_identifier_after(normalized, "ALTER TABLE")
         unsafe = True
         if " DROP COLUMN " in upper or " DROP CONSTRAINT " in upper:
             destructive = True
@@ -1798,23 +1996,24 @@ def _classify_sql_operation(sql: str) -> dict[str, Any]:
             requires_rebuild = True
     elif upper.startswith("CREATE INDEX") or upper.startswith("CREATE UNIQUE INDEX"):
         kind = "create_index"
+        table = _sql_identifier_after_keyword(normalized, " ON ")
         unsafe = "UNIQUE" in upper
     elif upper.startswith("DROP INDEX"):
         kind = "drop_index"
         unsafe = True
     elif upper.startswith("INSERT INTO"):
         kind = "insert"
-        table = _sql_identifier_after(upper, "INSERT INTO")
+        table = _sql_identifier_after(normalized, "INSERT INTO")
         reversible = False
         unsafe = True
     elif upper.startswith("UPDATE"):
         kind = "update"
-        table = _sql_identifier_after(upper, "UPDATE")
+        table = _sql_identifier_after(normalized, "UPDATE")
         reversible = False
         unsafe = True
     elif upper.startswith("DELETE FROM"):
         kind = "delete"
-        table = _sql_identifier_after(upper, "DELETE FROM")
+        table = _sql_identifier_after(normalized, "DELETE FROM")
         reversible = False
         destructive = True
         unsafe = True
@@ -1842,6 +2041,17 @@ def _sql_identifier_after(statement: str, prefix: str) -> str | None:
     return token.strip('`"[]')
 
 
+def _sql_identifier_after_keyword(statement: str, keyword: str) -> str | None:
+    marker = statement.upper().find(keyword)
+    if marker < 0:
+        return None
+    remainder = statement[marker + len(keyword) :].strip()
+    if not remainder:
+        return None
+    token = remainder.split(" ", 1)[0].strip()
+    return token.strip('`"[]')
+
+
 def _raise_if_unsupported_sqlite_plan(
     dialect: str, operations: Sequence[MigrationOperation]
 ) -> None:
@@ -1854,8 +2064,8 @@ def _raise_if_unsupported_sqlite_plan(
     if len(blocked) > 3:
         snippets += ", ..."
     raise ValueError(
-        "sqlite migration includes operations that require table rebuild support "
-        f"(not yet automatic): {snippets}"
+        "sqlite migration includes unresolved operations that require a table rebuild: "
+        f"{snippets}"
     )
 
 
@@ -1930,22 +2140,39 @@ def _db_truthy(value: Any) -> bool:
 
 
 def _migration_table_column_defs(dialect: str) -> list[tuple[str, str, str | None]]:
+    dialect_name = _dialect_name(dialect)
     text_type = "TEXT"
-    if _dialect_name(dialect) == "mssql":
+    short_text_type = text_type
+    revision_type = f"{text_type} PRIMARY KEY"
+    integer_type = "INTEGER"
+    metadata_type = text_type
+    if dialect_name in {"mysql", "mariadb"}:
+        short_text_type = "VARCHAR(255)"
+        revision_type = "VARCHAR(255) PRIMARY KEY"
+        metadata_type = "TEXT"
+    elif dialect_name == "mssql":
         text_type = "NVARCHAR(2048)"
-    if _dialect_name(dialect) == "oracle":
+        short_text_type = "NVARCHAR(255)"
+        revision_type = "NVARCHAR(255) PRIMARY KEY"
+        integer_type = "BIGINT"
+        metadata_type = "NVARCHAR(MAX)"
+    elif dialect_name == "oracle":
         text_type = "VARCHAR2(2048)"
+        short_text_type = "VARCHAR2(255)"
+        revision_type = "VARCHAR2(255) PRIMARY KEY"
+        integer_type = "NUMBER(19)"
+        metadata_type = "VARCHAR2(4000)"
     return [
-        ("revision", f"{text_type} PRIMARY KEY", None),
+        ("revision", revision_type, None),
         ("description", text_type, None),
-        ("checksum", text_type, None),
-        ("applied_at", text_type, None),
-        ("execution_time_ms", "INTEGER", None),
-        ("status", text_type, _sql_literal(MIGRATION_STATUS_APPLIED)),
-        ("dirty", "INTEGER", "0"),
-        ("artifact_version", "INTEGER", None),
-        ("ormdantic_version", text_type, None),
-        ("metadata", text_type, None),
+        ("checksum", short_text_type, None),
+        ("applied_at", short_text_type, None),
+        ("execution_time_ms", integer_type, None),
+        ("status", short_text_type, _sql_literal(MIGRATION_STATUS_APPLIED)),
+        ("dirty", integer_type, "0"),
+        ("artifact_version", integer_type, None),
+        ("ormdantic_version", short_text_type, None),
+        ("metadata", metadata_type, None),
     ]
 
 
@@ -1957,17 +2184,30 @@ def _ensure_migration_history_table(connection: Any, dialect: str) -> None:
         + (f" DEFAULT {default}" if default is not None else "")
         for name, column_type, default in columns
     )
-    connection.execute(f"CREATE TABLE IF NOT EXISTS {table} ({create_columns})", [])
-    for name, column_type, default in columns[1:]:
-        statement = (
-            f"ALTER TABLE {table} ADD COLUMN {_quote_ident(dialect, name)} {column_type}"
-            + (f" DEFAULT {default}" if default is not None else "")
-        )
+    existed = _migration_history_table_exists(connection, dialect)
+    if not existed:
         try:
-            connection.execute(statement, [])
+            connection.execute(f"CREATE TABLE {table} ({create_columns})", [])
         except Exception as exc:
-            if not _is_duplicate_column_error(exc):
+            if not _is_duplicate_table_error(exc):
                 raise
+            existed = True
+    if existed:
+        for name, column_type, default in columns[1:]:
+            if _migration_history_column_exists(connection, dialect, name):
+                continue
+            statement = _add_migration_history_column_sql(
+                dialect,
+                table,
+                name,
+                column_type,
+                default,
+            )
+            try:
+                connection.execute(statement, [])
+            except Exception as exc:
+                if not _is_duplicate_column_error(exc):
+                    raise
     connection.execute(
         f"UPDATE {table} SET {_quote_ident(dialect, 'status')} = "
         f"{_sql_literal(MIGRATION_STATUS_APPLIED)} WHERE {_quote_ident(dialect, 'status')} IS NULL",
@@ -1983,12 +2223,120 @@ def _ensure_migration_history_table(connection: Any, dialect: str) -> None:
         f"{MIGRATION_ARTIFACT_VERSION} WHERE {_quote_ident(dialect, 'artifact_version')} IS NULL",
         [],
     )
+    _commit_migration_history_if_needed(connection, dialect)
+
+
+def _migration_history_table_exists(connection: Any, dialect: str) -> bool:
+    dialect_name = _dialect_name(dialect)
+    table_name = _sql_literal(MIGRATION_TABLE)
+    if dialect_name == "sqlite":
+        sql = (
+            "SELECT COUNT(*) FROM sqlite_master "
+            f"WHERE type = 'table' AND name = {table_name}"
+        )
+    elif dialect_name == "postgresql":
+        sql = (
+            "SELECT COUNT(*) FROM information_schema.tables "
+            f"WHERE table_schema = current_schema() AND table_name = {table_name}"
+        )
+    elif dialect_name in {"mysql", "mariadb"}:
+        sql = (
+            "SELECT COUNT(*) FROM information_schema.tables "
+            f"WHERE table_schema = DATABASE() AND table_name = {table_name}"
+        )
+    elif dialect_name == "mssql":
+        sql = f"SELECT COUNT(*) FROM sys.tables WHERE name = {table_name}"
+    elif dialect_name == "oracle":
+        sql = f"SELECT COUNT(*) FROM user_tables WHERE table_name = {table_name}"
+    else:
+        return False
+    value = _query_scalar(connection, sql)
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return _db_truthy(value)
+
+
+def _add_migration_history_column_sql(
+    dialect: str,
+    table: str,
+    name: str,
+    column_type: str,
+    default: str | None,
+) -> str:
+    column_def = f"{_quote_ident(dialect, name)} {column_type}"
+    if default is not None:
+        column_def += f" DEFAULT {default}"
+    dialect_name = _dialect_name(dialect)
+    if dialect_name == "mssql":
+        return f"ALTER TABLE {table} ADD {column_def}"
+    if dialect_name == "oracle":
+        return f"ALTER TABLE {table} ADD ({column_def})"
+    return f"ALTER TABLE {table} ADD COLUMN {column_def}"
+
+
+def _migration_history_column_exists(
+    connection: Any,
+    dialect: str,
+    column: str,
+) -> bool:
+    dialect_name = _dialect_name(dialect)
+    table_name = _sql_literal(MIGRATION_TABLE)
+    column_name = _sql_literal(column)
+    if dialect_name == "sqlite":
+        sql = (
+            "SELECT COUNT(*) FROM "
+            f"pragma_table_info({table_name}) WHERE name = {column_name}"
+        )
+    elif dialect_name == "postgresql":
+        sql = (
+            "SELECT COUNT(*) FROM information_schema.columns "
+            f"WHERE table_schema = current_schema() AND table_name = {table_name} "
+            f"AND column_name = {column_name}"
+        )
+    elif dialect_name in {"mysql", "mariadb"}:
+        sql = (
+            "SELECT COUNT(*) FROM information_schema.columns "
+            f"WHERE table_schema = DATABASE() AND table_name = {table_name} "
+            f"AND column_name = {column_name}"
+        )
+    elif dialect_name == "mssql":
+        sql = (
+            "SELECT COUNT(*) FROM sys.columns "
+            f"WHERE object_id = OBJECT_ID(N{table_name}) AND name = {column_name}"
+        )
+    elif dialect_name == "oracle":
+        sql = (
+            "SELECT COUNT(*) FROM user_tab_columns "
+            f"WHERE table_name = {table_name} AND column_name = {column_name}"
+        )
+    else:
+        return False
+    value = _query_scalar(connection, sql)
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return _db_truthy(value)
+
+
+def _is_duplicate_table_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return (
+        ("already exists" in message and ("table" in message or "object" in message))
+        or "already an object named" in message
+        or "ora-00955" in message
+        or "name is already used by an existing object" in message
+    )
 
 
 def _is_duplicate_column_error(error: Exception) -> bool:
     message = str(error).lower()
-    return ("duplicate" in message and "column" in message) or (
-        "already exists" in message and "column" in message
+    return (
+        ("duplicate" in message and "column" in message)
+        or ("already exists" in message and "column" in message)
+        or "ora-01430" in message
+        or ("column" in message and "must be unique" in message)
+        or ("column" in message and "specified more than once" in message)
     )
 
 
@@ -2237,6 +2585,7 @@ def _run_migration_operations(
                 },
             ),
         )
+        _commit_migration_history_if_needed(connection, dialect)
     except Exception:
         if transaction_open:
             try:
@@ -2264,6 +2613,10 @@ def _run_migration_operations(
                 },
             ),
         )
+        try:
+            _commit_migration_history_if_needed(connection, dialect)
+        except Exception:
+            pass
         raise
     finally:
         if release_lock_sql:
@@ -2271,6 +2624,11 @@ def _run_migration_operations(
                 connection.execute(release_lock_sql, [])
             except Exception:
                 pass
+
+
+def _commit_migration_history_if_needed(connection: Any, dialect: str) -> None:
+    if _dialect_name(dialect) == "oracle" and hasattr(connection, "commit"):
+        connection.commit()
 
 
 def _reflect_schema_snapshot(
@@ -2281,10 +2639,14 @@ def _reflect_schema_snapshot(
     exclude_tables: Sequence[str] | None,
     schema: str | None,
 ) -> SchemaSnapshot:
-    if _dialect_name(dialect) != "sqlite":
-        raise ValueError(
-            "live autogenerate currently supports sqlite URLs; "
-            "other dialects are supported for artifact apply/history"
+    dialect_name = _dialect_name(dialect)
+    if dialect_name != "sqlite":
+        return _reflect_server_snapshot(
+            url,
+            dialect=dialect_name,
+            include_tables=include_tables,
+            exclude_tables=exclude_tables,
+            schema=schema,
         )
     return _reflect_sqlite_snapshot(
         url,
@@ -2292,6 +2654,579 @@ def _reflect_schema_snapshot(
         exclude_tables=exclude_tables,
         schema=schema,
     )
+
+
+def _reflect_server_snapshot(
+    url: str,
+    *,
+    dialect: str,
+    include_tables: Sequence[str] | None,
+    exclude_tables: Sequence[str] | None,
+    schema: str | None,
+) -> SchemaSnapshot:
+    rust = _require_migration_symbol("execute_native")
+    tables = [
+        table
+        for table in _reflect_server_tables(rust, url, dialect, schema)
+        if table != MIGRATION_TABLE
+        and _table_matches_filters(table, include_tables, exclude_tables)
+    ]
+    column_rows = _reflect_server_columns(rust, url, dialect, schema, tables)
+    primary_keys = _reflect_server_primary_keys(rust, url, dialect, schema, tables)
+    unique_constraints = _reflect_server_unique_constraints(
+        rust, url, dialect, schema, tables
+    )
+    foreign_keys = _reflect_server_foreign_keys(rust, url, dialect, schema, tables)
+    indexes = _reflect_server_indexes(rust, url, dialect, schema, tables)
+    snapshots: list[TableSnapshot] = []
+    for table_name in tables:
+        table_columns = column_rows.get(table_name, [])
+        pk_columns = primary_keys.get(table_name, [])
+        unique_columns = {
+            columns[0]
+            for columns in unique_constraints.get(table_name, [])
+            if len(columns) == 1
+        }
+        table_unique_constraints = [
+            columns
+            for columns in unique_constraints.get(table_name, [])
+            if len(columns) > 1
+        ]
+        table_foreign_keys = foreign_keys.get(table_name, {})
+        columns = [
+            ColumnSnapshot(
+                name=column["name"],
+                kind=column["kind"],
+                nullable=column["nullable"] and column["name"] not in set(pk_columns),
+                primary_key=column["name"] in set(pk_columns),
+                foreign_table=table_foreign_keys.get(column["name"], (None, None))[0],
+                foreign_column=table_foreign_keys.get(column["name"], (None, None))[1],
+                max_length=column["max_length"],
+                unique=column["name"] in unique_columns,
+            )
+            for column in table_columns
+        ]
+        primary_key = (
+            pk_columns[0] if pk_columns else (columns[0].name if columns else "id")
+        )
+        snapshots.append(
+            TableSnapshot(
+                model_key=table_name,
+                name=table_name,
+                primary_key=primary_key,
+                columns=columns,
+                indexes=indexes.get(table_name, []),
+                unique_constraints=table_unique_constraints,
+                relationships=[],
+            )
+        )
+    return SchemaSnapshot(tables=snapshots, version=MIGRATION_ARTIFACT_VERSION)
+
+
+def _reflect_server_tables(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+) -> list[str]:
+    schema_filter = _schema_filter(dialect, schema)
+    if dialect == "postgresql":
+        sql = (
+            "SELECT table_name FROM information_schema.tables "
+            f"WHERE table_schema = {schema_filter} AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name"
+        )
+    elif dialect in {"mysql", "mariadb"}:
+        sql = (
+            "SELECT table_name FROM information_schema.tables "
+            f"WHERE table_schema = {schema_filter} AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name"
+        )
+    elif dialect == "mssql":
+        sql = (
+            "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+            f"WHERE TABLE_SCHEMA = {schema_filter} AND TABLE_TYPE = 'BASE TABLE' "
+            "ORDER BY TABLE_NAME"
+        )
+    elif dialect == "oracle":
+        table_view = _oracle_table_view(schema)
+        owner_filter = _oracle_owner_filter(schema, table_alias="")
+        sql = f"SELECT table_name FROM {table_view} {owner_filter} ORDER BY table_name"
+    else:
+        raise ValueError(f"live autogenerate does not support dialect '{dialect}'")
+    return [str(row[0]) for row in _query_rows_url(rust, url, sql)]
+
+
+def _reflect_server_columns(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    table_names: Sequence[str],
+) -> dict[str, list[dict[str, Any]]]:
+    if not table_names:
+        return {}
+    schema_filter = _schema_filter(dialect, schema)
+    if dialect in {"postgresql", "mysql", "mariadb"}:
+        table_filter = _table_name_filter(table_names, "table_name")
+        sql = (
+            "SELECT table_name, column_name, data_type, is_nullable, "
+            "character_maximum_length, numeric_precision, numeric_scale, ordinal_position "
+            "FROM information_schema.columns "
+            f"WHERE table_schema = {schema_filter} {table_filter} "
+            "ORDER BY table_name, ordinal_position"
+        )
+    elif dialect == "mssql":
+        table_filter = _table_name_filter(table_names, "TABLE_NAME")
+        sql = (
+            "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, "
+            "CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, ORDINAL_POSITION "
+            "FROM INFORMATION_SCHEMA.COLUMNS "
+            f"WHERE TABLE_SCHEMA = {schema_filter} {table_filter} "
+            "ORDER BY TABLE_NAME, ORDINAL_POSITION"
+        )
+    elif dialect == "oracle":
+        view = _oracle_tab_columns_view(schema)
+        owner_filter = _oracle_owner_filter(schema, table_alias="")
+        table_filter = _table_name_filter(table_names, "table_name")
+        where = f"{owner_filter} " if owner_filter else ""
+        if where:
+            where += f"AND hidden_column = 'NO' {table_filter}"
+        else:
+            where = f"WHERE hidden_column = 'NO' {table_filter}"
+        sql = (
+            "SELECT table_name, column_name, data_type, nullable, char_length, "
+            f"data_precision, data_scale, column_id FROM {view} {where} "
+            "ORDER BY table_name, column_id"
+        )
+    else:
+        raise ValueError(f"live autogenerate does not support dialect '{dialect}'")
+    columns: dict[str, list[dict[str, Any]]] = {}
+    for row in _query_rows_url(rust, url, sql):
+        table_name = str(row[0])
+        data_type = str(row[2])
+        columns.setdefault(table_name, []).append(
+            {
+                "name": str(row[1]),
+                "kind": _normalize_reflected_type(
+                    dialect,
+                    data_type,
+                    precision=_optional_int(row[5] if len(row) > 5 else None),
+                    scale=_optional_int(row[6] if len(row) > 6 else None),
+                ),
+                "nullable": _nullable_from_reflection(row[3]),
+                "max_length": _reflected_max_length(row[4] if len(row) > 4 else None),
+            }
+        )
+    return columns
+
+
+def _reflect_server_primary_keys(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    table_names: Sequence[str],
+) -> dict[str, list[str]]:
+    return _reflect_key_columns(rust, url, dialect, schema, "PRIMARY KEY", table_names)
+
+
+def _reflect_server_unique_constraints(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    table_names: Sequence[str],
+) -> dict[str, list[list[str]]]:
+    grouped = _reflect_named_key_columns(
+        rust, url, dialect, schema, "UNIQUE", table_names
+    )
+    return {
+        table: [columns for _, columns in constraints]
+        for table, constraints in grouped.items()
+    }
+
+
+def _reflect_key_columns(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    constraint_type: str,
+    table_names: Sequence[str],
+) -> dict[str, list[str]]:
+    grouped = _reflect_named_key_columns(
+        rust, url, dialect, schema, constraint_type, table_names
+    )
+    return {
+        table: constraints[0][1] if constraints else []
+        for table, constraints in grouped.items()
+    }
+
+
+def _reflect_named_key_columns(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    constraint_type: str,
+    table_names: Sequence[str],
+) -> dict[str, list[tuple[str, list[str]]]]:
+    if not table_names:
+        return {}
+    schema_filter = _schema_filter(dialect, schema)
+    if dialect in {"postgresql", "mysql", "mariadb"}:
+        table_filter = _table_name_filter(table_names, "tc.table_name")
+        sql = (
+            "SELECT kcu.table_name, kcu.constraint_name, kcu.column_name, "
+            "kcu.ordinal_position "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.key_column_usage kcu "
+            "ON tc.constraint_schema = kcu.constraint_schema "
+            "AND tc.constraint_name = kcu.constraint_name "
+            "AND tc.table_name = kcu.table_name "
+            f"WHERE tc.table_schema = {schema_filter} "
+            f"AND tc.constraint_type = {_sql_literal(constraint_type)} {table_filter} "
+            "ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position"
+        )
+    elif dialect == "mssql":
+        table_filter = _table_name_filter(table_names, "tc.TABLE_NAME")
+        sql = (
+            "SELECT kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.COLUMN_NAME, "
+            "kcu.ORDINAL_POSITION "
+            "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+            "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
+            "ON tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA "
+            "AND tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME "
+            "AND tc.TABLE_NAME = kcu.TABLE_NAME "
+            f"WHERE tc.TABLE_SCHEMA = {schema_filter} "
+            f"AND tc.CONSTRAINT_TYPE = {_sql_literal(constraint_type)} {table_filter} "
+            "ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION"
+        )
+    elif dialect == "oracle":
+        constraints = _oracle_constraints_view(schema)
+        columns = _oracle_cons_columns_view(schema)
+        owner_join = ""
+        owner_filter = ""
+        if schema:
+            owner_join = "AND c.owner = cc.owner "
+            owner_filter = f"AND c.owner = {_sql_literal(schema.upper())} "
+        oracle_type = "P" if constraint_type == "PRIMARY KEY" else "U"
+        table_filter = _table_name_filter(table_names, "cc.table_name")
+        sql = (
+            "SELECT cc.table_name, cc.constraint_name, cc.column_name, cc.position "
+            f"FROM {constraints} c JOIN {columns} cc "
+            "ON c.constraint_name = cc.constraint_name "
+            f"{owner_join}AND c.table_name = cc.table_name "
+            f"WHERE c.constraint_type = {_sql_literal(oracle_type)} {owner_filter}"
+            f"{table_filter} "
+            "ORDER BY cc.table_name, cc.constraint_name, cc.position"
+        )
+    else:
+        raise ValueError(f"live autogenerate does not support dialect '{dialect}'")
+    grouped: dict[str, dict[str, list[tuple[int, str]]]] = {}
+    for row in _query_rows_url(rust, url, sql):
+        table_name = str(row[0])
+        constraint_name = str(row[1])
+        ordinal = _optional_int(row[3]) or 0
+        grouped.setdefault(table_name, {}).setdefault(constraint_name, []).append(
+            (ordinal, str(row[2]))
+        )
+    return {
+        table: [
+            (
+                name,
+                [column for _, column in sorted(columns, key=lambda item: item[0])],
+            )
+            for name, columns in constraints.items()
+        ]
+        for table, constraints in grouped.items()
+    }
+
+
+def _reflect_server_foreign_keys(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    table_names: Sequence[str],
+) -> dict[str, dict[str, tuple[str, str]]]:
+    if not table_names:
+        return {}
+    schema_filter = _schema_filter(dialect, schema)
+    if dialect == "postgresql":
+        table_filter = _table_name_filter(table_names, "tc.table_name")
+        sql = (
+            "SELECT kcu.table_name, kcu.column_name, ccu.table_name, ccu.column_name, "
+            "kcu.ordinal_position "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.key_column_usage kcu "
+            "ON tc.constraint_schema = kcu.constraint_schema "
+            "AND tc.constraint_name = kcu.constraint_name "
+            "AND tc.table_name = kcu.table_name "
+            "JOIN information_schema.constraint_column_usage ccu "
+            "ON tc.constraint_schema = ccu.constraint_schema "
+            "AND tc.constraint_name = ccu.constraint_name "
+            f"WHERE tc.table_schema = {schema_filter} "
+            f"AND tc.constraint_type = 'FOREIGN KEY' {table_filter} "
+            "ORDER BY kcu.table_name, tc.constraint_name, kcu.ordinal_position"
+        )
+    elif dialect in {"mysql", "mariadb"}:
+        table_filter = _table_name_filter(table_names, "table_name")
+        sql = (
+            "SELECT table_name, column_name, referenced_table_name, "
+            "referenced_column_name, ordinal_position "
+            "FROM information_schema.key_column_usage "
+            f"WHERE table_schema = {schema_filter} "
+            f"AND referenced_table_name IS NOT NULL {table_filter} "
+            "ORDER BY table_name, constraint_name, ordinal_position"
+        )
+    elif dialect == "mssql":
+        table_filter = _table_name_filter(table_names, "parent_table.name")
+        sql = (
+            "SELECT parent_table.name, parent_column.name, "
+            "referenced_table.name, referenced_column.name, fkc.constraint_column_id "
+            "FROM sys.foreign_key_columns fkc "
+            "JOIN sys.tables parent_table ON fkc.parent_object_id = parent_table.object_id "
+            "JOIN sys.schemas parent_schema ON parent_table.schema_id = parent_schema.schema_id "
+            "JOIN sys.columns parent_column ON fkc.parent_object_id = parent_column.object_id "
+            "AND fkc.parent_column_id = parent_column.column_id "
+            "JOIN sys.tables referenced_table ON fkc.referenced_object_id = referenced_table.object_id "
+            "JOIN sys.columns referenced_column ON fkc.referenced_object_id = referenced_column.object_id "
+            "AND fkc.referenced_column_id = referenced_column.column_id "
+            f"WHERE parent_schema.name = {schema_filter} {table_filter} "
+            "ORDER BY parent_table.name, fkc.constraint_object_id, fkc.constraint_column_id"
+        )
+    elif dialect == "oracle":
+        constraints = _oracle_constraints_view(schema)
+        columns = _oracle_cons_columns_view(schema)
+        owner_join = ""
+        owner_filter = ""
+        if schema:
+            owner_join = "AND c.owner = cc.owner AND rc.owner = rcc.owner "
+            owner_filter = f"AND c.owner = {_sql_literal(schema.upper())} "
+        table_filter = _table_name_filter(table_names, "cc.table_name")
+        sql = (
+            "SELECT cc.table_name, cc.column_name, rcc.table_name, rcc.column_name, cc.position "
+            f"FROM {constraints} c "
+            f"JOIN {columns} cc ON c.constraint_name = cc.constraint_name "
+            f"{owner_join}AND c.table_name = cc.table_name "
+            f"JOIN {constraints} rc ON c.r_constraint_name = rc.constraint_name "
+            f"JOIN {columns} rcc ON rc.constraint_name = rcc.constraint_name "
+            "AND rc.table_name = rcc.table_name AND cc.position = rcc.position "
+            "WHERE c.constraint_type = 'R' "
+            f"{owner_filter}{table_filter} "
+            "ORDER BY cc.table_name, c.constraint_name, cc.position"
+        )
+    else:
+        raise ValueError(f"live autogenerate does not support dialect '{dialect}'")
+    foreign_keys: dict[str, dict[str, tuple[str, str]]] = {}
+    for row in _query_rows_url(rust, url, sql):
+        foreign_keys.setdefault(str(row[0]), {})[str(row[1])] = (
+            str(row[2]),
+            str(row[3]),
+        )
+    return foreign_keys
+
+
+def _reflect_server_indexes(
+    rust: Any,
+    url: str,
+    dialect: str,
+    schema: str | None,
+    table_names: Sequence[str],
+) -> dict[str, list[IndexSnapshot]]:
+    if not table_names:
+        return {}
+    schema_filter = _schema_filter(dialect, schema)
+    if dialect == "postgresql":
+        table_filter = _table_name_filter(table_names, "t.relname")
+        sql = (
+            "SELECT t.relname, i.relname, ix.indisunique, a.attname, x.ordinality "
+            "FROM pg_class t "
+            "JOIN pg_namespace n ON n.oid = t.relnamespace "
+            "JOIN pg_index ix ON t.oid = ix.indrelid "
+            "JOIN pg_class i ON i.oid = ix.indexrelid "
+            "JOIN unnest(ix.indkey) WITH ORDINALITY AS x(attnum, ordinality) ON true "
+            "JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = x.attnum "
+            f"WHERE n.nspname = {schema_filter} {table_filter} AND NOT ix.indisprimary "
+            "AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid "
+            "AND c.contype IN ('p', 'u')) "
+            "ORDER BY t.relname, i.relname, x.ordinality"
+        )
+    elif dialect in {"mysql", "mariadb"}:
+        table_filter = _table_name_filter(table_names, "table_name")
+        sql = (
+            "SELECT table_name, index_name, CASE non_unique WHEN 0 THEN 1 ELSE 0 END, "
+            "column_name, seq_in_index "
+            "FROM information_schema.statistics "
+            f"WHERE table_schema = {schema_filter} {table_filter} AND index_name <> 'PRIMARY' "
+            "ORDER BY table_name, index_name, seq_in_index"
+        )
+    elif dialect == "mssql":
+        table_filter = _table_name_filter(table_names, "t.name")
+        sql = (
+            "SELECT t.name, i.name, CONVERT(int, i.is_unique), c.name, ic.key_ordinal "
+            "FROM sys.indexes i "
+            "JOIN sys.tables t ON i.object_id = t.object_id "
+            "JOIN sys.schemas s ON t.schema_id = s.schema_id "
+            "JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id "
+            "JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id "
+            f"WHERE s.name = {schema_filter} {table_filter} AND i.is_primary_key = 0 "
+            "AND i.is_unique_constraint = 0 AND i.name IS NOT NULL "
+            "AND ic.is_included_column = 0 "
+            "ORDER BY t.name, i.name, ic.key_ordinal"
+        )
+    elif dialect == "oracle":
+        indexes = _oracle_indexes_view(schema)
+        columns = _oracle_ind_columns_view(schema)
+        constraints = _oracle_constraints_view(schema)
+        owner_join = ""
+        owner_filter = ""
+        owner_not_exists = ""
+        if schema:
+            owner_join = "AND i.owner = ic.index_owner "
+            owner_filter = f"AND i.owner = {_sql_literal(schema.upper())} "
+            owner_not_exists = "AND c.owner = i.owner "
+        table_filter = _table_name_filter(table_names, "i.table_name")
+        sql = (
+            "SELECT i.table_name, i.index_name, "
+            "CASE i.uniqueness WHEN 'UNIQUE' THEN 1 ELSE 0 END, "
+            "ic.column_name, ic.column_position "
+            f"FROM {indexes} i JOIN {columns} ic "
+            "ON i.index_name = ic.index_name "
+            f"{owner_join}WHERE 1 = 1 {owner_filter}"
+            f"{table_filter} AND NOT EXISTS (SELECT 1 "
+            f"FROM {constraints} c WHERE c.index_name = i.index_name "
+            f"{owner_not_exists}AND c.constraint_type IN ('P', 'U')) "
+            "ORDER BY i.table_name, i.index_name, ic.column_position"
+        )
+    else:
+        raise ValueError(f"live autogenerate does not support dialect '{dialect}'")
+    grouped: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in _query_rows_url(rust, url, sql):
+        table_name = str(row[0])
+        index_name = str(row[1])
+        index = grouped.setdefault(table_name, {}).setdefault(
+            index_name,
+            {"columns": [], "unique": _db_truthy(row[2])},
+        )
+        index["columns"].append((_optional_int(row[4]) or 0, str(row[3])))
+    return {
+        table: [
+            IndexSnapshot(
+                name=name,
+                columns=[
+                    column
+                    for _, column in sorted(index["columns"], key=lambda item: item[0])
+                ],
+                unique=bool(index["unique"]),
+            )
+            for name, index in indexes.items()
+        ]
+        for table, indexes in grouped.items()
+    }
+
+
+def _schema_filter(dialect: str, schema: str | None) -> str:
+    if schema:
+        return _sql_literal(schema.upper() if dialect == "oracle" else schema)
+    if dialect == "postgresql":
+        return "current_schema()"
+    if dialect in {"mysql", "mariadb"}:
+        return "DATABASE()"
+    if dialect == "mssql":
+        return "SCHEMA_NAME()"
+    if dialect == "oracle":
+        return ""
+    raise ValueError(f"schema filter is not available for dialect '{dialect}'")
+
+
+def _table_name_filter(table_names: Sequence[str], column: str) -> str:
+    if not table_names:
+        return "AND 1 = 0"
+    names = ", ".join(_sql_literal(table) for table in table_names)
+    return f"AND {column} IN ({names})"
+
+
+def _oracle_table_view(schema: str | None) -> str:
+    return "all_tables" if schema else "user_tables"
+
+
+def _oracle_tab_columns_view(schema: str | None) -> str:
+    return "all_tab_cols" if schema else "user_tab_cols"
+
+
+def _oracle_constraints_view(schema: str | None) -> str:
+    return "all_constraints" if schema else "user_constraints"
+
+
+def _oracle_cons_columns_view(schema: str | None) -> str:
+    return "all_cons_columns" if schema else "user_cons_columns"
+
+
+def _oracle_indexes_view(schema: str | None) -> str:
+    return "all_indexes" if schema else "user_indexes"
+
+
+def _oracle_ind_columns_view(schema: str | None) -> str:
+    return "all_ind_columns" if schema else "user_ind_columns"
+
+
+def _oracle_owner_filter(schema: str | None, *, table_alias: str) -> str:
+    if not schema:
+        return ""
+    prefix = f"{table_alias}." if table_alias else ""
+    return f"WHERE {prefix}owner = {_sql_literal(schema.upper())}"
+
+
+def _nullable_from_reflection(value: Any) -> bool:
+    return str(value).strip().upper() in {"YES", "Y", "TRUE", "1"}
+
+
+def _reflected_max_length(value: Any) -> int | None:
+    length = _optional_int(value)
+    if length is None or length < 0:
+        return None
+    return length
+
+
+def _normalize_reflected_type(
+    dialect: str,
+    value: Any,
+    *,
+    precision: int | None = None,
+    scale: int | None = None,
+) -> str:
+    text = str(value or "").strip().upper()
+    if not text:
+        return "str"
+    if "UUID" in text or text == "UNIQUEIDENTIFIER":
+        return "uuid"
+    if "JSON" in text:
+        return "json"
+    if any(token in text for token in ("BLOB", "BINARY", "BYTEA", "RAW", "IMAGE")):
+        return "bytes"
+    if "BOOL" in text or text == "BIT":
+        return "bool"
+    if any(
+        token in text
+        for token in ("DOUBLE", "FLOAT", "REAL", "BINARY_FLOAT", "BINARY_DOUBLE")
+    ):
+        return "float"
+    if any(token in text for token in ("INT", "SERIAL", "BIGSERIAL", "SMALLSERIAL")):
+        return "int"
+    if text in {"DATE"}:
+        return "date"
+    if any(token in text for token in ("TIMESTAMP", "DATETIME", "TIME WITH")):
+        return "datetime"
+    if any(token in text for token in ("DECIMAL", "NUMERIC", "NUMBER", "MONEY")):
+        if dialect == "oracle" and scale in {None, 0}:
+            return "int"
+        return "decimal"
+    if any(token in text for token in ("CHAR", "CLOB", "TEXT", "STRING", "ENUM")):
+        return "str"
+    return text.lower()
 
 
 def _reflect_sqlite_snapshot(
