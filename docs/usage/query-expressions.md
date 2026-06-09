@@ -54,16 +54,10 @@ result = await database[Order].select(
 
 Use `select_query()` when you want to build a reusable query object and pass it as `query=`.
 
-Advanced SQL expression helpers cover common SQLAlchemy-style AST nodes:
+Typed expression helpers also cover scalar SQL AST nodes:
 
 ```python
-from ormdantic import case, cast, column, exists, literal, select_query, tuple_
-
-paid_orders = select_query(
-    "orders",
-    column("customer_id"),
-    where=column("status") == "paid",
-)
+from ormdantic import case, cast, column, literal, tuple_
 
 result = await database[Customer].select(
     column("id"),
@@ -73,7 +67,7 @@ result = await database[Customer].select(
         else_=literal("standard"),
     ).as_("service_level"),
     tuple_(column("country"), column("city")).as_("location_key"),
-    where=exists(paid_orders) & column("id").in_subquery(paid_orders),
+    where=(column("tier") == "gold") & column("deleted_at").is_null(),
 )
 ```
 
@@ -125,4 +119,4 @@ query = select_query(
 
 `raw_sql_safe()` is an explicit escape hatch. User input should be passed through normal expression values so the Rust compiler can emit bind parameters in stable traversal order.
 
-The typed API is intentionally not a full SQLAlchemy clone. CTE builders, window-function builders, relationship-aware Prisma-style `some`/`every`/`none` filters, nested `include`/`select`, and relation aggregate ordering remain separate higher-level ORM features.
+The typed API is intentionally not a full SQLAlchemy clone. Subquery predicates such as `EXISTS` and `IN (SELECT ...)`, CTE builders, window-function builders, relationship-aware Prisma-style `some`/`every`/`none` filters, nested `include`/`select`, and relation aggregate ordering remain separate higher-level ORM features.
