@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from typing import Any
 
 from ormdantic import migrations
+from ormdantic._migrations import history
+from ormdantic._migrations.models import MigrationHistoryEntry
 
 
 class RecordingConnection:
@@ -54,6 +56,31 @@ class RecordingConnection:
         if marker in normalized:
             return normalized.split(marker, 1)[1].split("'", 1)[0]
         return None
+
+
+class RowsConnection:
+    def __init__(self, rows: list[list[Any]] | None = None) -> None:
+        self.rows = rows or []
+        self.statements: list[str] = []
+
+    def execute(self, sql: str, params: Sequence[Any]) -> dict[str, Any]:
+        del params
+        self.statements.append(sql)
+        if sql.startswith("SELECT"):
+            return {"rows": self.rows}
+        return {"rows": []}
+
+
+def test_public_migration_facade_re_exports_history_helpers() -> None:
+    assert migrations.MIGRATION_TABLE == history.MIGRATION_TABLE
+    assert migrations.MIGRATION_LOCK_NAME == history.MIGRATION_LOCK_NAME
+    assert (
+        migrations._migration_table_column_defs is history._migration_table_column_defs
+    )
+    assert (
+        migrations._ensure_migration_history_table
+        is history._ensure_migration_history_table
+    )
 
 
 def test_history_column_types_are_key_safe_for_mysql_family() -> None:
@@ -139,3 +166,57 @@ def test_history_table_upgrade_uses_oracle_add_syntax() -> None:
     ]
     assert add_statements
     assert all(" ADD (" in statement for statement in add_statements)
+
+
+def test_history_entries_parse_metadata_and_dirty_state() -> None:
+    connection = RowsConnection(
+        rows=[
+            [
+                "001",
+                "create flavor",
+                "abc123",
+                "2026-01-01T00:00:00+00:00",
+                "12",
+                "applied",
+                0,
+                2,
+                "1.7.0",
+                '{"phase": "completed"}',
+            ],
+            ["002", None, None, None, None, "failed", 1, None, None, "not-json"],
+        ]
+    )
+
+    entries = history._history_entries(connection, "sqlite")
+
+    assert entries[0].metadata == {"phase": "completed"}
+    assert not entries[0].dirty
+    assert entries[0].execution_time_ms == 12
+    assert entries[1].metadata == {"raw": "not-json"}
+    assert entries[1].dirty
+    assert history._current_entry(connection, "sqlite") == entries[0]
+    assert history._is_dirty(connection, "sqlite")
+
+
+def test_write_history_entry_serializes_metadata() -> None:
+    connection = RowsConnection()
+
+    history._write_history_entry(
+        connection,
+        "sqlite",
+        MigrationHistoryEntry(
+            revision="001",
+            description="create flavor",
+            checksum="abc123",
+            applied_at="2026-01-01T00:00:00+00:00",
+            execution_time_ms=12,
+            metadata={"phase": "completed"},
+        ),
+    )
+
+    assert connection.statements[0] == (
+        'DELETE FROM "ormdantic_migrations" WHERE "revision" = \'001\''
+    )
+    assert connection.statements[1].startswith('INSERT INTO "ormdantic_migrations"')
+    assert '"metadata"' in connection.statements[1]
+    assert '"phase": "completed"' in connection.statements[1]

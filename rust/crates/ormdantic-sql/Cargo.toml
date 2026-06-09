@@ -24,3 +24,11 @@ criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
 [[bench]]
 name = "sql_compiler"
 harness = false
+
+[[bench]]
+name = "expression_compiler"
+harness = false
+
+[[bench]]
+name = "dml_compiler"
+harness = false

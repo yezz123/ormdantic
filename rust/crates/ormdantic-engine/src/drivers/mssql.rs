@@ -4,7 +4,9 @@ use crate::{DbValue, QueryResult};
 
 #[cfg(feature = "mssql")]
 mod runtime {
-    use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, Row, ToSql};
+    use tiberius::{
+        numeric::Numeric, AuthMethod, Client, ColumnData, Config, EncryptionLevel, Row, ToSql,
+    };
     use tokio::net::TcpStream;
     use tokio::runtime::Runtime;
     use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
@@ -187,6 +189,8 @@ mod runtime {
         } else if let Some(value) = row.try_get::<f64, _>(idx).ok().flatten() {
             DbValue::Real(value)
         } else if let Some(value) = row.try_get::<f32, _>(idx).ok().flatten() {
+            DbValue::Real(value.into())
+        } else if let Some(value) = row.try_get::<Numeric, _>(idx).ok().flatten() {
             DbValue::Real(value.into())
         } else if let Some(value) = row.try_get::<&str, _>(idx).ok().flatten() {
             DbValue::Text(value.to_string())

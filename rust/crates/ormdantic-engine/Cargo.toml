@@ -41,3 +41,14 @@ tokio = { version = "1.52.3", features = [
 ], optional = true }
 tokio-util = { version = "0.7.18", features = ["compat"], optional = true }
 url = "2.5.8"
+
+[dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "runtime_core"
+harness = false
+
+[[bench]]
+name = "engine_introspection"
+harness = false

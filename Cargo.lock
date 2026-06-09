@@ -1933,6 +1933,7 @@ version = "1.7.0"
 name = "ormdantic-dialects"
 version = "1.7.0"
 dependencies = [
+ "codspeed-criterion-compat",
  "ormdantic-core",
  "ormdantic-schema",
 ]
@@ -1941,6 +1942,7 @@ dependencies = [
 name = "ormdantic-engine"
 version = "1.7.0"
 dependencies = [
+ "codspeed-criterion-compat",
  "mysql",
  "oracle-rs",
  "ormdantic-core",
@@ -1958,6 +1960,7 @@ dependencies = [
 name = "ormdantic-hydrate"
 version = "1.7.0"
 dependencies = [
+ "codspeed-criterion-compat",
  "ormdantic-core",
  "ormdantic-schema",
 ]
@@ -1966,6 +1969,7 @@ dependencies = [
 name = "ormdantic-py"
 version = "1.7.0"
 dependencies = [
+ "codspeed-criterion-compat",
  "ormdantic-core",
  "ormdantic-dialects",
  "ormdantic-engine",
@@ -1981,6 +1985,7 @@ dependencies = [
 name = "ormdantic-schema"
 version = "1.7.0"
 dependencies = [
+ "codspeed-criterion-compat",
  "ormdantic-core",
 ]
 

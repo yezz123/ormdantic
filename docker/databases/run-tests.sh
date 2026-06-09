@@ -30,4 +30,4 @@ uv run --group testing pytest tests/integration/test_migrations_external.py -q
   unset ORMDANTIC_ORACLE_URL
   cargo test -p ormdantic-engine
 )
-cargo test -p ormdantic-engine --features mssql,oracle --test mssql_exec --test oracle_exec
+cargo test -p ormdantic-engine --features mssql,oracle --test driver_matrix --test mssql_exec --test oracle_exec

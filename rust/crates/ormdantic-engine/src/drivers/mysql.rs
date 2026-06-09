@@ -40,6 +40,18 @@ impl MySqlConnection {
             .query_drop(format!("SAVEPOINT {name}"))
             .map_err(sql_error)
     }
+
+    pub fn rollback_to_savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+        self.connection
+            .query_drop(format!("ROLLBACK TO SAVEPOINT {name}"))
+            .map_err(sql_error)
+    }
+
+    pub fn release_savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+        self.connection
+            .query_drop(format!("RELEASE SAVEPOINT {name}"))
+            .map_err(sql_error)
+    }
 }
 
 pub fn execute_url(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {

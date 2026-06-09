@@ -14,6 +14,10 @@ name = "_ormdantic"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
+
 [dependencies]
 ormdantic-core.workspace = true
 ormdantic-dialects.workspace = true
@@ -21,11 +25,16 @@ ormdantic-engine = { workspace = true, features = ["all-engines"] }
 ormdantic-hydrate.workspace = true
 ormdantic-schema.workspace = true
 ormdantic-sql.workspace = true
-pyo3 = { workspace = true, features = ["extension-module"] }
+pyo3.workspace = true
 
 [build-dependencies]
 pyo3-build-config = { version = "0.26", features = ["resolve-config"] }
 version_check = "0.9"
 
 [dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
 pyo3 = { workspace = true, features = ["auto-initialize"] }
+
+[[bench]]
+name = "py_bridge"
+harness = false

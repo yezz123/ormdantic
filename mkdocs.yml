@@ -154,6 +154,7 @@ nav:
       - Rust Core: architecture/rust-core.md
       - Dialect Support: architecture/dialect-support.md
       - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
+      - Refactor And Test Roadmap: architecture/refactor-test-roadmap.md
       - vNext Migration: architecture/vnext-migration.md
       - Migration History: architecture/migration-history.md
   - Performance: performance.md
