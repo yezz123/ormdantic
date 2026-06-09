@@ -788,7 +788,6 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
             Ok(Expr::Function {
                 name: required_item(expr, "name")?.extract()?,
                 args,
-                over: None,
             })
         }
         "between" => Ok(Expr::Between {
@@ -812,28 +811,6 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
                 values,
                 negated,
             })
-        }
-        "in_subquery" => {
-            let negated = expr
-                .get_item("negated")?
-                .map(|value| value.extract::<bool>())
-                .transpose()?
-                .unwrap_or(false);
-            let subquery_payload = required_item(expr, "subquery")?;
-            let subquery = subquery_payload.downcast::<PyDict>()?;
-            Ok(Expr::InSubquery {
-                expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
-                subquery: Box::new(select_ast_from_payload(expr.py(), subquery)?),
-                negated,
-            })
-        }
-        "exists" => {
-            let subquery_payload = required_item(expr, "subquery")?;
-            let subquery = subquery_payload.downcast::<PyDict>()?;
-            Ok(Expr::Exists(Box::new(select_ast_from_payload(
-                expr.py(),
-                subquery,
-            )?)))
         }
         "case" => {
             let whens = required_item(expr, "whens")?
