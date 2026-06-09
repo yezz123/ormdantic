@@ -21,7 +21,7 @@ The first completed slices focus on stable public facades with internals moved i
 - Python migration live snapshot reflection and backend-specific reflection SQL helpers are split into `ormdantic._migrations.reflection`.
 - Python migration CLI command handlers are split into `ormdantic._migrations.cli`, with `ormdantic.cli` kept as the top-level command facade.
 - `ormdantic-py` has self-contained modules for PyO3 binding registration, database/table handle classes, event bridge, session runtime, transaction options, runtime schema conversion, schema validation/diff bridge wrappers, DDL helper compilation, native connection/runtime/reflection helpers, migration revision execution helpers, query/filter helper parsing, compile query wrappers, select-in plan compilation, typed expression payload parsing, table-handle query methods, hydration bridge wrappers, and utility pyfunctions.
-- PyO3 bridge benchmarks cover Python-facing scalar value conversion through in-memory module registration.
+- PyO3 bridge benchmarks cover Python-facing scalar value conversion, query payload normalization and compilation, schema validation payloads, flat/joined hydration payloads, and select-in merge payloads through in-memory module registration.
 - `ormdantic-sql` exposes a small facade from `src/lib.rs`, with AST/data types in `ast.rs`, filter/predicate conversion in `filters.rs`, and rendering/compilation in `compiler.rs`.
 - SQL compiler tests are organized as integration test files by behavior, including facade, CRUD, expressions, filters, and joins.
 - SQL benchmarks are split across general query compilation, expression compilation, and dedicated bulk/wide DML compilation targets.
@@ -68,7 +68,7 @@ The first completed slices focus on stable public facades with internals moved i
    - Dialect rendering benchmarks for identifier quoting, placeholder allocation, and DDL generation.
    - Hydration benchmarks for additional loader shapes as hydration APIs grow.
    - Engine benchmarks for additional connection-state and batch-execution paths as those APIs grow.
-   - PyO3 bridge benchmarks for broader query, schema, and hydration payload conversion as those bridge paths grow.
+   - PyO3 bridge benchmarks for additional runtime/session payload conversion as those bridge paths grow.
 
 ## Rules
 
