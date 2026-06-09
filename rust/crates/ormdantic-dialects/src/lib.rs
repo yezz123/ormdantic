@@ -16,43 +16,27 @@
 //! # Ok::<(), ormdantic_core::OrmdanticError>(())
 //! ```
 
+mod ddl;
+mod identifiers;
+mod kind;
+mod reflection;
+mod transactions;
+
+pub use kind::{normalize_dialect_name, DialectKind};
+pub use reflection::{ReflectionQuery, ReflectionQueryKind, ReflectionScope};
+
+use ddl::{
+    compile_add_column, compile_alter_column, compile_create_index, compile_create_table,
+    compile_drop_column, compile_drop_index, render_constraint,
+};
+use identifiers::{quote_backtick, quote_double};
 use ormdantic_core::{
-    BackendFeature, DeferrableMode, FeatureSet, IsolationLevel, OrmdanticError, OrmdanticResult,
-    SavepointName, TransactionAccessMode, TransactionOptions,
+    BackendFeature, DeferrableMode, FeatureSet, IsolationLevel, OrmdanticResult, SavepointName,
+    TransactionAccessMode, TransactionOptions,
 };
-use ormdantic_schema::{
-    CheckConstraintDef, ColumnDef, ConstraintDef, FieldKind, ForeignKeyAction, ForeignKeyDef,
-    IndexDef, SchemaOperation, TableDef, UniqueConstraintDef,
-};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DialectKind {
-    Sqlite,
-    Postgres,
-    MySql,
-    MariaDb,
-    MsSql,
-    Oracle,
-}
-
-impl DialectKind {
-    pub fn parse(name: &str) -> OrmdanticResult<Self> {
-        let normalized = normalize_dialect_name(name);
-        match normalized.as_str() {
-            "sqlite" | "sqlite3" | "aiosqlite" => Ok(Self::Sqlite),
-            "postgres" | "postgresql" | "asyncpg" | "psycopg" | "psycopg2" | "pg8000" => {
-                Ok(Self::Postgres)
-            }
-            "mysql" | "pymysql" | "mysqlconnector" | "aiomysql" | "asyncmy" => Ok(Self::MySql),
-            "mariadb" | "mariadbconnector" => Ok(Self::MariaDb),
-            "mssql" | "pyodbc" | "pymssql" | "aioodbc" => Ok(Self::MsSql),
-            "oracle" | "oracledb" | "cx_oracle" => Ok(Self::Oracle),
-            other => Err(OrmdanticError::UnsupportedDialect {
-                dialect: other.to_string(),
-            }),
-        }
-    }
-}
+use ormdantic_schema::{ColumnDef, FieldKind, SchemaOperation};
+use reflection::scope_predicate;
+use transactions::render_isolation_level;
 
 pub trait Dialect {
     fn kind(&self) -> DialectKind;
@@ -224,68 +208,6 @@ pub trait Dialect {
             .collect::<Vec<_>>()
             .join(", ");
         format!("ON CONFLICT ({target}) DO UPDATE SET {assignments}")
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ReflectionScope {
-    schema: Option<String>,
-    tables: Vec<String>,
-}
-
-impl ReflectionScope {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn schema(mut self, schema: impl Into<String>) -> Self {
-        self.schema = Some(schema.into());
-        self
-    }
-
-    pub fn tables(mut self, tables: Vec<String>) -> Self {
-        self.tables = tables;
-        self
-    }
-
-    pub fn schema_name(&self) -> Option<&str> {
-        self.schema.as_deref()
-    }
-
-    pub fn table_names(&self) -> &[String] {
-        &self.tables
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReflectionQueryKind {
-    Tables,
-    Columns,
-    Constraints,
-    Indexes,
-    ForeignKeys,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReflectionQuery {
-    kind: ReflectionQueryKind,
-    sql: String,
-}
-
-impl ReflectionQuery {
-    pub fn new(kind: ReflectionQueryKind, sql: impl Into<String>) -> Self {
-        Self {
-            kind,
-            sql: sql.into(),
-        }
-    }
-
-    pub fn kind(&self) -> ReflectionQueryKind {
-        self.kind
-    }
-
-    pub fn sql(&self) -> &str {
-        &self.sql
     }
 }
 
@@ -531,6 +453,47 @@ impl Dialect for OracleDialect {
     fn release_savepoint_sql(&self, _name: &SavepointName) -> String {
         String::new()
     }
+
+    fn reflection_queries(&self, scope: &ReflectionScope) -> Vec<ReflectionQuery> {
+        let table_view = if scope.schema_name().is_some() {
+            "all_tables"
+        } else {
+            "user_tables"
+        };
+        let columns_view = if scope.schema_name().is_some() {
+            "all_tab_columns"
+        } else {
+            "user_tab_columns"
+        };
+        let constraints_view = if scope.schema_name().is_some() {
+            "all_constraints"
+        } else {
+            "user_constraints"
+        };
+        let owner_filter = scope
+            .schema_name()
+            .map(|schema| {
+                format!(
+                    " WHERE owner = '{}'",
+                    schema.replace('\'', "''").to_uppercase()
+                )
+            })
+            .unwrap_or_default();
+        vec![
+            ReflectionQuery::new(
+                ReflectionQueryKind::Tables,
+                format!("SELECT table_name FROM {table_view}{owner_filter}"),
+            ),
+            ReflectionQuery::new(
+                ReflectionQueryKind::Columns,
+                format!("SELECT table_name, column_name, data_type, nullable FROM {columns_view}{owner_filter}"),
+            ),
+            ReflectionQuery::new(
+                ReflectionQueryKind::Constraints,
+                format!("SELECT table_name, constraint_name, constraint_type FROM {constraints_view}{owner_filter}"),
+            ),
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -753,401 +716,5 @@ impl Dialect for AnyDialect {
                 dialect.upsert_conflict_clause(conflict_column, update_columns)
             }
         }
-    }
-}
-
-pub fn normalize_dialect_name(name_or_url: &str) -> String {
-    let lower = name_or_url.trim().to_ascii_lowercase();
-    let before_url = lower
-        .split_once("://")
-        .map_or(lower.as_str(), |(scheme, _)| scheme);
-    before_url
-        .split('+')
-        .next()
-        .unwrap_or(before_url)
-        .replace(['-', '_'], "")
-}
-
-fn quote_double(ident: &str) -> String {
-    format!("\"{}\"", ident.replace('"', "\"\""))
-}
-
-fn quote_backtick(ident: &str) -> String {
-    format!("`{}`", ident.replace('`', "``"))
-}
-
-fn compile_create_table(dialect: &(impl Dialect + ?Sized), table: &TableDef) -> Vec<String> {
-    let mut parts = table
-        .columns()
-        .iter()
-        .map(|column| render_column_def(dialect, column))
-        .collect::<Vec<_>>();
-
-    for constraint in table.unique_constraints() {
-        parts.push(render_unique_constraint(dialect, constraint));
-    }
-    for constraint in table.check_constraints() {
-        parts.push(render_check_constraint(dialect, constraint));
-    }
-    for foreign_key in table.foreign_keys() {
-        parts.push(render_foreign_key(dialect, foreign_key));
-    }
-
-    let mut statements = vec![format!(
-        "CREATE TABLE IF NOT EXISTS {} ({})",
-        dialect.quote_ident(table.name()),
-        parts.join(", ")
-    )];
-    for index in table.indexes() {
-        statements.push(compile_create_index(dialect, table.name(), index));
-    }
-    statements
-}
-
-fn render_column_def(dialect: &(impl Dialect + ?Sized), column: &ColumnDef) -> String {
-    let mut sql = format!(
-        "{} {}",
-        dialect.quote_ident(column.name()),
-        dialect.render_column_type(column)
-    );
-    if column.is_primary_key() {
-        sql.push_str(" PRIMARY KEY");
-    }
-    if !column.is_nullable() || column.is_primary_key() {
-        sql.push_str(" NOT NULL");
-    }
-    if column.is_autoincrement() {
-        sql.push_str(" AUTOINCREMENT");
-    }
-    if let Some(default) = column.server_default() {
-        sql.push_str(" DEFAULT ");
-        sql.push_str(default);
-    }
-    if let Some(collation) = column.collation() {
-        sql.push_str(" COLLATE ");
-        sql.push_str(collation);
-    }
-    if let Some(computed) = column.computed() {
-        sql.push_str(" GENERATED ALWAYS AS (");
-        sql.push_str(computed.expression());
-        sql.push(')');
-        if computed.is_persisted() {
-            sql.push_str(" STORED");
-        }
-    }
-    sql
-}
-
-fn compile_create_index(
-    dialect: &(impl Dialect + ?Sized),
-    table: &str,
-    index: &IndexDef,
-) -> String {
-    let uniqueness = if index.is_unique() { "UNIQUE " } else { "" };
-    let method = index
-        .method_name()
-        .map(|method| format!(" USING {method}"))
-        .unwrap_or_default();
-    let columns = index
-        .columns()
-        .iter()
-        .map(|column| dialect.quote_ident(column))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let include = if index.include_columns_ref().is_empty() {
-        String::new()
-    } else {
-        format!(
-            " INCLUDE ({})",
-            index
-                .include_columns_ref()
-                .iter()
-                .map(|column| dialect.quote_ident(column))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-    let predicate = index
-        .predicate()
-        .map(|predicate| format!(" WHERE {predicate}"))
-        .unwrap_or_default();
-    format!(
-        "CREATE {uniqueness}INDEX IF NOT EXISTS {} ON {}{method} ({columns}){include}{predicate}",
-        dialect.quote_ident(index.name()),
-        dialect.quote_ident(table)
-    )
-}
-
-fn compile_add_column(
-    dialect: &(impl Dialect + ?Sized),
-    table: &str,
-    column: &ColumnDef,
-) -> String {
-    match dialect.kind() {
-        DialectKind::MsSql => format!(
-            "ALTER TABLE {} ADD {}",
-            dialect.quote_ident(table),
-            render_column_def(dialect, column)
-        ),
-        DialectKind::Oracle => format!(
-            "ALTER TABLE {} ADD ({})",
-            dialect.quote_ident(table),
-            render_column_def(dialect, column)
-        ),
-        _ => format!(
-            "ALTER TABLE {} ADD COLUMN {}",
-            dialect.quote_ident(table),
-            render_column_def(dialect, column)
-        ),
-    }
-}
-
-fn compile_drop_column(dialect: &(impl Dialect + ?Sized), table: &str, column: &str) -> String {
-    format!(
-        "ALTER TABLE {} DROP COLUMN {}",
-        dialect.quote_ident(table),
-        dialect.quote_ident(column)
-    )
-}
-
-fn compile_alter_column(
-    dialect: &(impl Dialect + ?Sized),
-    table: &str,
-    column: &ColumnDef,
-) -> String {
-    match dialect.kind() {
-        DialectKind::MySql | DialectKind::MariaDb => format!(
-            "ALTER TABLE {} MODIFY COLUMN {}",
-            dialect.quote_ident(table),
-            render_column_def(dialect, column)
-        ),
-        DialectKind::Oracle => format!(
-            "ALTER TABLE {} MODIFY ({} {})",
-            dialect.quote_ident(table),
-            dialect.quote_ident(column.name()),
-            dialect.render_column_type(column)
-        ),
-        _ => format!(
-            "ALTER TABLE {} ALTER COLUMN {} TYPE {}",
-            dialect.quote_ident(table),
-            dialect.quote_ident(column.name()),
-            dialect.render_column_type(column)
-        ),
-    }
-}
-
-fn compile_drop_index(dialect: &(impl Dialect + ?Sized), table: &str, name: &str) -> String {
-    match dialect.kind() {
-        DialectKind::MySql | DialectKind::MariaDb | DialectKind::MsSql => format!(
-            "DROP INDEX {} ON {}",
-            dialect.quote_ident(name),
-            dialect.quote_ident(table)
-        ),
-        DialectKind::Oracle => format!("DROP INDEX {}", dialect.quote_ident(name)),
-        _ => format!("DROP INDEX IF EXISTS {}", dialect.quote_ident(name)),
-    }
-}
-
-fn render_constraint(dialect: &(impl Dialect + ?Sized), constraint: &ConstraintDef) -> String {
-    match constraint {
-        ConstraintDef::Unique(constraint) => render_unique_constraint(dialect, constraint),
-        ConstraintDef::Check(constraint) => render_check_constraint(dialect, constraint),
-        ConstraintDef::ForeignKey(constraint) => render_foreign_key(dialect, constraint),
-    }
-}
-
-fn render_unique_constraint(
-    dialect: &(impl Dialect + ?Sized),
-    constraint: &UniqueConstraintDef,
-) -> String {
-    let columns = constraint
-        .columns()
-        .iter()
-        .map(|column| dialect.quote_ident(column))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        "CONSTRAINT {} UNIQUE ({columns})",
-        dialect.quote_ident(constraint.name())
-    )
-}
-
-fn render_check_constraint(
-    dialect: &(impl Dialect + ?Sized),
-    constraint: &CheckConstraintDef,
-) -> String {
-    match constraint.name() {
-        Some(name) => format!(
-            "CONSTRAINT {} CHECK ({})",
-            dialect.quote_ident(name),
-            constraint.expression()
-        ),
-        None => format!("CHECK ({})", constraint.expression()),
-    }
-}
-
-fn render_foreign_key(dialect: &(impl Dialect + ?Sized), foreign_key: &ForeignKeyDef) -> String {
-    let local_columns = foreign_key
-        .local_columns()
-        .iter()
-        .map(|column| dialect.quote_ident(column))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let remote_columns = foreign_key
-        .remote_columns()
-        .iter()
-        .map(|column| dialect.quote_ident(column))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let mut sql = String::new();
-    if let Some(name) = foreign_key.name() {
-        sql.push_str("CONSTRAINT ");
-        sql.push_str(&dialect.quote_ident(name));
-        sql.push(' ');
-    }
-    sql.push_str(&format!(
-        "FOREIGN KEY ({local_columns}) REFERENCES {} ({remote_columns})",
-        dialect.quote_ident(foreign_key.remote_table())
-    ));
-    if let Some(action) = foreign_key.on_delete_action() {
-        sql.push_str(" ON DELETE ");
-        sql.push_str(render_foreign_key_action(action));
-    }
-    if let Some(action) = foreign_key.on_update_action() {
-        sql.push_str(" ON UPDATE ");
-        sql.push_str(render_foreign_key_action(action));
-    }
-    sql
-}
-
-fn render_foreign_key_action(action: &ForeignKeyAction) -> &'static str {
-    match action {
-        ForeignKeyAction::Cascade => "CASCADE",
-        ForeignKeyAction::Restrict => "RESTRICT",
-        ForeignKeyAction::SetNull => "SET NULL",
-        ForeignKeyAction::SetDefault => "SET DEFAULT",
-        ForeignKeyAction::NoAction => "NO ACTION",
-    }
-}
-
-fn render_isolation_level(isolation_level: IsolationLevel) -> &'static str {
-    match isolation_level {
-        IsolationLevel::ReadUncommitted => "READ UNCOMMITTED",
-        IsolationLevel::ReadCommitted => "READ COMMITTED",
-        IsolationLevel::RepeatableRead => "REPEATABLE READ",
-        IsolationLevel::Serializable => "SERIALIZABLE",
-        IsolationLevel::Snapshot => "SNAPSHOT",
-    }
-}
-
-fn scope_predicate(scope: &ReflectionScope) -> String {
-    match scope.schema_name() {
-        Some(schema) => format!(" WHERE table_schema = '{}'", schema.replace('\'', "''")),
-        None => String::new(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        normalize_dialect_name, AnyDialect, Dialect, MariaDbDialect, MsSqlDialect, MySqlDialect,
-        OracleDialect, PostgresDialect, SqliteDialect,
-    };
-
-    #[test]
-    fn quotes_identifiers() {
-        assert_eq!(SqliteDialect.quote_ident("user"), "\"user\"");
-        assert_eq!(
-            PostgresDialect.quote_ident("weird\"name"),
-            "\"weird\"\"name\""
-        );
-    }
-
-    #[test]
-    fn renders_placeholders() {
-        assert_eq!(SqliteDialect.placeholder(1), "?");
-        assert_eq!(PostgresDialect.placeholder(2), "$2");
-    }
-
-    #[test]
-    fn parses_supported_dialects() {
-        assert_eq!(AnyDialect::parse("sqlite").unwrap().name(), "sqlite");
-        assert_eq!(
-            AnyDialect::parse("postgresql+asyncpg").unwrap().name(),
-            "postgresql"
-        );
-        assert_eq!(
-            AnyDialect::parse("postgresql+asyncpg://user:pass@host/db")
-                .unwrap()
-                .name(),
-            "postgresql"
-        );
-        assert_eq!(
-            AnyDialect::parse("mysql+pymysql://host/db").unwrap().name(),
-            "mysql"
-        );
-        assert_eq!(
-            AnyDialect::parse("mariadb+mariadbconnector://host/db")
-                .unwrap()
-                .name(),
-            "mariadb"
-        );
-        assert_eq!(
-            AnyDialect::parse("mssql+pyodbc://host/db").unwrap().name(),
-            "mssql"
-        );
-        assert_eq!(
-            AnyDialect::parse("oracle+oracledb://host/db")
-                .unwrap()
-                .name(),
-            "oracle"
-        );
-    }
-
-    #[test]
-    fn rejects_unknown_dialects() {
-        let error = AnyDialect::parse("db2").expect_err("dialect should fail");
-
-        assert_eq!(error.to_string(), "dialect 'db2' is not supported");
-    }
-
-    #[test]
-    fn renders_upsert_conflict_clauses() {
-        assert_eq!(
-            SqliteDialect.upsert_conflict_clause("id", &["name".to_string()]),
-            "ON CONFLICT (\"id\") DO UPDATE SET \"name\" = excluded.\"name\""
-        );
-        assert_eq!(
-            PostgresDialect.upsert_conflict_clause("id", &[]),
-            "ON CONFLICT (\"id\") DO NOTHING"
-        );
-        assert_eq!(
-            MySqlDialect.upsert_conflict_clause("id", &["name".to_string()]),
-            "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)"
-        );
-        assert_eq!(
-            MariaDbDialect.upsert_conflict_clause("id", &["name".to_string()]),
-            "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)"
-        );
-    }
-
-    #[test]
-    fn normalizes_sqlalchemy_connection_strings() {
-        assert_eq!(
-            normalize_dialect_name("postgresql+asyncpg://user:pass@localhost/db"),
-            "postgresql"
-        );
-        assert_eq!(
-            normalize_dialect_name("mysql-connector://localhost/db"),
-            "mysqlconnector"
-        );
-    }
-
-    #[test]
-    fn renders_additional_dialect_placeholders() {
-        assert_eq!(MySqlDialect.placeholder(1), "?");
-        assert_eq!(MariaDbDialect.placeholder(1), "?");
-        assert_eq!(MsSqlDialect.placeholder(1), "@P1");
-        assert_eq!(OracleDialect.placeholder(3), ":3");
     }
 }

@@ -16,3 +16,14 @@ path = "src/lib.rs"
 [dependencies]
 ormdantic-core.workspace = true
 ormdantic-schema.workspace = true
+
+[dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "hydration_planning"
+harness = false
+
+[[bench]]
+name = "nested_hydration"
+harness = false

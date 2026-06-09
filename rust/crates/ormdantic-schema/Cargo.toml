@@ -15,3 +15,10 @@ path = "src/lib.rs"
 
 [dependencies]
 ormdantic-core.workspace = true
+
+[dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "schema_core"
+harness = false

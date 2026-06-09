@@ -120,7 +120,7 @@ mod runtime {
                 DbValue::Integer(value) => Value::Integer(*value),
                 DbValue::Real(value) => Value::Float(*value),
                 DbValue::Text(value) => Value::String(value.clone()),
-                DbValue::Bool(value) => Value::Boolean(*value),
+                DbValue::Bool(value) => Value::Integer(i64::from(*value)),
             })
             .collect()
     }

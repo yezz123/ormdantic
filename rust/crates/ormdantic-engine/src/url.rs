@@ -21,7 +21,55 @@ pub fn normalize_driver_url(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_driver_url;
+    use super::{normalize_driver_url, sqlite_path};
+
+    #[test]
+    fn sqlite_path_accepts_sqlalchemy_style_urls() {
+        assert_eq!(sqlite_path("sqlite:///:memory:"), ":memory:");
+        assert_eq!(sqlite_path("sqlite+aiosqlite:///:memory:"), ":memory:");
+        assert_eq!(
+            sqlite_path("sqlite:////tmp/ormdantic.sqlite3"),
+            "/tmp/ormdantic.sqlite3"
+        );
+    }
+
+    #[test]
+    fn normalizes_python_driver_aliases_for_native_drivers() {
+        let cases = [
+            (
+                "postgresql+asyncpg://user:pass@localhost/db",
+                "postgresql://user:pass@localhost/db",
+            ),
+            (
+                "postgres+asyncpg://user:pass@localhost/db",
+                "postgres://user:pass@localhost/db",
+            ),
+            (
+                "mysql+pymysql://user:pass@localhost/db",
+                "mysql://user:pass@localhost/db",
+            ),
+            (
+                "mysql+aiomysql://user:pass@localhost/db",
+                "mysql://user:pass@localhost/db",
+            ),
+            (
+                "mysql+asyncmy://user:pass@localhost/db",
+                "mysql://user:pass@localhost/db",
+            ),
+            (
+                "mssql+pyodbc://user:pass@localhost/db?trust_cert=true",
+                "mssql://user:pass@localhost/db?trust_cert=true",
+            ),
+            (
+                "oracle+oracledb://user:pass@localhost/FREEPDB1",
+                "oracle://user:pass@localhost/FREEPDB1",
+            ),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(normalize_driver_url(input), expected);
+        }
+    }
 
     #[test]
     fn normalizes_mariadb_urls_for_mysql_driver() {
