@@ -3,7 +3,7 @@
 Ormdantic migrations now support:
 
 - Snapshot-to-snapshot generation.
-- Live SQLite autogeneration (database -> models).
+- Live autogeneration for SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle.
 - Durable migration history with checksum, status, dirty state, and metadata.
 - Explicit rollback behavior (no unsafe fallback to `up` SQL).
 - Migration artifact V2 with checksum and safety metadata.
@@ -34,12 +34,12 @@ artifact = db.migrations.create_migration(
 )
 ```
 
-## Live SQLite Autogenerate
+## Live Autogenerate
 
 ```python
 artifact = db.migrations.autogenerate(
     "20260608_live_autogen",
-    description="sync live sqlite schema with models",
+    description="sync live schema with models",
     include_tables=["flavor*"],
     exclude_tables=["legacy_*"],
 )
@@ -131,8 +131,8 @@ ormdantic migrations check migrations/
 
 ## Backend Notes
 
-- **SQLite**: unsupported generic `ALTER TABLE` operations that require table rebuild are blocked with a clear error.
-- **PostgreSQL / MySQL / MariaDB / SQL Server / Oracle**: apply/rollback history, checksum checks, and locking hooks are available; live autogenerate currently focuses on SQLite first.
+- **SQLite**: generated plans automatically use a copy/rename table rebuild for changes SQLite cannot express as direct `ALTER TABLE` statements.
+- **PostgreSQL / MySQL / MariaDB / SQL Server / Oracle**: live autogenerate, apply/rollback history, checksum checks, and locking hooks are available for tables, columns, primary keys, unique constraints, foreign keys, and indexes.
 
 ## Recipes
 
