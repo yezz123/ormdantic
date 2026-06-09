@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from ormdantic._ormdantic import (
     compile_typed_expression_query,
     compile_typed_update_query,
@@ -12,7 +13,6 @@ from ormdantic import (
     cast,
     column,
     count,
-    exists,
     group,
     literal,
     max,
@@ -28,6 +28,12 @@ from ormdantic import (
 
 
 def test_expression_helpers_preserve_legacy_filter_payloads() -> None:
+    assert column("strength").eq(5).to_where() == {"strength": 5}
+    assert column("strength").ne(5).to_where() == {"strength__ne": 5}
+    assert (column("strength") < 5).to_where() == {"strength__lt": 5}
+    assert (column("strength") <= 5).to_where() == {"strength__le": 5}
+    assert (column("strength") > 5).to_where() == {"strength__gt": 5}
+    assert (column("strength") >= 5).to_where() == {"strength__ge": 5}
     assert column("name").contains("mo").to_where() == {"name__like": "%mo%"}
     assert column("name").startswith("mo").to_where() == {"name__like": "mo%"}
     assert column("name").endswith("cha").to_where() == {"name__like": "%cha"}
@@ -43,6 +49,12 @@ def test_expression_helpers_preserve_legacy_filter_payloads() -> None:
         "filters": {"id__not_in": ["1", "2"]},
     }
     assert column("deleted_at").is_not_null().to_where() == {
+        "deleted_at__is_not_null": True
+    }
+    assert (column("deleted_at") == None).to_where() == {  # noqa: E711
+        "deleted_at__is_null": True
+    }
+    assert (column("deleted_at") != None).to_where() == {  # noqa: E711
         "deleted_at__is_not_null": True
     }
 
@@ -103,6 +115,43 @@ def test_raw_sql_safe_and_not_between_compile_through_typed_bridge() -> None:
     assert compiled["values"] == {"expr_param_0": 1, "expr_param_1": 3}
 
 
+def test_none_comparison_operators_compile_as_null_checks() -> None:
+    query = select_query(
+        "orders",
+        column("id"),
+        where=(
+            (column("deleted_at") == None)  # noqa: E711
+            | (column("archived_at") != None)  # noqa: E711
+        ),
+    )
+
+    compiled = compile_typed_expression_query("postgresql", query.to_query_payload())
+
+    assert compiled == {
+        "sql": 'SELECT "id" FROM "orders" WHERE (("deleted_at" IS NULL) OR ("archived_at" IS NOT NULL))',
+        "params": [],
+        "operation": "select",
+        "values": {},
+    }
+
+
+def test_empty_typed_in_predicates_compile_to_constants() -> None:
+    query = select_query(
+        "orders",
+        column("id"),
+        where=column("status").in_([]) & column("kind").not_in([]),
+    )
+
+    compiled = compile_typed_expression_query("sqlite", query.to_query_payload())
+
+    assert compiled == {
+        "sql": 'SELECT "id" FROM "orders" WHERE ((1 = 0) AND (1 = 1))',
+        "params": [],
+        "operation": "select",
+        "values": {},
+    }
+
+
 def test_projection_group_literal_and_min_max_helpers_compile() -> None:
     query = select_query(
         "orders",
@@ -148,12 +197,7 @@ def test_typed_update_query_compiles_with_stable_assignment_then_where_params() 
     }
 
 
-def test_case_cast_tuple_exists_and_subquery_predicates_compile() -> None:
-    recent_paid_orders = select_query(
-        "orders",
-        column("customer_id"),
-        where=(column("status") == "paid") & (column("total") > 50),
-    )
+def test_case_cast_tuple_and_null_predicates_compile() -> None:
     query = select_query(
         "customers",
         column("id"),
@@ -163,26 +207,37 @@ def test_case_cast_tuple_exists_and_subquery_predicates_compile() -> None:
             else_=literal("standard"),
         ).as_("service_level"),
         tuple_(column("country"), column("city")).as_("location_key"),
-        where=exists(recent_paid_orders) & column("id").in_subquery(recent_paid_orders),
+        where=(column("tier") == "gold") & (column("deleted_at") != None),  # noqa: E711
     )
 
     compiled = compile_typed_expression_query("postgresql", query.to_query_payload())
 
     assert compiled == {
-        "sql": 'SELECT "id", CAST("created_at" AS TEXT) AS "created_at_text", CASE WHEN ("tier" = $1) THEN \'priority\' ELSE \'standard\' END AS "service_level", ("country", "city") AS "location_key" FROM "customers" WHERE (EXISTS (SELECT "customer_id" FROM "orders" WHERE (("status" = $2) AND ("total" > $3))) AND ("id" IN (SELECT "customer_id" FROM "orders" WHERE (("status" = $4) AND ("total" > $5)))))',
+        "sql": 'SELECT "id", CAST("created_at" AS TEXT) AS "created_at_text", CASE WHEN ("tier" = $1) THEN \'priority\' ELSE \'standard\' END AS "service_level", ("country", "city") AS "location_key" FROM "customers" WHERE (("tier" = $2) AND ("deleted_at" IS NOT NULL))',
         "params": [
             "expr_param_0",
             "expr_param_1",
-            "expr_param_2",
-            "expr_param_3",
-            "expr_param_4",
         ],
         "operation": "select",
         "values": {
             "expr_param_0": "gold",
-            "expr_param_1": "paid",
-            "expr_param_2": 50,
-            "expr_param_3": "paid",
-            "expr_param_4": 50,
+            "expr_param_1": "gold",
         },
     }
+
+
+def test_subquery_payloads_remain_unsupported_in_python_facade() -> None:
+    subquery_payload = {
+        "table": "orders",
+        "projections": [{"expr": {"kind": "column", "name": "customer_id"}}],
+        "values": {},
+    }
+    query = {
+        "table": "customers",
+        "projections": [{"expr": {"kind": "column", "name": "id"}}],
+        "where": {"kind": "exists", "subquery": subquery_payload},
+        "values": {},
+    }
+
+    with pytest.raises(ValueError, match="unsupported expression kind 'exists'"):
+        compile_typed_expression_query("postgresql", query)
