@@ -81,18 +81,6 @@ class SqlExpression:
                 ],
                 "negated": self.data.get("negated", False),
             }
-        if kind == "in_subquery":
-            return {
-                "kind": "in_subquery",
-                "expr": expression_payload(self.data["expr"], ctx),
-                "subquery": self.data["subquery"].to_query_payload(ctx),
-                "negated": self.data.get("negated", False),
-            }
-        if kind == "exists":
-            return {
-                "kind": "exists",
-                "subquery": self.data["subquery"].to_query_payload(ctx),
-            }
         if kind == "case":
             return {
                 "kind": "case",
@@ -142,9 +130,13 @@ class SqlExpression:
         return OrderExpression(self, "desc", nulls)
 
     def eq(self, value: Any) -> "QueryExpression":
+        if value is None:
+            return self.is_null()
         return predicate("eq", self, value)
 
     def ne(self, value: Any) -> "QueryExpression":
+        if value is None:
+            return self.is_not_null()
         return predicate("ne", self, value)
 
     def lt(self, value: Any) -> "QueryExpression":
@@ -229,15 +221,6 @@ class SqlExpression:
             ),
         )
 
-    def in_subquery(self, query: "SelectExpressionQuery") -> "QueryExpression":
-        return QueryExpression(
-            "leaf",
-            expr=SqlExpression(
-                "in_subquery",
-                {"expr": self, "subquery": query, "negated": False},
-            ),
-        )
-
     def not_in(self, values: Sequence[Any]) -> "QueryExpression":
         return QueryExpression(
             "leaf",
@@ -249,15 +232,6 @@ class SqlExpression:
                     "values": [bind_value(value) for value in values],
                     "negated": True,
                 },
-            ),
-        )
-
-    def not_in_subquery(self, query: "SelectExpressionQuery") -> "QueryExpression":
-        return QueryExpression(
-            "leaf",
-            expr=SqlExpression(
-                "in_subquery",
-                {"expr": self, "subquery": query, "negated": True},
             ),
         )
 
@@ -563,11 +537,6 @@ def case(
 def tuple_(*values: SerializableExpression | Any) -> SqlExpression:
     """Create a SQL tuple expression."""
     return SqlExpression("tuple", {"values": values})
-
-
-def exists(query: SelectExpressionQuery) -> QueryExpression:
-    """Create an EXISTS predicate for a typed subquery."""
-    return QueryExpression("leaf", expr=SqlExpression("exists", {"subquery": query}))
 
 
 def binary(op: str, left: Any, right: Any) -> SqlExpression:
