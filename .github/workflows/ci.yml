@@ -94,68 +94,18 @@ jobs:
 
   database-services:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: mysql
-          MYSQL_DATABASE: mysql
-        options: >-
-          --health-cmd "mysqladmin ping -hmysql -uroot -pmysql"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-        ports:
-          - 3306:3306
-      mariadb:
-        image: mariadb:11
-        env:
-          MARIADB_ROOT_PASSWORD: mariadb
-          MARIADB_DATABASE: mariadb
-        options: >-
-          --health-cmd "mariadb-admin ping -hmariadb -uroot -pmariadb"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-        ports:
-          - 3307:3306
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p ormdantic-engine
-        env:
-          ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
-          ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
-          ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
-
-  optional-enterprise-engines:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          persist-credentials: false
+          python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
-
-      - run: cargo test -p ormdantic-engine --features mssql,oracle --test mssql_exec --test oracle_exec
-        env:
-          ORMDANTIC_MSSQL_URL: ${{ secrets.ORMDANTIC_MSSQL_URL }}
-          ORMDANTIC_ORACLE_URL: ${{ secrets.ORMDANTIC_ORACLE_URL }}
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
+      - run: bash docker/databases/run-tests.sh
 
   check:
     if: always()
