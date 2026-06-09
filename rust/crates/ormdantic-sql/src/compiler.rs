@@ -141,27 +141,6 @@ fn render_select_ast(
     }
 
     let mut sql = String::new();
-    if !select.ctes.is_empty() {
-        let recursive = select.ctes.iter().any(|cte| cte.recursive);
-        sql.push_str(if recursive {
-            "WITH RECURSIVE "
-        } else {
-            "WITH "
-        });
-        sql.push_str(
-            &select
-                .ctes
-                .iter()
-                .map(|cte| {
-                    render_select_ast(dialect, &cte.query, params, bind_index)
-                        .map(|query| format!("{} AS ({query})", dialect.quote_ident(&cte.name)))
-                })
-                .collect::<OrmdanticResult<Vec<_>>>()?
-                .join(", "),
-        );
-        sql.push(' ');
-    }
-
     sql.push_str("SELECT ");
     if select.distinct {
         sql.push_str("DISTINCT ");
@@ -183,7 +162,7 @@ fn render_select_ast(
 
     if let Some(source) = &select.from {
         sql.push_str(" FROM ");
-        sql.push_str(&render_table_source(dialect, source, params, bind_index)?);
+        sql.push_str(&render_table_source(dialect, source));
     }
     for join in &select.joins {
         sql.push(' ');
@@ -195,12 +174,7 @@ fn render_select_ast(
             JoinKind::Cross => "CROSS JOIN",
         });
         sql.push(' ');
-        sql.push_str(&render_table_source(
-            dialect,
-            &join.source,
-            params,
-            bind_index,
-        )?);
+        sql.push_str(&render_table_source(dialect, &join.source));
         if let Some(on) = &join.on {
             sql.push_str(" ON ");
             sql.push_str(&render_expr(dialect, on, params, bind_index)?);
@@ -279,7 +253,7 @@ fn render_dml_ast(
                 .join(", ");
             let mut sql = format!(
                 "INSERT INTO {} ({}) VALUES {rendered_rows}",
-                render_table_source(dialect, table, params, bind_index)?,
+                render_table_source(dialect, table),
                 column_list(dialect, columns)
             );
             append_returning(dialect, &mut sql, returning, params, bind_index)?;
@@ -309,7 +283,7 @@ fn render_dml_ast(
                 .join(", ");
             let mut sql = format!(
                 "UPDATE {} SET {assignments}",
-                render_table_source(dialect, table, params, bind_index)?
+                render_table_source(dialect, table)
             );
             if let Some(where_expr) = where_expr {
                 sql.push_str(" WHERE ");
@@ -323,10 +297,7 @@ fn render_dml_ast(
             where_expr,
             returning,
         } => {
-            let mut sql = format!(
-                "DELETE FROM {}",
-                render_table_source(dialect, table, params, bind_index)?
-            );
+            let mut sql = format!("DELETE FROM {}", render_table_source(dialect, table));
             if let Some(where_expr) = where_expr {
                 sql.push_str(" WHERE ");
                 sql.push_str(&render_expr(dialect, where_expr, params, bind_index)?);
@@ -363,7 +334,7 @@ fn render_dml_ast(
                 .join(", ");
             let mut sql = format!(
                 "INSERT INTO {} ({}) VALUES {rendered_rows}",
-                render_table_source(dialect, table, params, bind_index)?,
+                render_table_source(dialect, table),
                 column_list(dialect, columns)
             );
             let target = conflict_target
@@ -434,42 +405,13 @@ fn render_expr(
                 render_expr(dialect, expr, params, bind_index)?
             ),
         },
-        Expr::Function { name, args, over } => {
+        Expr::Function { name, args } => {
             let args = args
                 .iter()
                 .map(|arg| render_expr(dialect, arg, params, bind_index))
                 .collect::<OrmdanticResult<Vec<_>>>()?
                 .join(", ");
-            let mut sql = format!("{name}({args})");
-            if let Some(window) = over {
-                sql.push_str(" OVER (");
-                let mut parts = Vec::new();
-                if !window.partition_by.is_empty() {
-                    parts.push(format!(
-                        "PARTITION BY {}",
-                        window
-                            .partition_by
-                            .iter()
-                            .map(|expr| render_expr(dialect, expr, params, bind_index))
-                            .collect::<OrmdanticResult<Vec<_>>>()?
-                            .join(", ")
-                    ));
-                }
-                if !window.order_by.is_empty() {
-                    parts.push(format!(
-                        "ORDER BY {}",
-                        window
-                            .order_by
-                            .iter()
-                            .map(|order| render_order_expr(dialect, order, params, bind_index))
-                            .collect::<OrmdanticResult<Vec<_>>>()?
-                            .join(", ")
-                    ));
-                }
-                sql.push_str(&parts.join(" "));
-                sql.push(')');
-            }
-            sql
+            format!("{name}({args})")
         }
         Expr::Between { expr, low, high } => format!(
             "({} BETWEEN {} AND {})",
@@ -482,6 +424,13 @@ fn render_expr(
             values,
             negated,
         } => {
+            if values.is_empty() {
+                return Ok(if *negated {
+                    "(1 = 1)".to_string()
+                } else {
+                    "(1 = 0)".to_string()
+                });
+            }
             let operator = if *negated { "NOT IN" } else { "IN" };
             format!(
                 "({} {operator} ({}))",
@@ -493,22 +442,6 @@ fn render_expr(
                     .join(", ")
             )
         }
-        Expr::InSubquery {
-            expr,
-            subquery,
-            negated,
-        } => {
-            let operator = if *negated { "NOT IN" } else { "IN" };
-            format!(
-                "({} {operator} ({}))",
-                render_expr(dialect, expr, params, bind_index)?,
-                render_select_ast(dialect, subquery, params, bind_index)?
-            )
-        }
-        Expr::Exists(subquery) => format!(
-            "EXISTS ({})",
-            render_select_ast(dialect, subquery, params, bind_index)?
-        ),
         Expr::Case { whens, else_expr } => {
             let mut sql = "CASE".to_string();
             for (condition, value) in whens {
@@ -540,13 +473,8 @@ fn render_expr(
     })
 }
 
-fn render_table_source(
-    dialect: &impl Dialect,
-    source: &TableSource,
-    params: &mut Vec<String>,
-    bind_index: &mut usize,
-) -> OrmdanticResult<String> {
-    Ok(match source {
+fn render_table_source(dialect: &impl Dialect, source: &TableSource) -> String {
+    match source {
         TableSource::Table { name, alias } => match alias {
             Some(alias) => format!(
                 "{} AS {}",
@@ -555,13 +483,8 @@ fn render_table_source(
             ),
             None => dialect.quote_ident(name),
         },
-        TableSource::Subquery { subquery, alias } => format!(
-            "({}) AS {}",
-            render_select_ast(dialect, subquery, params, bind_index)?,
-            dialect.quote_ident(alias)
-        ),
         TableSource::RawSafe(sql) => sql.clone(),
-    })
+    }
 }
 
 fn render_order_expr(

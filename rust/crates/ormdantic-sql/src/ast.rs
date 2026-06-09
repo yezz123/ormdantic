@@ -184,21 +184,6 @@ pub enum OrderNulls {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WindowSpec {
-    pub(crate) partition_by: Vec<Expr>,
-    pub(crate) order_by: Vec<OrderExpr>,
-}
-
-impl WindowSpec {
-    pub fn new(partition_by: Vec<Expr>, order_by: Vec<OrderExpr>) -> Self {
-        Self {
-            partition_by,
-            order_by,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Column {
         table: Option<String>,
@@ -218,7 +203,6 @@ pub enum Expr {
     Function {
         name: String,
         args: Vec<Expr>,
-        over: Option<WindowSpec>,
     },
     Between {
         expr: Box<Expr>,
@@ -230,12 +214,6 @@ pub enum Expr {
         values: Vec<Expr>,
         negated: bool,
     },
-    InSubquery {
-        expr: Box<Expr>,
-        subquery: Box<SelectAst>,
-        negated: bool,
-    },
-    Exists(Box<SelectAst>),
     Case {
         whens: Vec<(Expr, Expr)>,
         else_expr: Option<Box<Expr>>,
@@ -297,14 +275,7 @@ impl Projection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TableSource {
-    Table {
-        name: String,
-        alias: Option<String>,
-    },
-    Subquery {
-        subquery: Box<SelectAst>,
-        alias: String,
-    },
+    Table { name: String, alias: Option<String> },
     RawSafe(String),
 }
 
@@ -323,8 +294,6 @@ impl TableSource {
         }
     }
 }
-
-pub type Subquery = SelectAst;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JoinKind {
@@ -349,28 +318,6 @@ impl JoinAst {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CteAst {
-    pub(crate) name: String,
-    pub(crate) query: Box<SelectAst>,
-    pub(crate) recursive: bool,
-}
-
-impl CteAst {
-    pub fn new(name: impl Into<String>, query: SelectAst) -> Self {
-        Self {
-            name: name.into(),
-            query: Box::new(query),
-            recursive: false,
-        }
-    }
-
-    pub fn recursive(mut self, recursive: bool) -> Self {
-        self.recursive = recursive;
-        self
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectAst {
     pub(crate) projections: Vec<Projection>,
     pub(crate) from: Option<TableSource>,
@@ -382,7 +329,6 @@ pub struct SelectAst {
     pub(crate) distinct: bool,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
-    pub(crate) ctes: Vec<CteAst>,
 }
 
 impl SelectAst {
@@ -398,7 +344,6 @@ impl SelectAst {
             distinct: false,
             limit: None,
             offset: None,
-            ctes: Vec::new(),
         }
     }
 
@@ -444,11 +389,6 @@ impl SelectAst {
 
     pub fn offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
-        self
-    }
-
-    pub fn with_cte(mut self, cte: CteAst) -> Self {
-        self.ctes.push(cte);
         self
     }
 
