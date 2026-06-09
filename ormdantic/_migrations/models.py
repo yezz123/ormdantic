@@ -306,8 +306,9 @@ class SchemaSnapshot:
     def read(
         cls, path: str | PathLike[str], *, format: str | None = None
     ) -> "SchemaSnapshot":
-        document = Path(path).read_text()
-        if document_format(path, format) == "toml":
+        input_path = Path(path)
+        document = input_path.read_text()
+        if document_format(str(input_path), format) == "toml":
             return cls.from_toml(document)
         return cls.from_json(document)
 
@@ -329,7 +330,7 @@ class SchemaSnapshot:
     def write(self, path: str | PathLike[str], *, format: str | None = None) -> None:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        if document_format(path, format) == "toml":
+        if document_format(str(output), format) == "toml":
             output.write_text(self.to_toml())
         else:
             output.write_text(self.to_json())
