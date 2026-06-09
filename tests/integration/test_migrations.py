@@ -56,8 +56,11 @@ def test_schema_snapshot_roundtrip_diff_and_dry_run() -> None:
     assert diff.has_unsafe_operations
     assert not diff.has_destructive_operations
 
-    with pytest.raises(ValueError, match="require table rebuild"):
-        new_db.migrations.generate_plan(old_snapshot, roundtrip, dialect="sqlite")
+    plan = new_db.migrations.generate_plan(old_snapshot, roundtrip, dialect="sqlite")
+    assert plan.safety["requires_rebuild"] is True
+    assert any(
+        operation.metadata.get("sqlite_rebuild") for operation in plan.operations
+    )
 
 
 @pytest.mark.asyncio
@@ -133,6 +136,68 @@ def test_generated_diff_sql_renders_supported_dialects() -> None:
             new_db.migrations.dry_run(old_snapshot, new_snapshot, dialect=dialect)
             == sql
         )
+
+
+@pytest.mark.asyncio
+async def test_sqlite_rebuild_plan_preserves_common_columns(tmp_path) -> None:
+    old_db = Ormdantic("sqlite:///:memory:")
+
+    @old_db.table("flavor", pk="id")
+    class OldFlavor(BaseModel):
+        id: str
+        name: str
+        code: str
+
+    new_db = Ormdantic("sqlite:///:memory:")
+
+    @new_db.table("flavor", pk="id")
+    class NewFlavor(BaseModel):
+        id: str
+        name: str
+
+    old_snapshot = old_db.migrations.snapshot()
+    new_snapshot = new_db.migrations.snapshot()
+    plan = new_db.migrations.generate_plan(old_snapshot, new_snapshot, dialect="sqlite")
+
+    assert plan.safety["requires_rebuild"] is True
+    assert any('DROP TABLE "flavor"' == operation.sql for operation in plan.operations)
+    assert any(
+        'INSERT INTO "__ormdantic_rebuild_flavor" ("id", "name") '
+        'SELECT "id", "name" FROM "flavor"' == operation.sql
+        for operation in plan.operations
+    )
+
+    url = f"sqlite:///{tmp_path / 'rebuild.sqlite3'}"
+    runtime = importlib.import_module("ormdantic._ormdantic")
+    runtime.execute_native(
+        url,
+        (
+            'CREATE TABLE "flavor" ('
+            '"id" TEXT PRIMARY KEY NOT NULL, '
+            '"name" TEXT NOT NULL, '
+            '"code" TEXT NOT NULL)'
+        ),
+        [],
+    )
+    runtime.execute_native(
+        url,
+        "INSERT INTO flavor (id, name, code) VALUES ('f1', 'vanilla', 'v')",
+        [],
+    )
+
+    db = Ormdantic(url)
+    assert (
+        await db.migrations.apply("001_rebuild_flavor", plan, allow_destructive=True)
+        is True
+    )
+    columns = runtime.execute_native(
+        url,
+        "SELECT name FROM pragma_table_info('flavor') ORDER BY cid",
+        [],
+    )["rows"]
+    assert columns == [["id"], ["name"]]
+    rows = runtime.execute_native(url, "SELECT id, name FROM flavor", [])["rows"]
+    assert rows == [["f1", "vanilla"]]
 
 
 @pytest.mark.asyncio
