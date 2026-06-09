@@ -966,6 +966,7 @@ impl SchemaDiffer {
             };
             diff_columns(&mut operations, from_table, to_table);
             diff_indexes(&mut operations, from_table, to_table);
+            diff_constraints(&mut operations, from_table, to_table);
         }
 
         Ok(SchemaDiff::new(operations))
@@ -1052,6 +1053,66 @@ fn diff_indexes(operations: &mut Vec<SchemaOperation>, from: &TableDef, to: &Tab
             });
         }
     }
+}
+
+fn diff_constraints(operations: &mut Vec<SchemaOperation>, from: &TableDef, to: &TableDef) {
+    let from_constraints = named_constraints(from);
+    let to_constraints = named_constraints(to);
+
+    for (name, constraint) in &to_constraints {
+        if !from_constraints.contains_key(name) {
+            operations.push(SchemaOperation::AddConstraint {
+                table: to.name().to_string(),
+                constraint: constraint.clone(),
+            });
+        }
+    }
+    for name in from_constraints.keys() {
+        if !to_constraints.contains_key(name) {
+            operations.push(SchemaOperation::DropConstraint {
+                table: from.name().to_string(),
+                name: name.clone(),
+            });
+        }
+    }
+    for (name, from_constraint) in from_constraints {
+        if let Some(to_constraint) = to_constraints.get(&name) {
+            if &from_constraint != to_constraint {
+                operations.push(SchemaOperation::DropConstraint {
+                    table: from.name().to_string(),
+                    name: name.clone(),
+                });
+                operations.push(SchemaOperation::AddConstraint {
+                    table: to.name().to_string(),
+                    constraint: to_constraint.clone(),
+                });
+            }
+        }
+    }
+}
+
+fn named_constraints(table: &TableDef) -> BTreeMap<String, ConstraintDef> {
+    let mut constraints = BTreeMap::new();
+    for constraint in table.unique_constraints() {
+        constraints.insert(
+            constraint.name().to_string(),
+            ConstraintDef::Unique(constraint.clone()),
+        );
+    }
+    for constraint in table.check_constraints() {
+        if let Some(name) = constraint.name() {
+            constraints.insert(name.to_string(), ConstraintDef::Check(constraint.clone()));
+        }
+    }
+    for constraint in table.foreign_keys() {
+        if let Some(name) = constraint.name() {
+            constraints.insert(
+                name.to_string(),
+                ConstraintDef::ForeignKey(constraint.clone()),
+            );
+        }
+    }
+    constraints
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1293,8 +1354,9 @@ impl ColumnAlias {
 #[cfg(test)]
 mod tests {
     use super::{
-        ColumnAlias, ColumnDef, FieldKind, RelationshipCardinality, RelationshipDef,
-        SchemaRegistry, TableDef,
+        CheckConstraintDef, ColumnAlias, ColumnDef, ConstraintDef, FieldKind,
+        RelationshipCardinality, RelationshipDef, SchemaDef, SchemaDiffer, SchemaOperation,
+        SchemaRegistry, SchemaSnapshot, TableDef, UniqueConstraintDef,
     };
 
     #[test]
@@ -1431,5 +1493,86 @@ mod tests {
             error.to_string(),
             "relationship 'coffee.flavor' targets unknown table 'flavors'"
         );
+    }
+
+    #[test]
+    fn schema_differ_reports_named_constraint_changes() {
+        let before = TableDef::from_parts(
+            "flavor",
+            "Flavor",
+            "id",
+            vec![
+                ColumnDef::new("id", FieldKind::String).primary_key(true),
+                ColumnDef::new("name", FieldKind::String),
+                ColumnDef::new("code", FieldKind::String),
+            ],
+            Vec::new(),
+            vec![UniqueConstraintDef::new(
+                "flavor_unique_0",
+                vec!["name".to_string()],
+            )],
+            Vec::new(),
+        )
+        .with_check_constraints(vec![
+            CheckConstraintDef::new("LENGTH(name) >= 2").named("flavor_name_check")
+        ]);
+        let after = TableDef::from_parts(
+            "flavor",
+            "Flavor",
+            "id",
+            vec![
+                ColumnDef::new("id", FieldKind::String).primary_key(true),
+                ColumnDef::new("name", FieldKind::String),
+                ColumnDef::new("code", FieldKind::String),
+            ],
+            Vec::new(),
+            vec![UniqueConstraintDef::new(
+                "flavor_unique_0",
+                vec!["name".to_string(), "code".to_string()],
+            )],
+            Vec::new(),
+        )
+        .with_check_constraints(vec![
+            CheckConstraintDef::new("LENGTH(code) >= 2").named("flavor_code_check")
+        ]);
+        let diff = SchemaDiffer::diff(
+            &SchemaSnapshot::new(SchemaDef::from_tables(vec![before])),
+            &SchemaSnapshot::new(SchemaDef::from_tables(vec![after])),
+        )
+        .expect("constraint diff should compile");
+        let operations = diff.operations();
+
+        assert!(operations.iter().any(|operation| {
+            matches!(
+                operation,
+                SchemaOperation::DropConstraint { table, name }
+                    if table == "flavor" && name == "flavor_name_check"
+            )
+        }));
+        assert!(operations.iter().any(|operation| {
+            matches!(
+                operation,
+                SchemaOperation::AddConstraint {
+                    table,
+                    constraint: ConstraintDef::Check(constraint),
+                } if table == "flavor" && constraint.name() == Some("flavor_code_check")
+            )
+        }));
+        assert!(operations.iter().any(|operation| {
+            matches!(
+                operation,
+                SchemaOperation::DropConstraint { table, name }
+                    if table == "flavor" && name == "flavor_unique_0"
+            )
+        }));
+        assert!(operations.iter().any(|operation| {
+            matches!(
+                operation,
+                SchemaOperation::AddConstraint {
+                    table,
+                    constraint: ConstraintDef::Unique(constraint),
+                } if table == "flavor" && constraint.columns() == ["name", "code"]
+            )
+        }));
     }
 }

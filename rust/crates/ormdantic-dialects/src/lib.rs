@@ -124,27 +124,20 @@ pub trait Dialect {
             SchemaOperation::DropTable { name } => {
                 vec![format!("DROP TABLE IF EXISTS {}", self.quote_ident(name))]
             }
-            SchemaOperation::AddColumn { table, column } => vec![format!(
-                "ALTER TABLE {} ADD COLUMN {}",
-                self.quote_ident(table),
-                render_column_def(self, column)
-            )],
-            SchemaOperation::DropColumn { table, column } => vec![format!(
-                "ALTER TABLE {} DROP COLUMN {}",
-                self.quote_ident(table),
-                self.quote_ident(column)
-            )],
-            SchemaOperation::AlterColumn { table, column } => vec![format!(
-                "ALTER TABLE {} ALTER COLUMN {} TYPE {}",
-                self.quote_ident(table),
-                self.quote_ident(column.name()),
-                self.render_column_type(column)
-            )],
+            SchemaOperation::AddColumn { table, column } => {
+                vec![compile_add_column(self, table, column)]
+            }
+            SchemaOperation::DropColumn { table, column } => {
+                vec![compile_drop_column(self, table, column)]
+            }
+            SchemaOperation::AlterColumn { table, column } => {
+                vec![compile_alter_column(self, table, column)]
+            }
             SchemaOperation::CreateIndex { table, index } => {
                 vec![compile_create_index(self, table, index)]
             }
-            SchemaOperation::DropIndex { name, .. } => {
-                vec![format!("DROP INDEX IF EXISTS {}", self.quote_ident(name))]
+            SchemaOperation::DropIndex { table, name } => {
+                vec![compile_drop_index(self, table, name)]
             }
             SchemaOperation::AddConstraint { table, constraint } => vec![format!(
                 "ALTER TABLE {} ADD {}",
@@ -883,6 +876,76 @@ fn compile_create_index(
         dialect.quote_ident(index.name()),
         dialect.quote_ident(table)
     )
+}
+
+fn compile_add_column(
+    dialect: &(impl Dialect + ?Sized),
+    table: &str,
+    column: &ColumnDef,
+) -> String {
+    match dialect.kind() {
+        DialectKind::MsSql => format!(
+            "ALTER TABLE {} ADD {}",
+            dialect.quote_ident(table),
+            render_column_def(dialect, column)
+        ),
+        DialectKind::Oracle => format!(
+            "ALTER TABLE {} ADD ({})",
+            dialect.quote_ident(table),
+            render_column_def(dialect, column)
+        ),
+        _ => format!(
+            "ALTER TABLE {} ADD COLUMN {}",
+            dialect.quote_ident(table),
+            render_column_def(dialect, column)
+        ),
+    }
+}
+
+fn compile_drop_column(dialect: &(impl Dialect + ?Sized), table: &str, column: &str) -> String {
+    format!(
+        "ALTER TABLE {} DROP COLUMN {}",
+        dialect.quote_ident(table),
+        dialect.quote_ident(column)
+    )
+}
+
+fn compile_alter_column(
+    dialect: &(impl Dialect + ?Sized),
+    table: &str,
+    column: &ColumnDef,
+) -> String {
+    match dialect.kind() {
+        DialectKind::MySql | DialectKind::MariaDb => format!(
+            "ALTER TABLE {} MODIFY COLUMN {}",
+            dialect.quote_ident(table),
+            render_column_def(dialect, column)
+        ),
+        DialectKind::Oracle => format!(
+            "ALTER TABLE {} MODIFY ({} {})",
+            dialect.quote_ident(table),
+            dialect.quote_ident(column.name()),
+            dialect.render_column_type(column)
+        ),
+        _ => format!(
+            "ALTER TABLE {} ALTER COLUMN {} TYPE {}",
+            dialect.quote_ident(table),
+            dialect.quote_ident(column.name()),
+            dialect.render_column_type(column)
+        ),
+    }
+}
+
+fn compile_drop_index(dialect: &(impl Dialect + ?Sized), table: &str, name: &str) -> String {
+    match dialect.kind() {
+        DialectKind::MySql | DialectKind::MariaDb | DialectKind::MsSql => format!(
+            "DROP INDEX {} ON {}",
+            dialect.quote_ident(name),
+            dialect.quote_ident(table)
+        ),
+        DialectKind::Oracle => format!("DROP INDEX {}", dialect.quote_ident(name)),
+        _ => format!("DROP INDEX IF EXISTS {}", dialect.quote_ident(name)),
+    }
 }
 
 fn render_constraint(dialect: &(impl Dialect + ?Sized), constraint: &ConstraintDef) -> String {

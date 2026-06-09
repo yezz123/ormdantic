@@ -57,12 +57,34 @@ mod runtime {
         }
 
         pub fn begin(&mut self) -> OrmdanticResult<()> {
-            self.execute("BEGIN TRANSACTION", &[]).map(|_| ())
+            self.simple_execute("BEGIN TRANSACTION")
+        }
+
+        pub fn commit(&mut self) -> OrmdanticResult<()> {
+            self.simple_execute("COMMIT TRANSACTION")
+        }
+
+        pub fn rollback(&mut self) -> OrmdanticResult<()> {
+            self.simple_execute("ROLLBACK TRANSACTION")
         }
 
         pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
-            self.execute(&format!("SAVE TRANSACTION {name}"), &[])
-                .map(|_| ())
+            self.simple_execute(&format!("SAVE TRANSACTION {name}"))
+        }
+
+        pub fn rollback_to_savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
+            self.simple_execute(&format!("ROLLBACK TRANSACTION {name}"))
+        }
+
+        fn simple_execute(&mut self, sql: &str) -> OrmdanticResult<()> {
+            let stream = self
+                .runtime
+                .block_on(self.client.simple_query(sql))
+                .map_err(sql_error)?;
+            self.runtime
+                .block_on(stream.into_results())
+                .map_err(sql_error)?;
+            Ok(())
         }
     }
 
@@ -194,7 +216,19 @@ impl MsSqlConnection {
         Err(unavailable())
     }
 
+    pub fn commit(&mut self) -> OrmdanticResult<()> {
+        Err(unavailable())
+    }
+
+    pub fn rollback(&mut self) -> OrmdanticResult<()> {
+        Err(unavailable())
+    }
+
     pub fn savepoint(&mut self, _name: &str) -> OrmdanticResult<()> {
+        Err(unavailable())
+    }
+
+    pub fn rollback_to_savepoint(&mut self, _name: &str) -> OrmdanticResult<()> {
         Err(unavailable())
     }
 }

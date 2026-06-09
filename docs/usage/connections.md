@@ -50,3 +50,7 @@ Native integration tests are gated by environment variables:
 - `ORMDANTIC_MARIADB_URL`
 - `ORMDANTIC_MSSQL_URL`
 - `ORMDANTIC_ORACLE_URL`
+
+The local database matrix in `docker/databases/` starts PostgreSQL, MySQL,
+MariaDB, SQL Server, and Oracle containers and exports matching test URLs for
+the Python migration smoke tests and Rust engine tests.

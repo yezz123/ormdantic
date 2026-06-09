@@ -197,6 +197,7 @@ impl NativeConnection {
     pub fn commit(&mut self) -> OrmdanticResult<()> {
         match self {
             Self::MySql(connection) | Self::MariaDb(connection) => connection.commit(),
+            Self::MsSql(connection) => connection.commit(),
             Self::Oracle(connection) => connection.commit(),
             _ => self.execute("COMMIT", &[]).map(|_| ()),
         }
@@ -205,6 +206,7 @@ impl NativeConnection {
     pub fn rollback(&mut self) -> OrmdanticResult<()> {
         match self {
             Self::MySql(connection) | Self::MariaDb(connection) => connection.rollback(),
+            Self::MsSql(connection) => connection.rollback(),
             Self::Oracle(connection) => connection.rollback(),
             _ => self.execute("ROLLBACK", &[]).map(|_| ()),
         }
@@ -216,6 +218,10 @@ impl NativeConnection {
     }
 
     pub fn begin_nested(&mut self, name: SavepointName) -> OrmdanticResult<()> {
+        if let Self::MsSql(connection) = self {
+            return connection.savepoint(name.as_str());
+        }
+
         let dialect = AnyDialect::parse(self.dialect())?;
         let sql = dialect.savepoint_sql(&name);
         if sql.is_empty() {
@@ -227,6 +233,10 @@ impl NativeConnection {
 
     pub fn rollback_to_savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
         let name = SavepointName::new(name.to_string())?;
+        if let Self::MsSql(connection) = self {
+            return connection.rollback_to_savepoint(name.as_str());
+        }
+
         let dialect = AnyDialect::parse(self.dialect())?;
         let sql = dialect.rollback_to_savepoint_sql(&name);
         if sql.is_empty() {

@@ -14,3 +14,5 @@
 - SQLite is the local baseline for all ORM behavior tests.
 - PostgreSQL, MySQL, and MariaDB have gated Rust integration tests that run when `ORMDANTIC_POSTGRES_URL`, `ORMDANTIC_MYSQL_URL`, or `ORMDANTIC_MARIADB_URL` are set.
 - SQL Server and Oracle URLs are parsed and their SQL dialects are represented. Their native runtimes are available behind optional Cargo features because they add larger enterprise-driver dependencies.
+- Live migration autogenerate reflects core table metadata across SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle.
+- `docker/databases/` provides a local Compose matrix for PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle, plus a runner for the external migration smoke tests, live autogenerate checks, and Rust engine tests.

@@ -4,4 +4,4 @@ set -e
 set -x
 
 # Serve the docs
-uv run zensical serve
+uv run --group docs zensical serve

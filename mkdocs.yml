@@ -148,6 +148,7 @@ nav:
       - Query Expressions: usage/query-expressions.md
       - Transactions And Sessions: usage/transactions-sessions.md
       - Relationship Loading: usage/relationship-loading.md
+      - Migrations: usage/migrations.md
       - Events: usage/events.md
   - Architecture:
       - Rust Core: architecture/rust-core.md

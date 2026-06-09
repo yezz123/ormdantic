@@ -4,4 +4,4 @@ set -e
 set -x
 
 # Build the docs
-uv run zensical build
+uv run --group docs zensical build

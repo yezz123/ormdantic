@@ -61,7 +61,11 @@ async def test_expression_facade_reflection_migrations_and_session_delete(
     assert await db.migrations.applied_revisions() == ["001"]
     await db.migrations.rollback(
         "001",
-        MigrationPlan([MigrationOperation("DROP TABLE parity_extra")]),
+        MigrationPlan(
+            operations=[MigrationOperation("CREATE TABLE parity_extra (id TEXT)")],
+            rollback_operations=[MigrationOperation("DROP TABLE parity_extra")],
+        ),
+        allow_destructive=True,
     )
     assert await db.migrations.applied_revisions() == []
 

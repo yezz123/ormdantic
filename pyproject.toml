@@ -34,7 +34,11 @@ classifiers = [
     'Typing :: Typed',
 ]
 
-dependencies = ["pydantic>=2.0.0"]
+dependencies = [
+    "pydantic>=2.0.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "typer>=0.26.7",
+]
 
 dynamic = ['readme', 'version']
 
@@ -45,6 +49,9 @@ allow-direct-references = true
 Homepage = "https://github.com/yezz123/ormdantic"
 Documentation = "https://ormdantic.yezz.me/"
 Funding = 'https://github.com/sponsors/yezz123'
+
+[project.scripts]
+ormdantic = "ormdantic.cli:main"
 
 [project.optional-dependencies]
 sqlite = []
