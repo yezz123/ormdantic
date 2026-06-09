@@ -314,7 +314,9 @@ def rollback_command(
     url: Annotated[str, typer.Argument(help="Database URL.")],
     artifact: Annotated[
         Path | None,
-        typer.Argument(help="Migration artifact file (optional when using --revision)."),
+        typer.Argument(
+            help="Migration artifact file (optional when using --revision)."
+        ),
     ] = None,
     revision: Annotated[
         str | None,
@@ -368,7 +370,9 @@ def repair_command(
     ] = None,
     status: Annotated[
         str | None,
-        typer.Option("--status", help="Force status value (applied/failed/rolled_back)."),
+        typer.Option(
+            "--status", help="Force status value (applied/failed/rolled_back)."
+        ),
     ] = None,
     clear_dirty: Annotated[
         bool,

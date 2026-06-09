@@ -174,7 +174,9 @@ def _build_plan(
         from_snapshot,
     )
     warnings = list(schema_diff.warnings)
-    operations = [_operation_from_compiled(item, normalized_dialect) for item in compiled]
+    operations = [
+        _operation_from_compiled(item, normalized_dialect) for item in compiled
+    ]
     rollback_operations = [
         _operation_from_compiled(item, normalized_dialect, generated_rollback=True)
         for item in rollback_compiled

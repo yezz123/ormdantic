@@ -76,7 +76,9 @@ def test_reflect_server_snapshot_combines_reflected_metadata(
     class RustExtension:
         pass
 
-    monkeypatch.setattr(reflection, "_require_migration_symbol", lambda symbol: RustExtension)
+    monkeypatch.setattr(
+        reflection, "_require_migration_symbol", lambda symbol: RustExtension
+    )
     monkeypatch.setattr(
         reflection,
         "_reflect_server_tables",
@@ -229,9 +231,7 @@ def test_normalize_reflected_type(
     scale: int | None,
     expected: str,
 ) -> None:
-    assert (
-        reflection._normalize_reflected_type(dialect, value, scale=scale) == expected
-    )
+    assert reflection._normalize_reflected_type(dialect, value, scale=scale) == expected
 
 
 @pytest.mark.parametrize(

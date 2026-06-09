@@ -37,7 +37,9 @@ def snapshot(table_name: str) -> SchemaSnapshot:
     )
 
 
-def artifact(revision: str, before: SchemaSnapshot, after: SchemaSnapshot) -> MigrationArtifact:
+def artifact(
+    revision: str, before: SchemaSnapshot, after: SchemaSnapshot
+) -> MigrationArtifact:
     plan = MigrationPlan(
         operations=[
             MigrationOperation(
@@ -101,8 +103,14 @@ def test_artifact_roundtrips_json_toml_and_plan(tmp_path) -> None:
     migration = artifact("001_create_flavor", before, after)
 
     assert migration.checksum
-    assert MigrationArtifact.from_json(migration.to_json()).to_dict() == migration.to_dict()
-    assert MigrationArtifact.from_toml(migration.to_toml()).to_dict() == migration.to_dict()
+    assert (
+        MigrationArtifact.from_json(migration.to_json()).to_dict()
+        == migration.to_dict()
+    )
+    assert (
+        MigrationArtifact.from_toml(migration.to_toml()).to_dict()
+        == migration.to_dict()
+    )
     assert migration.to_plan().dry_run() == [
         "CREATE TABLE flavor (id INTEGER PRIMARY KEY)"
     ]
@@ -117,7 +125,9 @@ def test_artifact_roundtrips_json_toml_and_plan(tmp_path) -> None:
 
 
 def test_artifact_checksum_detects_tampering() -> None:
-    migration = artifact("001_create_flavor", SchemaSnapshot.empty(), snapshot("flavor"))
+    migration = artifact(
+        "001_create_flavor", SchemaSnapshot.empty(), snapshot("flavor")
+    )
     payload = migration.to_dict()
     payload["up"][0]["sql"] = "DROP TABLE flavor"
 

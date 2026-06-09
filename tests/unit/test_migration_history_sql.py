@@ -74,8 +74,13 @@ class RowsConnection:
 def test_public_migration_facade_re_exports_history_helpers() -> None:
     assert migrations.MIGRATION_TABLE == history.MIGRATION_TABLE
     assert migrations.MIGRATION_LOCK_NAME == history.MIGRATION_LOCK_NAME
-    assert migrations._migration_table_column_defs is history._migration_table_column_defs
-    assert migrations._ensure_migration_history_table is history._ensure_migration_history_table
+    assert (
+        migrations._migration_table_column_defs is history._migration_table_column_defs
+    )
+    assert (
+        migrations._ensure_migration_history_table
+        is history._ensure_migration_history_table
+    )
 
 
 def test_history_column_types_are_key_safe_for_mysql_family() -> None:
@@ -212,8 +217,6 @@ def test_write_history_entry_serializes_metadata() -> None:
     assert connection.statements[0] == (
         'DELETE FROM "ormdantic_migrations" WHERE "revision" = \'001\''
     )
-    assert connection.statements[1].startswith(
-        'INSERT INTO "ormdantic_migrations"'
-    )
+    assert connection.statements[1].startswith('INSERT INTO "ormdantic_migrations"')
     assert '"metadata"' in connection.statements[1]
     assert '"phase": "completed"' in connection.statements[1]

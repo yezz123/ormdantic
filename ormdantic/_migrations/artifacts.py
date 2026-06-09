@@ -80,8 +80,7 @@ class MigrationArtifact:
             ],
             diff=diff_from_dict(diff_to_dict(plan.diff)),
             warnings=[
-                warning_from_dict(warning_to_dict(warning))
-                for warning in plan.warnings
+                warning_from_dict(warning_to_dict(warning)) for warning in plan.warnings
             ],
             description=description,
             created_at=created_at
@@ -168,8 +167,7 @@ class MigrationArtifact:
             ],
             diff=diff_from_dict(diff_to_dict(self.diff)),
             warnings=[
-                warning_from_dict(warning_to_dict(warning))
-                for warning in self.warnings
+                warning_from_dict(warning_to_dict(warning)) for warning in self.warnings
             ],
             safety=dict(self.safety),
         )

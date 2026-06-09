@@ -70,7 +70,9 @@ def test_diff_snapshots_reports_columns_indexes_and_constraints() -> None:
                 [
                     column("id", primary_key=True),
                     column("name", checks=[("length", ">=", "2")]),
-                    column("supplier_id", foreign_table="supplier", foreign_column="id"),
+                    column(
+                        "supplier_id", foreign_table="supplier", foreign_column="id"
+                    ),
                 ],
                 indexes=[IndexSnapshot("flavor_name_idx", ["name"], unique=False)],
                 unique_constraints=[["name"]],
@@ -106,7 +108,9 @@ def test_diff_snapshots_reports_columns_indexes_and_constraints() -> None:
 
 
 def test_sql_operation_classification_extracts_metadata() -> None:
-    assert planning._classify_sql_operation('CREATE TABLE IF NOT EXISTS "flavor" (id TEXT)') == {
+    assert planning._classify_sql_operation(
+        'CREATE TABLE IF NOT EXISTS "flavor" (id TEXT)'
+    ) == {
         "kind": "create_table",
         "table": "flavor",
         "object_name": None,
@@ -138,7 +142,9 @@ def test_check_constraint_helpers_render_supported_checks() -> None:
 
 
 def test_snapshot_coercion_accepts_objects_and_mappings() -> None:
-    snapshot = SchemaSnapshot(tables=[table("flavor", [column("id", primary_key=True)])])
+    snapshot = SchemaSnapshot(
+        tables=[table("flavor", [column("id", primary_key=True)])]
+    )
 
     assert planning._coerce_snapshot(snapshot) is snapshot
     assert planning._coerce_snapshot(snapshot.to_dict()).to_dict() == snapshot.to_dict()
@@ -171,7 +177,9 @@ def test_sqlite_rebuild_rewrites_rebuild_operations(monkeypatch) -> None:
         target = to_snapshot.tables[0]
         return [
             {"sql": f'CREATE TABLE "{target.name}" ("id" TEXT, "name" TEXT)'},
-            {"sql": f'CREATE INDEX "{target.name}_name_idx" ON "{target.name}" ("name")'},
+            {
+                "sql": f'CREATE INDEX "{target.name}_name_idx" ON "{target.name}" ("name")'
+            },
         ]
 
     monkeypatch.setattr(
