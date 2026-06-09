@@ -1,0 +1,89 @@
+name: ormdantic-databases
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: mysql
+      MYSQL_ROOT_PASSWORD: mysql
+    ports:
+      - '3306:3306'
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h127.0.0.1 -uroot -pmysql']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: mariadb
+      MARIADB_ROOT_PASSWORD: mariadb
+    ports:
+      - '3307:3306'
+    healthcheck:
+      test: ['CMD-SHELL', 'mariadb-admin ping -h127.0.0.1 -uroot -pmariadb']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: ${MSSQL_PLATFORM:-linux/amd64}
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: Password123
+    ports:
+      - '1433:1433'
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $$MSSQL_SA_PASSWORD -Q ''SELECT 1'' -b || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $$MSSQL_SA_PASSWORD -Q ''SELECT 1'' -b']
+      interval: 10s
+      timeout: 10s
+      retries: 18
+    volumes:
+      - mssql-data:/var/opt/mssql
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    platform: ${ORACLE_PLATFORM:-linux/amd64}
+    environment:
+      ORACLE_PASSWORD: oracle
+      APP_USER: ormdantic
+      APP_USER_PASSWORD: ormdantic
+    ports:
+      - '1521:1521'
+    healthcheck:
+      test: ['CMD-SHELL', 'healthcheck.sh']
+      interval: 15s
+      timeout: 10s
+      retries: 30
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+
+volumes:
+  postgres-data:
+  mysql-data:
+  mariadb-data:
+  mssql-data:
+  oracle-data:
