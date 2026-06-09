@@ -1,7 +1,7 @@
 use ormdantic_dialects::PostgresDialect;
 use ormdantic_sql::{
     BinaryOp, DmlAst, Expr, OrderExpr, OrderNulls, Projection, SelectAst, SortDirection,
-    TableSource,
+    TableSource, UnaryOp,
 };
 
 #[test]
@@ -9,7 +9,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
     let total = Expr::Function {
         name: "SUM".to_string(),
         args: vec![Expr::column("total")],
-        over: None,
     };
     let query = SelectAst::new(vec![
         Projection::new(Expr::column("customer_id")),
@@ -18,7 +17,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "AVG".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             },
             "average_total",
         ),
@@ -26,7 +24,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "MIN".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             },
             "minimum_total",
         ),
@@ -34,7 +31,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "MAX".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             },
             "maximum_total",
         ),
@@ -42,7 +38,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "COUNT".to_string(),
                 args: vec![Expr::RawSafe("*".to_string())],
-                over: None,
             },
             "row_count",
         ),
@@ -83,6 +78,35 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             "minimum_total".to_string()
         ]
     );
+}
+
+#[test]
+fn compiles_empty_expression_in_lists_as_constants() {
+    let query = SelectAst::new(vec![Projection::new(Expr::column("id"))])
+        .from(TableSource::table("orders"))
+        .where_expr(Expr::Binary {
+            left: Box::new(Expr::InList {
+                expr: Box::new(Expr::column("status")),
+                values: Vec::new(),
+                negated: false,
+            }),
+            op: BinaryOp::And,
+            right: Box::new(Expr::InList {
+                expr: Box::new(Expr::column("kind")),
+                values: Vec::new(),
+                negated: true,
+            }),
+        });
+
+    let compiled = query
+        .compile(&PostgresDialect)
+        .expect("expression query should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "SELECT \"id\" FROM \"orders\" WHERE ((1 = 0) AND (1 = 1))"
+    );
+    assert!(compiled.params().is_empty());
 }
 
 #[test]
@@ -127,14 +151,7 @@ fn compiles_update_expression_with_arithmetic_assignment() {
 }
 
 #[test]
-fn compiles_case_cast_tuple_exists_and_in_subquery_expressions() {
-    let subquery = SelectAst::new(vec![Projection::new(Expr::column("customer_id"))])
-        .from(TableSource::table("orders"))
-        .where_expr(Expr::Binary {
-            left: Box::new(Expr::column("status")),
-            op: BinaryOp::Eq,
-            right: Box::new(Expr::param("status")),
-        });
+fn compiles_case_cast_tuple_and_null_predicate_expressions() {
     let query = SelectAst::new(vec![
         Projection::new(Expr::column("id")),
         Projection::aliased(
@@ -167,12 +184,15 @@ fn compiles_case_cast_tuple_exists_and_in_subquery_expressions() {
     ])
     .from(TableSource::table("customers"))
     .where_expr(Expr::Binary {
-        left: Box::new(Expr::Exists(Box::new(subquery.clone()))),
+        left: Box::new(Expr::Binary {
+            left: Box::new(Expr::column("tier")),
+            op: BinaryOp::Eq,
+            right: Box::new(Expr::param("tier_filter")),
+        }),
         op: BinaryOp::And,
-        right: Box::new(Expr::InSubquery {
+        right: Box::new(Expr::Unary {
+            op: UnaryOp::IsNotNull,
             expr: Box::new(Expr::column("id")),
-            subquery: Box::new(subquery),
-            negated: false,
         }),
     });
 
@@ -182,14 +202,10 @@ fn compiles_case_cast_tuple_exists_and_in_subquery_expressions() {
 
     assert_eq!(
         compiled.sql(),
-        "SELECT \"id\", CAST(\"created_at\" AS TEXT) AS \"created_at_text\", CASE WHEN (\"tier\" = $1) THEN 'priority' ELSE 'standard' END AS \"service_level\", (\"country\", \"city\") AS \"location_key\" FROM \"customers\" WHERE (EXISTS (SELECT \"customer_id\" FROM \"orders\" WHERE (\"status\" = $2)) AND (\"id\" IN (SELECT \"customer_id\" FROM \"orders\" WHERE (\"status\" = $3))))"
+        "SELECT \"id\", CAST(\"created_at\" AS TEXT) AS \"created_at_text\", CASE WHEN (\"tier\" = $1) THEN 'priority' ELSE 'standard' END AS \"service_level\", (\"country\", \"city\") AS \"location_key\" FROM \"customers\" WHERE ((\"tier\" = $2) AND (\"id\" IS NOT NULL))"
     );
     assert_eq!(
         compiled.params(),
-        &[
-            "tier".to_string(),
-            "status".to_string(),
-            "status".to_string()
-        ]
+        &["tier".to_string(), "tier_filter".to_string()]
     );
 }

@@ -12,7 +12,6 @@ fn bench_expression_select(c: &mut Criterion) {
             let total = Expr::Function {
                 name: "SUM".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             };
             black_box(
                 SelectAst::new(vec![
@@ -22,7 +21,6 @@ fn bench_expression_select(c: &mut Criterion) {
                         Expr::Function {
                             name: "COUNT".to_string(),
                             args: vec![Expr::RawSafe("*".to_string())],
-                            over: None,
                         },
                         "row_count",
                     ),
