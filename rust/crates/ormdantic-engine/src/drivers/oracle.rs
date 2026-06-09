@@ -4,7 +4,7 @@ use crate::{DbValue, QueryResult};
 
 #[cfg(feature = "oracle")]
 mod runtime {
-    use oracle_rs::{Config, Connection, Value};
+    use oracle_rs::{ColumnInfo, Config, Connection, OracleType, Value};
     use tokio::runtime::Runtime;
     use url::Url;
 
@@ -134,15 +134,23 @@ mod runtime {
         let rows = result
             .rows
             .iter()
-            .map(|row| row.values().iter().map(oracle_value).collect::<Vec<_>>())
+            .map(|row| {
+                row.values()
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, value)| oracle_value(value, result.columns.get(idx)))
+                    .collect::<Vec<_>>()
+            })
             .collect();
         QueryResult::new(columns, rows)
     }
 
-    fn oracle_value(value: &Value) -> DbValue {
+    fn oracle_value(value: &Value, column: Option<&ColumnInfo>) -> DbValue {
         match value {
             Value::Null => DbValue::Null,
-            Value::String(value) => DbValue::Text(value.clone()),
+            Value::String(value) => {
+                numeric_string_value(value, column).unwrap_or_else(|| DbValue::Text(value.clone()))
+            }
             Value::Bytes(value) => DbValue::Text(String::from_utf8_lossy(value).to_string()),
             Value::Integer(value) => DbValue::Integer(*value),
             Value::Float(value) => DbValue::Real(*value),
@@ -154,6 +162,25 @@ mod runtime {
             Value::Boolean(value) => DbValue::Bool(*value),
             Value::Json(value) => DbValue::Text(value.to_string()),
             other => DbValue::Text(format!("{other:?}")),
+        }
+    }
+
+    fn numeric_string_value(value: &str, column: Option<&ColumnInfo>) -> Option<DbValue> {
+        let column = column?;
+        match column.oracle_type {
+            OracleType::Number | OracleType::BinaryInteger => parse_oracle_number(value),
+            OracleType::BinaryFloat | OracleType::BinaryDouble => {
+                value.parse::<f64>().ok().map(DbValue::Real)
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_oracle_number(value: &str) -> Option<DbValue> {
+        if let Ok(integer) = value.parse::<i64>() {
+            Some(DbValue::Integer(integer))
+        } else {
+            value.parse::<f64>().ok().map(DbValue::Real)
         }
     }
 }
