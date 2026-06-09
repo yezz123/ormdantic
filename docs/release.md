@@ -4,6 +4,7 @@
 
 ### Features
 
+* ✨  Enhance Ormdantic migration functionality and CLI support. PR [#254](https://github.com/yezz123/ormdantic/pull/254) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance query capabilities and relationship loading in ORM. PR [#251](https://github.com/yezz123/ormdantic/pull/251) by [@yezz123](https://github.com/yezz123).
 - ✨ Migrate to Rust integration with ORM, SQL support, and documentation. PR [#235](https://github.com/yezz123/ormdantic/pull/235) by [@yezz123](https://github.com/yezz123).
 - ✨ Enhance query handling with new expression methods and tests. PR [#250](https://github.com/yezz123/ormdantic/pull/250) by [@yezz123](https://github.com/yezz123).
