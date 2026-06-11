@@ -403,7 +403,7 @@ def test_build_plan_creates_oracle_table_compression_inline() -> None:
     plan = planning._build_plan("oracle", before, after)
 
     assert plan.dry_run() == [
-        'CREATE TABLE "flavor" ("id" TEXT PRIMARY KEY NOT NULL) COMPRESS FOR 6'
+        'CREATE TABLE "flavor" ("id" VARCHAR2(255) PRIMARY KEY NOT NULL) COMPRESS FOR 6'
     ]
     with pytest.raises(ValueError, match="Oracle table compression"):
         planning._build_plan("sqlite", before, after)
@@ -429,11 +429,11 @@ def test_build_plan_recreates_oracle_table_when_compression_changes() -> None:
     assert diff.warnings[0].code == "destructive_table_change"
     assert plan.dry_run() == [
         'DROP TABLE "flavor"',
-        'CREATE TABLE "flavor" ("id" TEXT PRIMARY KEY NOT NULL) COMPRESS',
+        'CREATE TABLE "flavor" ("id" VARCHAR2(255) PRIMARY KEY NOT NULL) COMPRESS',
     ]
     assert plan.rollback_sql() == [
         'DROP TABLE "flavor"',
-        'CREATE TABLE "flavor" ("id" TEXT PRIMARY KEY NOT NULL)',
+        'CREATE TABLE "flavor" ("id" VARCHAR2(255) PRIMARY KEY NOT NULL)',
     ]
     assert plan.operations[0].destructive
     with pytest.raises(ValueError, match="Oracle table compression"):
@@ -2510,7 +2510,7 @@ def test_build_plan_creates_mysql_not_enforced_check_constraint() -> None:
 
     assert plan.dry_run() == [
         "CREATE TABLE IF NOT EXISTS `flavor` "
-        "(`id` TEXT NOT NULL PRIMARY KEY, `rating` INTEGER NOT NULL, "
+        "(`id` VARCHAR(255) NOT NULL PRIMARY KEY, `rating` INTEGER NOT NULL, "
         "CONSTRAINT `flavor_rating_check` CHECK (rating >= 0) NOT ENFORCED)"
     ]
     with pytest.raises(ValueError, match="constraint validation toggles"):
