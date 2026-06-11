@@ -10,7 +10,7 @@ The first completed slices focus on stable public facades with internals moved i
 - Engine runtime concerns live in focused modules for connections, statements, runtime helpers, reflection, migrations, values, and results.
 - Driver-specific code remains under `src/drivers/`.
 - Engine integration tests now have shared support helpers and a grouped driver matrix.
-- The grouped driver matrix covers driver alias URL handling, dialect detection, backend-specific parameter binding, `DbValue` round-trips for nulls, integers, floats, text, and booleans, backend-specific numeric edge cases for integer widths, MySQL/MariaDB unsigned and decimal text values, MSSQL decimal values, and Oracle `NUMBER` values, CRUD result round-trips, PostgreSQL/MariaDB `RETURNING` and MSSQL `OUTPUT` statement rowsets, DDL add-column/index/drop-column lifecycle behavior, syntax-error mapping, unique constraint-error mapping, connection-failure mapping, live reflection smoke execution, and transaction/savepoint behavior across Postgres, MySQL, MariaDB, MSSQL, and Oracle feature gates.
+- The grouped driver matrix covers driver alias URL handling, dialect detection, backend-specific parameter binding, `DbValue` round-trips for nulls, integers, floats, text, and booleans, backend-specific numeric edge cases for integer widths, MySQL/MariaDB unsigned and decimal values, MSSQL decimal values, and Oracle `NUMBER` values, CRUD result round-trips, PostgreSQL/MariaDB `RETURNING` and MSSQL `OUTPUT` statement rowsets, DDL add-column/index/drop-column lifecycle behavior, syntax-error mapping, unique constraint-error mapping, connection-failure mapping, live reflection smoke execution, and transaction/savepoint behavior across Postgres, MySQL, MariaDB, MSSQL, and Oracle feature gates.
 - External migration integration tests now round-trip live autogenerate artifacts through disk, apply them, verify reflected schema changes, and roll them back across Docker-backed Postgres, MySQL, MariaDB, MSSQL, and Oracle URLs.
 - Engine benchmarks cover statement-result conversion, SQLite execution, migration-store revision checks, and reflection query planning across dialects.
 - Python migration SQL helpers are split into `ormdantic._migrations.sql` with unit coverage.
@@ -56,7 +56,7 @@ The first completed slices focus on stable public facades with internals moved i
 
    Remaining backend-specific coverage should include:
 
-   - Exact decimal/unsigned overflow representation once `DbValue` grows a decimal or big-integer variant, including direct PostgreSQL `NUMERIC` decoding and unsigned values outside the `i64` range.
+   - Exact decimal/unsigned overflow representation across every backend, including SQLite `DECIMAL_TEXT` high-precision decimal storage, SQLite decimal predicate/order/check semantics, and unsigned values outside the `i64` range.
    - Oracle out-bind `RETURNING INTO` behavior once the engine exposes an out-parameter API.
    - Additional backend-specific edge cases as new driver features land.
 

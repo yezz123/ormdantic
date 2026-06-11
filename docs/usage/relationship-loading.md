@@ -38,6 +38,15 @@ author = await database[Author].find_one(
 )
 ```
 
+Select-in loaders automatically chunk large `IN` lists and can set an explicit
+batch size for a path:
+
+```python
+authors = await database[Author].find_many(
+    load=[selectinload("posts").batched(250)],
+)
+```
+
 Joined and select-in strategies can be composed in one query:
 
 ```python
@@ -60,7 +69,7 @@ article = await database[Article].find_one(
 Current behavior:
 
 - `joinedload()` maps to Rust-compiled joined loading.
-- `selectinload()` runs the root query first, then batches each selected relationship branch with `IN` filters.
+- `selectinload()` runs the root query first, then batches each selected relationship branch with chunked `IN` filters.
 - `lazyload()` and `noload()` keep the initial result shallow for that path and require explicit async loading if the relationship value is needed later.
 - Repeated rows for the same loaded table and primary key reuse the same Python object within one hydrated result graph.
 - Invalid paths raise `ValueError` messages that name the missing relationship and available relationships at that point.
