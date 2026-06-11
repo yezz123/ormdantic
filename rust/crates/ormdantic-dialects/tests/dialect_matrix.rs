@@ -29,6 +29,25 @@ fn renders_driver_placeholder_styles() {
 }
 
 #[test]
+fn exposes_backend_bind_parameter_limits() {
+    let cases = [
+        ("sqlite", Some(32_766)),
+        ("postgresql", Some(65_535)),
+        ("mysql", Some(65_535)),
+        ("mariadb", Some(65_535)),
+        ("mssql", Some(2_100)),
+        ("oracle", Some(65_535)),
+    ];
+
+    for (dialect, expected) in cases {
+        assert_eq!(
+            AnyDialect::parse(dialect).unwrap().max_bind_parameters(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn renders_add_column_schema_operations_for_each_dialect() {
     let column = ColumnDef::new("rating", FieldKind::Integer).nullable(true);
     let operation = SchemaOperation::AddColumn {

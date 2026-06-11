@@ -11,8 +11,12 @@ pub struct ColumnDef {
     autoincrement: bool,
     collation: Option<String>,
     comment: Option<String>,
+    max_length: Option<u32>,
     precision: Option<u32>,
     scale: Option<u32>,
+    sqlite_on_conflict_primary_key: Option<String>,
+    sqlite_on_conflict_not_null: Option<String>,
+    sqlite_on_conflict_unique: Option<String>,
 }
 
 impl ColumnDef {
@@ -29,8 +33,12 @@ impl ColumnDef {
             autoincrement: false,
             collation: None,
             comment: None,
+            max_length: None,
             precision: None,
             scale: None,
+            sqlite_on_conflict_primary_key: None,
+            sqlite_on_conflict_not_null: None,
+            sqlite_on_conflict_unique: None,
         }
     }
 
@@ -79,9 +87,44 @@ impl ColumnDef {
         self
     }
 
+    pub fn with_max_length(mut self, max_length: u32) -> Self {
+        self.max_length = Some(max_length);
+        self
+    }
+
     pub fn numeric(mut self, precision: u32, scale: u32) -> Self {
         self.precision = Some(precision);
         self.scale = Some(scale);
+        self
+    }
+
+    pub fn with_sqlite_on_conflict_primary_key(mut self, policy: impl Into<String>) -> Self {
+        self.sqlite_on_conflict_primary_key = Some(policy.into());
+        self
+    }
+
+    pub fn with_sqlite_on_conflict_primary_key_option(mut self, policy: Option<String>) -> Self {
+        self.sqlite_on_conflict_primary_key = policy;
+        self
+    }
+
+    pub fn with_sqlite_on_conflict_not_null(mut self, policy: impl Into<String>) -> Self {
+        self.sqlite_on_conflict_not_null = Some(policy.into());
+        self
+    }
+
+    pub fn with_sqlite_on_conflict_not_null_option(mut self, policy: Option<String>) -> Self {
+        self.sqlite_on_conflict_not_null = policy;
+        self
+    }
+
+    pub fn with_sqlite_on_conflict_unique(mut self, policy: impl Into<String>) -> Self {
+        self.sqlite_on_conflict_unique = Some(policy.into());
+        self
+    }
+
+    pub fn with_sqlite_on_conflict_unique_option(mut self, policy: Option<String>) -> Self {
+        self.sqlite_on_conflict_unique = policy;
         self
     }
 
@@ -129,12 +172,47 @@ impl ColumnDef {
         self.comment.as_deref()
     }
 
+    pub fn definition_eq_ignoring_comment(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.kind == other.kind
+            && self.nullable == other.nullable
+            && self.primary_key == other.primary_key
+            && self.default == other.default
+            && self.server_default == other.server_default
+            && self.identity == other.identity
+            && self.computed == other.computed
+            && self.autoincrement == other.autoincrement
+            && self.collation == other.collation
+            && self.max_length == other.max_length
+            && self.precision == other.precision
+            && self.scale == other.scale
+            && self.sqlite_on_conflict_primary_key == other.sqlite_on_conflict_primary_key
+            && self.sqlite_on_conflict_not_null == other.sqlite_on_conflict_not_null
+            && self.sqlite_on_conflict_unique == other.sqlite_on_conflict_unique
+    }
+
     pub fn precision(&self) -> Option<u32> {
         self.precision
     }
 
+    pub fn max_length(&self) -> Option<u32> {
+        self.max_length
+    }
+
     pub fn scale(&self) -> Option<u32> {
         self.scale
+    }
+
+    pub fn sqlite_on_conflict_primary_key(&self) -> Option<&str> {
+        self.sqlite_on_conflict_primary_key.as_deref()
+    }
+
+    pub fn sqlite_on_conflict_not_null(&self) -> Option<&str> {
+        self.sqlite_on_conflict_not_null.as_deref()
+    }
+
+    pub fn sqlite_on_conflict_unique(&self) -> Option<&str> {
+        self.sqlite_on_conflict_unique.as_deref()
     }
 }
 
@@ -148,7 +226,15 @@ pub enum ColumnDefault {
 pub struct IdentityDef {
     start: Option<i64>,
     increment: Option<i64>,
+    min_value: Option<i64>,
+    max_value: Option<i64>,
+    no_min_value: bool,
+    no_max_value: bool,
+    cache: Option<i64>,
     always: bool,
+    cycle: bool,
+    order: bool,
+    on_null: bool,
 }
 
 impl IdentityDef {
@@ -156,7 +242,15 @@ impl IdentityDef {
         Self {
             start: None,
             increment: None,
+            min_value: None,
+            max_value: None,
+            no_min_value: false,
+            no_max_value: false,
+            cache: None,
             always: false,
+            cycle: false,
+            order: false,
+            on_null: false,
         }
     }
 
@@ -170,8 +264,48 @@ impl IdentityDef {
         self
     }
 
+    pub fn min_value(mut self, min_value: i64) -> Self {
+        self.min_value = Some(min_value);
+        self
+    }
+
+    pub fn max_value(mut self, max_value: i64) -> Self {
+        self.max_value = Some(max_value);
+        self
+    }
+
+    pub fn no_min_value(mut self, no_min_value: bool) -> Self {
+        self.no_min_value = no_min_value;
+        self
+    }
+
+    pub fn no_max_value(mut self, no_max_value: bool) -> Self {
+        self.no_max_value = no_max_value;
+        self
+    }
+
+    pub fn cache(mut self, cache: i64) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
     pub fn always(mut self, always: bool) -> Self {
         self.always = always;
+        self
+    }
+
+    pub fn cycle(mut self, cycle: bool) -> Self {
+        self.cycle = cycle;
+        self
+    }
+
+    pub fn order(mut self, order: bool) -> Self {
+        self.order = order;
+        self
+    }
+
+    pub fn on_null(mut self, on_null: bool) -> Self {
+        self.on_null = on_null;
         self
     }
 
@@ -183,8 +317,40 @@ impl IdentityDef {
         self.increment
     }
 
+    pub fn minimum_value(&self) -> Option<i64> {
+        self.min_value
+    }
+
+    pub fn maximum_value(&self) -> Option<i64> {
+        self.max_value
+    }
+
+    pub fn is_no_min_value(&self) -> bool {
+        self.no_min_value
+    }
+
+    pub fn is_no_max_value(&self) -> bool {
+        self.no_max_value
+    }
+
+    pub fn cache_value(&self) -> Option<i64> {
+        self.cache
+    }
+
     pub fn is_always(&self) -> bool {
         self.always
+    }
+
+    pub fn is_cycle(&self) -> bool {
+        self.cycle
+    }
+
+    pub fn is_ordered(&self) -> bool {
+        self.order
+    }
+
+    pub fn is_on_null(&self) -> bool {
+        self.on_null
     }
 }
 
@@ -233,9 +399,14 @@ pub enum FieldKind {
     DateTime,
     Json,
     ModelJson,
-    Enum,
+    Enum {
+        name: Option<String>,
+        schema: Option<String>,
+    },
     Decimal,
     Binary,
-    ForeignKey { target_table: String },
+    ForeignKey {
+        target_table: String,
+    },
     Unknown,
 }

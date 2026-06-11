@@ -14,7 +14,7 @@ database = Ormdantic(connection)
 
 ## Create a table
 
-To create tables decorate a pydantic model with the `database.table` decorator, passing the database information ex. `Primary key`, `foreign keys`, `Indexes`, `back_references`, `unique_constraints` etc. to the decorator call.
+To create tables decorate a pydantic model with the `database.table` decorator, passing the database information ex. `Primary key`, `schema`, `foreign keys`, `Indexes`, `back_references`, `unique_constraints` etc. to the decorator call.
 
 ### Table Restrictions
 
@@ -23,15 +23,127 @@ To create tables decorate a pydantic model with the `database.table` decorator, 
 - Relationships must `union-type` the foreign model and that models primary key.
 
 ```python
-from uuid import uuid4
+from decimal import Decimal
+from enum import Enum
+from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
+from ormdantic import (
+    TableCheck,
+    TableColumn,
+    TableExclusion,
+    TableForeignKey,
+    TableIndex,
+    TableUnique,
+)
 
-@database.table(pk="id", indexed=["name"])
+
+class Roast(Enum):
+    LIGHT = "light"
+    DARK = "dark"
+
+
+database.sequence(
+    "flavor_id_seq",
+    schema="inventory",
+    data_type="bigint",
+    start=10,
+    increment=5,
+)
+
+
+@database.table(
+    pk="id",
+    schema="inventory",
+    indexed=["name"],
+    comment="Coffee flavor catalog metadata",
+    tablespace="fastspace",
+    mysql_engine="InnoDB",
+    mysql_charset="utf8mb4",
+    mysql_collation="utf8mb4_unicode_ci",
+    mysql_row_format="DYNAMIC",
+    postgres_unlogged=True,
+    sqlite_strict=True,
+    sqlite_without_rowid=True,
+    indexes=[
+        TableIndex(
+            name="flavor_active_name_idx",
+            columns=["name"],
+            where="deleted_at IS NULL",
+            expressions=["LOWER(name)"],
+            postgres_with={"fillfactor": 70},
+        )
+    ],
+    unique_constraints=[
+        TableUnique(
+            name="flavor_name_created_unique",
+            columns=["name", "created_at"],
+            deferrable=True,
+            initially_deferred=True,
+            nulls_not_distinct=True,
+            sqlite_on_conflict="IGNORE",
+        )
+    ],
+    foreign_key_constraints=[
+        TableForeignKey(
+            name="flavor_supplier_pair_fk",
+            columns=["supplier_id", "supplier_code"],
+            foreign_table="supplier",
+            foreign_columns=["id", "code"],
+            on_delete="cascade",
+        )
+    ],
+    exclusion_constraints=[
+        TableExclusion(
+            name="flavor_active_name_exclusion",
+            columns=[("name", "=")],
+            using="btree",
+            where="deleted_at IS NULL",
+        )
+    ],
+    column_options={
+        "id": TableColumn(
+            server_default="nextval('inventory.flavor_id_seq')",
+            sqlite_on_conflict_primary_key="REPLACE",
+        ),
+        "name": TableColumn(
+            comment="Display name shown to customers",
+            sqlite_on_conflict_not_null="FAIL",
+            sqlite_on_conflict_unique="IGNORE",
+        ),
+        "created_at": TableColumn(server_default="CURRENT_TIMESTAMP"),
+        "name_lower": TableColumn(computed="LOWER(name)", computed_persisted=True),
+        "roast": TableColumn(
+            enum_type_name="coffee_roast_kind",
+            enum_schema="inventory",
+        ),
+    },
+    check_constraints=[
+        TableCheck(
+            name="flavor_name_not_empty_check",
+            expression="LENGTH(name) > 0",
+        )
+    ],
+)
 class Flavor(BaseModel):
      """A coffee flavor."""
 
      id: UUID = Field(default_factory=uuid4)
      name: str = Field(max_length=63)
+     roast: Roast
+     supplier_id: UUID
+     supplier_code: str = Field(pattern=r"^[A-Z0-9_-]+$")
+     rating: int = Field(ge=0, le=100, multiple_of=5)
+     price: Decimal = Field(max_digits=12, decimal_places=2)
+     name_lower: str | None = None
+     created_at: str | None = None
+     deleted_at: str | None = None
+
+
+database.view(
+    "active_flavors",
+    "SELECT id, name, roast FROM inventory.flavor WHERE deleted_at IS NULL",
+    schema="inventory",
+)
 ```
 
 ## Queries

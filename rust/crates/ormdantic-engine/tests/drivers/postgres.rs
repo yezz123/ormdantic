@@ -18,6 +18,7 @@ fn postgres_parameterized_selects_cover_core_values() {
         &url,
         common::ValueRoundTripSql {
             sql: "SELECT $1::BIGINT AS int_value, $2::DOUBLE PRECISION AS real_value, $3::TEXT AS text_value, $4::BOOLEAN AS bool_value, $5::TEXT AS null_value",
+            expected_real: DbValue::Real(3.25),
             expected_bool: DbValue::Bool(true),
         },
     );
@@ -33,13 +34,13 @@ fn postgres_numeric_edges_round_trip() {
     common::run_numeric_edge_flow(
         &url,
         common::NumericEdgeSql {
-            sql: "SELECT CAST(-32768 AS SMALLINT) AS small_value, CAST(2147483647 AS INTEGER) AS int_value, CAST(9223372036854775807 AS BIGINT) AS big_value, CAST(3.5 AS DOUBLE PRECISION) AS real_value, CAST(123.45 AS NUMERIC(10,2))::TEXT AS decimal_text",
+            sql: "SELECT CAST(-32768 AS SMALLINT) AS small_value, CAST(2147483647 AS INTEGER) AS int_value, CAST(9223372036854775807 AS BIGINT) AS big_value, CAST(3.5 AS DOUBLE PRECISION) AS real_value, CAST(123.45 AS NUMERIC(10,2)) AS decimal_value",
             expected: vec![
                 DbValue::Integer(-32768),
                 DbValue::Integer(2_147_483_647),
                 DbValue::Integer(9_223_372_036_854_775_807),
                 DbValue::Real(3.5),
-                DbValue::Text("123.45".to_string()),
+                DbValue::Decimal("123.45".to_string()),
             ],
         },
     );

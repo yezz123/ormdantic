@@ -1,3 +1,4 @@
+use ormdantic_core::{ExecutionErrorKind, OrmdanticError};
 use ormdantic_dialects::ReflectionScope;
 use ormdantic_engine::{DbValue, Inspector, NativeConnection};
 use url::Url;
@@ -26,6 +27,7 @@ pub struct ConstraintSql {
 
 pub struct ValueRoundTripSql {
     pub sql: &'static str,
+    pub expected_real: DbValue,
     pub expected_bool: DbValue,
 }
 
@@ -97,7 +99,7 @@ pub fn run_value_round_trip_flow(url: &str, sql: ValueRoundTripSql) {
         result.rows(),
         &[vec![
             DbValue::Integer(42),
-            DbValue::Real(3.25),
+            sql.expected_real,
             DbValue::Text("vanilla".to_string()),
             sql.expected_bool,
             DbValue::Null,
@@ -292,9 +294,10 @@ pub fn run_crud_result_and_error_flow(url: &str, table: &str, sql: CrudSql) {
         .unwrap_or_else(|error| panic!("count after delete for {table} should work: {error}"));
     assert_eq!(count.rows(), &[vec![DbValue::Integer(0)]]);
 
-    assert!(
-        connection.execute(sql.syntax_error_sql, &[]).is_err(),
-        "syntax error for {table} should be mapped to an engine error"
+    assert_execution_error_kind(
+        connection.execute(sql.syntax_error_sql, &[]),
+        ExecutionErrorKind::Syntax,
+        &format!("syntax error for {table} should be mapped to an engine error"),
     );
 
     ormdantic_engine::execute_url(url, &sql.drop_sql, &[])
@@ -322,13 +325,13 @@ pub fn run_constraint_error_flow(url: &str, table: &str, sql: ConstraintSql) {
             .unwrap_or_else(|error| panic!("commit first constrained insert for {table}: {error}"));
     }
 
-    let duplicate = connection.execute(
-        &sql.insert_sql,
-        &[DbValue::Integer(2), DbValue::Text("vanilla".to_string())],
-    );
-    assert!(
-        duplicate.is_err(),
-        "duplicate unique value for {table} should be mapped to an engine error"
+    assert_execution_error_kind(
+        connection.execute(
+            &sql.insert_sql,
+            &[DbValue::Integer(2), DbValue::Text("vanilla".to_string())],
+        ),
+        ExecutionErrorKind::UniqueViolation,
+        &format!("duplicate unique value for {table} should be mapped to an engine error"),
     );
     if sql.rollback_after_error {
         connection
@@ -383,6 +386,17 @@ pub fn run_transaction_savepoint_flow(
 
 pub fn unique_table(prefix: &str) -> String {
     support::unique_name(prefix)
+}
+
+fn assert_execution_error_kind<T: std::fmt::Debug>(
+    result: Result<T, OrmdanticError>,
+    expected: ExecutionErrorKind,
+    context: &str,
+) {
+    match result.expect_err(context) {
+        OrmdanticError::ExecutionError { kind, .. } => assert_eq!(kind, expected, "{context}"),
+        other => panic!("{context}: expected execution error {expected:?}, got {other:?}"),
+    }
 }
 
 #[cfg(feature = "oracle")]

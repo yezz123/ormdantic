@@ -1,7 +1,9 @@
-use ormdantic_dialects::PostgresDialect;
+use std::collections::HashSet;
+
+use ormdantic_dialects::{PostgresDialect, SqliteDialect};
 use ormdantic_sql::{
-    BinaryOp, DmlAst, Expr, OrderExpr, OrderNulls, Projection, SelectAst, SortDirection,
-    TableSource,
+    BinaryOp, CommonTableExpr, DmlAst, Expr, OrderExpr, OrderNulls, Projection, SelectAst,
+    SortDirection, TableSource, UnaryOp,
 };
 
 #[test]
@@ -9,7 +11,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
     let total = Expr::Function {
         name: "SUM".to_string(),
         args: vec![Expr::column("total")],
-        over: None,
     };
     let query = SelectAst::new(vec![
         Projection::new(Expr::column("customer_id")),
@@ -18,7 +19,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "AVG".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             },
             "average_total",
         ),
@@ -26,7 +26,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "MIN".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             },
             "minimum_total",
         ),
@@ -34,7 +33,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "MAX".to_string(),
                 args: vec![Expr::column("total")],
-                over: None,
             },
             "maximum_total",
         ),
@@ -42,7 +40,6 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             Expr::Function {
                 name: "COUNT".to_string(),
                 args: vec![Expr::RawSafe("*".to_string())],
-                over: None,
             },
             "row_count",
         ),
@@ -81,6 +78,78 @@ fn compiles_grouped_aggregate_select_with_null_ordering() {
             "status_0".to_string(),
             "status_1".to_string(),
             "minimum_total".to_string()
+        ]
+    );
+}
+
+#[test]
+fn compiles_empty_expression_in_lists_as_constants() {
+    let query = SelectAst::new(vec![Projection::new(Expr::column("id"))])
+        .from(TableSource::table("orders"))
+        .where_expr(Expr::Binary {
+            left: Box::new(Expr::InList {
+                expr: Box::new(Expr::column("status")),
+                values: Vec::new(),
+                negated: false,
+            }),
+            op: BinaryOp::And,
+            right: Box::new(Expr::InList {
+                expr: Box::new(Expr::column("kind")),
+                values: Vec::new(),
+                negated: true,
+            }),
+        });
+
+    let compiled = query
+        .compile(&PostgresDialect)
+        .expect("expression query should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "SELECT \"id\" FROM \"orders\" WHERE ((1 = 0) AND (1 = 1))"
+    );
+    assert!(compiled.params().is_empty());
+}
+
+#[test]
+fn rewrites_sqlite_decimal_expression_comparisons_and_ordering() {
+    let decimal_columns = HashSet::from(["amount".to_string()]);
+    let table_names = vec!["prices".to_string()];
+    let query = SelectAst::new(vec![Projection::new(Expr::column("id"))])
+        .from(TableSource::table("prices"))
+        .where_expr(Expr::Binary {
+            left: Box::new(Expr::InList {
+                expr: Box::new(Expr::column("amount")),
+                values: vec![Expr::param("exact_0"), Expr::param("exact_1")],
+                negated: false,
+            }),
+            op: BinaryOp::And,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Expr::column("amount")),
+                op: BinaryOp::Gt,
+                right: Box::new(Expr::param("minimum")),
+            }),
+        })
+        .order_by(vec![OrderExpr::new(
+            Expr::column("amount"),
+            SortDirection::Asc,
+        )])
+        .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names);
+
+    let compiled = query
+        .compile(&SqliteDialect)
+        .expect("rewritten decimal expression query should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "SELECT \"id\" FROM \"prices\" WHERE (((ormdantic_decimal_cmp(\"amount\", ?) = 0) OR (ormdantic_decimal_cmp(\"amount\", ?) = 0)) AND (ormdantic_decimal_cmp(\"amount\", ?) > 0)) ORDER BY ormdantic_decimal_sort_key(\"amount\") ASC"
+    );
+    assert_eq!(
+        compiled.params(),
+        &[
+            "exact_0".to_string(),
+            "exact_1".to_string(),
+            "minimum".to_string()
         ]
     );
 }
@@ -127,14 +196,7 @@ fn compiles_update_expression_with_arithmetic_assignment() {
 }
 
 #[test]
-fn compiles_case_cast_tuple_exists_and_in_subquery_expressions() {
-    let subquery = SelectAst::new(vec![Projection::new(Expr::column("customer_id"))])
-        .from(TableSource::table("orders"))
-        .where_expr(Expr::Binary {
-            left: Box::new(Expr::column("status")),
-            op: BinaryOp::Eq,
-            right: Box::new(Expr::param("status")),
-        });
+fn compiles_case_cast_tuple_and_null_predicate_expressions() {
     let query = SelectAst::new(vec![
         Projection::new(Expr::column("id")),
         Projection::aliased(
@@ -167,12 +229,15 @@ fn compiles_case_cast_tuple_exists_and_in_subquery_expressions() {
     ])
     .from(TableSource::table("customers"))
     .where_expr(Expr::Binary {
-        left: Box::new(Expr::Exists(Box::new(subquery.clone()))),
+        left: Box::new(Expr::Binary {
+            left: Box::new(Expr::column("tier")),
+            op: BinaryOp::Eq,
+            right: Box::new(Expr::param("tier_filter")),
+        }),
         op: BinaryOp::And,
-        right: Box::new(Expr::InSubquery {
+        right: Box::new(Expr::Unary {
+            op: UnaryOp::IsNotNull,
             expr: Box::new(Expr::column("id")),
-            subquery: Box::new(subquery),
-            negated: false,
         }),
     });
 
@@ -182,14 +247,140 @@ fn compiles_case_cast_tuple_exists_and_in_subquery_expressions() {
 
     assert_eq!(
         compiled.sql(),
-        "SELECT \"id\", CAST(\"created_at\" AS TEXT) AS \"created_at_text\", CASE WHEN (\"tier\" = $1) THEN 'priority' ELSE 'standard' END AS \"service_level\", (\"country\", \"city\") AS \"location_key\" FROM \"customers\" WHERE (EXISTS (SELECT \"customer_id\" FROM \"orders\" WHERE (\"status\" = $2)) AND (\"id\" IN (SELECT \"customer_id\" FROM \"orders\" WHERE (\"status\" = $3))))"
+        "SELECT \"id\", CAST(\"created_at\" AS TEXT) AS \"created_at_text\", CASE WHEN (\"tier\" = $1) THEN 'priority' ELSE 'standard' END AS \"service_level\", (\"country\", \"city\") AS \"location_key\" FROM \"customers\" WHERE ((\"tier\" = $2) AND (\"id\" IS NOT NULL))"
     );
     assert_eq!(
         compiled.params(),
-        &[
-            "tier".to_string(),
-            "status".to_string(),
-            "status".to_string()
-        ]
+        &["tier".to_string(), "tier_filter".to_string()]
+    );
+}
+
+#[test]
+fn compiles_subquery_predicates_and_scalar_subqueries() {
+    let order_count = SelectAst::new(vec![Projection::new(Expr::Function {
+        name: "COUNT".to_string(),
+        args: vec![Expr::RawSafe("*".to_string())],
+    })])
+    .from(TableSource::table("orders"))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::qualified_column("orders", "customer_id")),
+        op: BinaryOp::Eq,
+        right: Box::new(Expr::qualified_column("customers", "id")),
+    });
+    let paid_customer_ids = SelectAst::new(vec![Projection::new(Expr::column("customer_id"))])
+        .from(TableSource::table("orders"))
+        .where_expr(Expr::Binary {
+            left: Box::new(Expr::column("status")),
+            op: BinaryOp::Eq,
+            right: Box::new(Expr::param("paid_status")),
+        });
+    let banned_customers = SelectAst::new(vec![Projection::new(Expr::Literal(
+        ormdantic_sql::SqlLiteral::Integer(1),
+    ))])
+    .from(TableSource::table("bans"))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::qualified_column("bans", "customer_id")),
+        op: BinaryOp::Eq,
+        right: Box::new(Expr::qualified_column("customers", "id")),
+    });
+    let query = SelectAst::new(vec![
+        Projection::new(Expr::column("id")),
+        Projection::aliased(Expr::Subquery(Box::new(order_count)), "order_count"),
+    ])
+    .from(TableSource::table("customers"))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::Binary {
+            left: Box::new(Expr::Exists {
+                select: Box::new(paid_customer_ids.clone()),
+                negated: false,
+            }),
+            op: BinaryOp::And,
+            right: Box::new(Expr::InSubquery {
+                expr: Box::new(Expr::column("id")),
+                select: Box::new(paid_customer_ids),
+                negated: false,
+            }),
+        }),
+        op: BinaryOp::And,
+        right: Box::new(Expr::Exists {
+            select: Box::new(banned_customers),
+            negated: true,
+        }),
+    });
+
+    let compiled = query
+        .compile(&PostgresDialect)
+        .expect("subquery expression query should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "SELECT \"id\", (SELECT COUNT(*) FROM \"orders\" WHERE (\"orders\".\"customer_id\" = \"customers\".\"id\")) AS \"order_count\" FROM \"customers\" WHERE (((EXISTS (SELECT \"customer_id\" FROM \"orders\" WHERE (\"status\" = $1))) AND (\"id\" IN (SELECT \"customer_id\" FROM \"orders\" WHERE (\"status\" = $2)))) AND (NOT EXISTS (SELECT 1 FROM \"bans\" WHERE (\"bans\".\"customer_id\" = \"customers\".\"id\"))))"
+    );
+    assert_eq!(
+        compiled.params(),
+        &["paid_status".to_string(), "paid_status".to_string()]
+    );
+}
+
+#[test]
+fn compiles_ctes_and_window_expressions() {
+    let paid_orders = SelectAst::new(vec![
+        Projection::new(Expr::column("customer_id")),
+        Projection::aliased(
+            Expr::Function {
+                name: "SUM".to_string(),
+                args: vec![Expr::column("total")],
+            },
+            "paid_total",
+        ),
+    ])
+    .from(TableSource::table("orders"))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::column("status")),
+        op: BinaryOp::Eq,
+        right: Box::new(Expr::param("status")),
+    })
+    .group_by(vec![Expr::column("customer_id")]);
+    let query = SelectAst::new(vec![
+        Projection::new(Expr::column("customer_id")),
+        Projection::new(Expr::column("paid_total")),
+        Projection::aliased(
+            Expr::Window {
+                expr: Box::new(Expr::Function {
+                    name: "SUM".to_string(),
+                    args: vec![Expr::column("paid_total")],
+                }),
+                partition_by: Vec::new(),
+                order_by: vec![OrderExpr::new(
+                    Expr::column("paid_total"),
+                    SortDirection::Desc,
+                )],
+            },
+            "running_total",
+        ),
+    ])
+    .with_cte(CommonTableExpr::new("paid_orders", paid_orders))
+    .from(TableSource::table("paid_orders"))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::column("paid_total")),
+        op: BinaryOp::Gt,
+        right: Box::new(Expr::param("minimum_total")),
+    })
+    .order_by(vec![OrderExpr::new(
+        Expr::column("paid_total"),
+        SortDirection::Desc,
+    )]);
+
+    let compiled = query
+        .compile(&PostgresDialect)
+        .expect("cte window expression query should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "WITH \"paid_orders\" AS (SELECT \"customer_id\", SUM(\"total\") AS \"paid_total\" FROM \"orders\" WHERE (\"status\" = $1) GROUP BY \"customer_id\") SELECT \"customer_id\", \"paid_total\", SUM(\"paid_total\") OVER (ORDER BY \"paid_total\" DESC) AS \"running_total\" FROM \"paid_orders\" WHERE (\"paid_total\" > $2) ORDER BY \"paid_total\" DESC"
+    );
+    assert_eq!(
+        compiled.params(),
+        &["status".to_string(), "minimum_total".to_string()]
     );
 }

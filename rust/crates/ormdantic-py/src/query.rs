@@ -1,9 +1,9 @@
 use ormdantic_dialects::AnyDialect;
 use ormdantic_sql::{
-    BinaryOp, CompiledQuery, DmlAst, Expr, Filter, JoinSpec, JoinedFilter, JoinedOrderBy,
-    JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, Projection, QueryAst, QueryOperation,
-    SelectAst, SelectColumn, SelectInPlan as SqlSelectInPlan, SortDirection, SqlLiteral, TableRef,
-    TableSource, UnaryOp,
+    BinaryOp, CommonTableExpr, CompiledQuery, DmlAst, Expr, Filter, JoinSpec, JoinedFilter,
+    JoinedOrderBy, JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, Projection, QueryAst,
+    QueryOperation, SelectAst, SelectColumn, SelectInPlan as SqlSelectInPlan, SortDirection,
+    SqlLiteral, TableRef, TableSource, UnaryOp,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -660,9 +660,17 @@ pub(crate) fn select_ast_from_payload(
 ) -> PyResult<SelectAst> {
     let table: String = required_item(query, "table")?.extract()?;
     let projections = required_item(query, "projections")?.extract::<Vec<Py<PyAny>>>()?;
-    let mut select =
-        SelectAst::new(parse_projections(py, projections)?).from(TableSource::table(table));
+    let source = match query.get_item("table_alias")? {
+        Some(alias) => TableSource::aliased_table(table, alias.extract::<String>()?),
+        None => TableSource::table(table),
+    };
+    let mut select = SelectAst::new(parse_projections(py, projections)?).from(source);
 
+    if let Some(ctes) = query.get_item("ctes")? {
+        for cte in parse_ctes(py, ctes)? {
+            select = select.with_cte(cte);
+        }
+    }
     if let Some(where_expr) = query.get_item("where")? {
         select = select.where_expr(parse_expression(where_expr)?);
     }
@@ -751,6 +759,29 @@ fn parse_order_expressions(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<
         .collect()
 }
 
+fn parse_ctes(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Vec<CommonTableExpr>> {
+    value
+        .extract::<Vec<Py<PyAny>>>()?
+        .into_iter()
+        .map(|cte| {
+            let cte_payload = cte.bind(py).downcast::<PyDict>()?;
+            let query = required_item(cte_payload, "query")?;
+            let query = query.downcast::<PyDict>()?;
+            let mut cte = CommonTableExpr::new(
+                required_item(cte_payload, "name")?.extract::<String>()?,
+                select_ast_from_payload(py, query)?,
+            );
+            if let Some(columns) = cte_payload.get_item("columns")? {
+                cte = cte.columns(columns.extract()?);
+            }
+            if let Some(recursive) = cte_payload.get_item("recursive")? {
+                cte = cte.recursive(recursive.extract()?);
+            }
+            Ok(cte)
+        })
+        .collect()
+}
+
 fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
     let expr = expr.downcast::<PyDict>()?;
     let kind: String = required_item(expr, "kind")?.extract()?;
@@ -788,7 +819,21 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
             Ok(Expr::Function {
                 name: required_item(expr, "name")?.extract()?,
                 args,
-                over: None,
+            })
+        }
+        "window" => {
+            let partition_by = match expr.get_item("partition_by")? {
+                Some(partition_by) => parse_expression_list(expr.py(), partition_by)?,
+                None => Vec::new(),
+            };
+            let order_by = match expr.get_item("order_by")? {
+                Some(order_by) => parse_order_expressions(expr.py(), order_by)?,
+                None => Vec::new(),
+            };
+            Ok(Expr::Window {
+                expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+                partition_by,
+                order_by,
             })
         }
         "between" => Ok(Expr::Between {
@@ -812,28 +857,6 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
                 values,
                 negated,
             })
-        }
-        "in_subquery" => {
-            let negated = expr
-                .get_item("negated")?
-                .map(|value| value.extract::<bool>())
-                .transpose()?
-                .unwrap_or(false);
-            let subquery_payload = required_item(expr, "subquery")?;
-            let subquery = subquery_payload.downcast::<PyDict>()?;
-            Ok(Expr::InSubquery {
-                expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
-                subquery: Box::new(select_ast_from_payload(expr.py(), subquery)?),
-                negated,
-            })
-        }
-        "exists" => {
-            let subquery_payload = required_item(expr, "subquery")?;
-            let subquery = subquery_payload.downcast::<PyDict>()?;
-            Ok(Expr::Exists(Box::new(select_ast_from_payload(
-                expr.py(),
-                subquery,
-            )?)))
         }
         "case" => {
             let whens = required_item(expr, "whens")?
@@ -866,10 +889,40 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
                 .collect::<PyResult<Vec<_>>>()?;
             Ok(Expr::Tuple(values))
         }
+        "subquery" => Ok(Expr::Subquery(Box::new(parse_select_subquery(expr)?))),
+        "exists" => {
+            let negated = expr
+                .get_item("negated")?
+                .map(|value| value.extract::<bool>())
+                .transpose()?
+                .unwrap_or(false);
+            Ok(Expr::Exists {
+                select: Box::new(parse_select_subquery(expr)?),
+                negated,
+            })
+        }
+        "in_subquery" => {
+            let negated = expr
+                .get_item("negated")?
+                .map(|value| value.extract::<bool>())
+                .transpose()?
+                .unwrap_or(false);
+            Ok(Expr::InSubquery {
+                expr: Box::new(parse_expression(required_item(expr, "expr")?)?),
+                select: Box::new(parse_select_subquery(expr)?),
+                negated,
+            })
+        }
         other => Err(PyValueError::new_err(format!(
             "unsupported expression kind '{other}'"
         ))),
     }
+}
+
+fn parse_select_subquery(expr: &Bound<'_, PyDict>) -> PyResult<SelectAst> {
+    let query = required_item(expr, "query")?;
+    let query = query.downcast::<PyDict>()?;
+    select_ast_from_payload(expr.py(), query)
 }
 
 fn parse_literal_expr(value: Bound<'_, PyAny>) -> PyResult<Expr> {

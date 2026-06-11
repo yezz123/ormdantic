@@ -14,6 +14,9 @@ fn renders_begin_transaction_options() {
         .with_isolation_level(IsolationLevel::RepeatableRead)
         .read_only()
         .with_deferrable_mode(DeferrableMode::Deferrable);
+    let serializable_read_only = TransactionOptions::new()
+        .with_isolation_level(IsolationLevel::Serializable)
+        .read_only();
 
     assert_eq!(
         PostgresDialect.begin_transaction_sql(&options),
@@ -21,6 +24,37 @@ fn renders_begin_transaction_options() {
             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
             "BEGIN READ ONLY DEFERRABLE",
         ])
+    );
+    assert_eq!(
+        MySqlDialect.begin_transaction_sql(&options),
+        strings(&[
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
+            "START TRANSACTION READ ONLY",
+        ])
+    );
+    assert_eq!(
+        MariaDbDialect.begin_transaction_sql(&options),
+        strings(&[
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
+            "START TRANSACTION READ ONLY",
+        ])
+    );
+    assert_eq!(
+        MsSqlDialect.begin_transaction_sql(&options),
+        strings(&[
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
+            "BEGIN TRANSACTION",
+        ])
+    );
+    assert_eq!(
+        OracleDialect.begin_transaction_sql(&serializable_read_only),
+        strings(&["SET TRANSACTION READ ONLY"])
+    );
+    assert_eq!(
+        OracleDialect.begin_transaction_sql(
+            &TransactionOptions::new().with_isolation_level(IsolationLevel::Serializable)
+        ),
+        strings(&["SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"])
     );
     assert_eq!(
         SqliteDialect.begin_transaction_sql(&TransactionOptions::new()),

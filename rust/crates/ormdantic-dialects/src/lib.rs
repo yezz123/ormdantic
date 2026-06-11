@@ -26,15 +26,18 @@ pub use kind::{normalize_dialect_name, DialectKind};
 pub use reflection::{ReflectionQuery, ReflectionQueryKind, ReflectionScope};
 
 use ddl::{
-    compile_add_column, compile_alter_column, compile_create_index, compile_create_table,
-    compile_drop_column, compile_drop_index, render_constraint,
+    compile_add_column, compile_add_constraint, compile_alter_column, compile_column_comment,
+    compile_create_index, compile_create_table, compile_drop_column, compile_drop_index,
+    compile_table_comment, compile_table_mysql_options, compile_table_postgres_inherits,
+    compile_table_postgres_using, compile_table_postgres_with, compile_table_tablespace,
+    MysqlTableOptionsRef,
 };
 use identifiers::{quote_backtick, quote_double};
 use ormdantic_core::{
-    BackendFeature, DeferrableMode, FeatureSet, IsolationLevel, OrmdanticResult, SavepointName,
-    TransactionAccessMode, TransactionOptions,
+    BackendFeature, DeferrableMode, FeatureSet, IsolationLevel, OrmdanticError, OrmdanticResult,
+    SavepointName, TransactionAccessMode, TransactionOptions,
 };
-use ormdantic_schema::{ColumnDef, FieldKind, SchemaOperation};
+use ormdantic_schema::{ColumnDef, FieldKind, NamespaceDef, SchemaOperation};
 use reflection::scope_predicate;
 use transactions::render_isolation_level;
 
@@ -43,6 +46,16 @@ pub trait Dialect {
     fn name(&self) -> &'static str;
     fn quote_ident(&self, ident: &str) -> String;
     fn placeholder(&self, index: usize) -> String;
+    fn max_bind_parameters(&self) -> Option<usize> {
+        Some(match self.kind() {
+            DialectKind::Sqlite => 32_766,
+            DialectKind::Postgres
+            | DialectKind::MySql
+            | DialectKind::MariaDb
+            | DialectKind::Oracle => 65_535,
+            DialectKind::MsSql => 2_100,
+        })
+    }
     fn supports_returning(&self) -> bool;
     fn supports_native_uuid(&self) -> bool;
     fn supports_json(&self) -> bool;
@@ -71,22 +84,44 @@ pub trait Dialect {
 
     fn render_column_type(&self, column: &ColumnDef) -> String {
         match column.kind() {
-            FieldKind::String | FieldKind::Enum => "TEXT".to_string(),
+            FieldKind::String => {
+                render_string_type(self.kind(), column.max_length(), column.is_primary_key())
+            }
+            FieldKind::Enum { name, schema } => match (self.kind(), name) {
+                (DialectKind::Postgres, Some(name)) => match schema {
+                    Some(schema) => {
+                        format!("{}.{}", self.quote_ident(schema), self.quote_ident(name))
+                    }
+                    None => self.quote_ident(name),
+                },
+                _ => "TEXT".to_string(),
+            },
             FieldKind::Integer => "INTEGER".to_string(),
             FieldKind::Float => "REAL".to_string(),
             FieldKind::Boolean => "BOOLEAN".to_string(),
             FieldKind::Uuid if self.supports_native_uuid() => "UUID".to_string(),
-            FieldKind::Uuid => "TEXT".to_string(),
+            FieldKind::Uuid => render_uuid_type(self.kind(), column.is_primary_key()),
             FieldKind::Date => "DATE".to_string(),
             FieldKind::DateTime => "TIMESTAMP".to_string(),
             FieldKind::Json | FieldKind::ModelJson if self.supports_json() => "JSON".to_string(),
             FieldKind::Json | FieldKind::ModelJson => "TEXT".to_string(),
+            FieldKind::Decimal if self.kind() == DialectKind::Sqlite => {
+                match (column.precision(), column.scale()) {
+                    (Some(precision), Some(scale)) => {
+                        format!("DECIMAL_TEXT({precision}, {scale})")
+                    }
+                    _ => "DECIMAL_TEXT".to_string(),
+                }
+            }
             FieldKind::Decimal => match (column.precision(), column.scale()) {
                 (Some(precision), Some(scale)) => format!("NUMERIC({precision}, {scale})"),
                 _ => "NUMERIC".to_string(),
             },
             FieldKind::Binary => "BLOB".to_string(),
-            FieldKind::ForeignKey { .. } | FieldKind::Unknown => "TEXT".to_string(),
+            FieldKind::ForeignKey { .. } => {
+                render_string_type(self.kind(), column.max_length(), true)
+            }
+            FieldKind::Unknown => "TEXT".to_string(),
         }
     }
 
@@ -96,62 +131,182 @@ pub trait Dialect {
     ) -> OrmdanticResult<Vec<String>> {
         Ok(match operation {
             SchemaOperation::CreateNamespace(namespace) => {
-                vec![format!(
-                    "CREATE SCHEMA IF NOT EXISTS {}",
-                    self.quote_ident(namespace.name())
-                )]
+                compile_create_namespace(self, namespace)?
             }
-            SchemaOperation::DropNamespace { name } => {
-                vec![format!("DROP SCHEMA IF EXISTS {}", self.quote_ident(name))]
+            SchemaOperation::DropNamespace { name } => compile_drop_namespace(self, name)?,
+            SchemaOperation::SetNamespaceComment { name, comment } => {
+                compile_namespace_comment(self, name, comment.as_deref())?
             }
-            SchemaOperation::CreateTable(table) => compile_create_table(self, table),
-            SchemaOperation::DropTable { name } => {
-                vec![format!("DROP TABLE IF EXISTS {}", self.quote_ident(name))]
+            SchemaOperation::CreateTable(table) => compile_create_table(self, table)?,
+            SchemaOperation::DropTable { name } => vec![drop_table_sql(self, name)],
+            SchemaOperation::RecreateTable(table) => {
+                let mut statements =
+                    vec![drop_table_sql(self, &table.qualified_name().to_string())];
+                statements.extend(compile_create_table(self, table)?);
+                statements
             }
             SchemaOperation::AddColumn { table, column } => {
-                vec![compile_add_column(self, table, column)]
+                compile_add_column(self, table, column)?
             }
             SchemaOperation::DropColumn { table, column } => {
                 vec![compile_drop_column(self, table, column)]
             }
             SchemaOperation::AlterColumn { table, column } => {
-                vec![compile_alter_column(self, table, column)]
+                vec![compile_alter_column(self, table, column)?]
+            }
+            SchemaOperation::SetColumnComment { table, column } => {
+                compile_column_comment(self, table, column)?
+                    .into_iter()
+                    .collect()
             }
             SchemaOperation::CreateIndex { table, index } => {
-                vec![compile_create_index(self, table, index)]
+                vec![compile_create_index(self, table, index)?]
             }
             SchemaOperation::DropIndex { table, name } => {
                 vec![compile_drop_index(self, table, name)]
             }
-            SchemaOperation::AddConstraint { table, constraint } => vec![format!(
-                "ALTER TABLE {} ADD {}",
-                self.quote_ident(table),
-                render_constraint(self, constraint)
-            )],
+            SchemaOperation::AddConstraint { table, constraint } => {
+                vec![compile_add_constraint(self, table, constraint)?]
+            }
             SchemaOperation::DropConstraint { table, name } => vec![format!(
                 "ALTER TABLE {} DROP CONSTRAINT {}",
-                self.quote_ident(table),
+                quote_qualified_name(self, table),
                 self.quote_ident(name)
             )],
+            SchemaOperation::SetTableComment { table, comment } => {
+                compile_table_comment(self, table, comment.as_deref())?
+                    .into_iter()
+                    .collect()
+            }
+            SchemaOperation::SetTableTablespace { table, tablespace } => {
+                compile_table_tablespace(self, table, tablespace.as_deref())?
+                    .into_iter()
+                    .collect()
+            }
+            SchemaOperation::SetTableMysqlOptions {
+                table,
+                engine,
+                charset,
+                collation,
+                row_format,
+                key_block_size,
+                pack_keys,
+                checksum,
+                delay_key_write,
+                stats_persistent,
+                stats_auto_recalc,
+                stats_sample_pages,
+                avg_row_length,
+                max_rows,
+                min_rows,
+                insert_method,
+                data_directory,
+                index_directory,
+                connection,
+                union,
+                partition_by,
+                partitions,
+                subpartition_by,
+                subpartitions,
+                auto_increment,
+            } => compile_table_mysql_options(
+                self,
+                table,
+                MysqlTableOptionsRef {
+                    engine: engine.as_deref(),
+                    charset: charset.as_deref(),
+                    collation: collation.as_deref(),
+                    row_format: row_format.as_deref(),
+                    key_block_size: *key_block_size,
+                    pack_keys: *pack_keys,
+                    checksum: *checksum,
+                    delay_key_write: *delay_key_write,
+                    stats_persistent: *stats_persistent,
+                    stats_auto_recalc: *stats_auto_recalc,
+                    stats_sample_pages: *stats_sample_pages,
+                    avg_row_length: *avg_row_length,
+                    max_rows: *max_rows,
+                    min_rows: *min_rows,
+                    insert_method: insert_method.as_deref(),
+                    data_directory: data_directory.as_deref(),
+                    index_directory: index_directory.as_deref(),
+                    connection: connection.as_deref(),
+                    union,
+                    partition_by: partition_by.as_deref(),
+                    partitions: *partitions,
+                    subpartition_by: subpartition_by.as_deref(),
+                    subpartitions: *subpartitions,
+                    auto_increment: *auto_increment,
+                },
+            )?
+            .into_iter()
+            .collect(),
+            SchemaOperation::SetTablePostgresInherits { table, add, drop } => {
+                compile_table_postgres_inherits(self, table, add, drop)?
+            }
+            SchemaOperation::SetTablePostgresWith { table, set, reset } => {
+                compile_table_postgres_with(self, table, set, reset)?
+            }
+            SchemaOperation::SetTablePostgresUsing { table, using } => {
+                compile_table_postgres_using(self, table, using.as_deref())?
+                    .into_iter()
+                    .collect()
+            }
+            SchemaOperation::SetTablePostgresUnlogged { table, unlogged } => {
+                if self.kind() != DialectKind::Postgres {
+                    return Err(ormdantic_core::OrmdanticError::UnsupportedFeature {
+                        feature: "PostgreSQL unlogged tables".to_string(),
+                        dialect: self.name().to_string(),
+                    });
+                }
+                vec![format!(
+                    "ALTER TABLE {} SET {}",
+                    quote_qualified_name(self, table),
+                    if *unlogged { "UNLOGGED" } else { "LOGGED" }
+                )]
+            }
+            SchemaOperation::AttachPostgresPartition {
+                table,
+                parent,
+                bound,
+            } => {
+                if self.kind() != DialectKind::Postgres {
+                    return Err(ormdantic_core::OrmdanticError::UnsupportedFeature {
+                        feature: "PostgreSQL table partitions".to_string(),
+                        dialect: self.name().to_string(),
+                    });
+                }
+                vec![format!(
+                    "ALTER TABLE {} ATTACH PARTITION {} {}",
+                    quote_qualified_name(self, parent),
+                    quote_qualified_name(self, table),
+                    bound
+                )]
+            }
+            SchemaOperation::DetachPostgresPartition { table, parent } => {
+                if self.kind() != DialectKind::Postgres {
+                    return Err(ormdantic_core::OrmdanticError::UnsupportedFeature {
+                        feature: "PostgreSQL table partitions".to_string(),
+                        dialect: self.name().to_string(),
+                    });
+                }
+                vec![format!(
+                    "ALTER TABLE {} DETACH PARTITION {}",
+                    quote_qualified_name(self, parent),
+                    quote_qualified_name(self, table)
+                )]
+            }
         })
     }
 
     fn begin_transaction_sql(&self, options: &TransactionOptions) -> Vec<String> {
-        let mut statements = Vec::new();
-        if let Some(isolation_level) = options.isolation_level() {
-            statements.push(self.set_isolation_sql(isolation_level));
+        match self.kind() {
+            DialectKind::Postgres => postgres_begin_transaction_sql(self, options),
+            DialectKind::MySql | DialectKind::MariaDb => mysql_begin_transaction_sql(self, options),
+            DialectKind::MsSql => mssql_begin_transaction_sql(self, options),
+            DialectKind::Oracle => oracle_begin_transaction_sql(self, options),
+            DialectKind::Sqlite => vec!["BEGIN".to_string()],
         }
-        let mut begin = "BEGIN".to_string();
-        if options.access_mode() == TransactionAccessMode::ReadOnly {
-            begin.push_str(" READ ONLY");
-        }
-        match options.deferrable_mode() {
-            Some(DeferrableMode::Deferrable) => begin.push_str(" DEFERRABLE"),
-            Some(DeferrableMode::NotDeferrable) => begin.push_str(" NOT DEFERRABLE"),
-            None => {}
-        }
-        statements.push(begin);
-        statements
     }
 
     fn set_isolation_sql(&self, isolation_level: IsolationLevel) -> String {
@@ -209,6 +364,226 @@ pub trait Dialect {
             .join(", ");
         format!("ON CONFLICT ({target}) DO UPDATE SET {assignments}")
     }
+}
+
+const DEFAULT_BOUNDED_STRING_LENGTH: u32 = 255;
+
+fn render_string_type(kind: DialectKind, max_length: Option<u32>, keyable: bool) -> String {
+    let max_length = max_length.filter(|length| *length > 0);
+    match kind {
+        DialectKind::Sqlite => "TEXT".to_string(),
+        DialectKind::Postgres => max_length
+            .map(|length| format!("VARCHAR({length})"))
+            .unwrap_or_else(|| "TEXT".to_string()),
+        DialectKind::MsSql => match max_length {
+            Some(length) => format!("NVARCHAR({length})"),
+            None => format!("NVARCHAR({DEFAULT_BOUNDED_STRING_LENGTH})"),
+        },
+        DialectKind::Oracle => match max_length {
+            Some(length) => format!("VARCHAR2({length})"),
+            None => format!("VARCHAR2({DEFAULT_BOUNDED_STRING_LENGTH})"),
+        },
+        DialectKind::MySql | DialectKind::MariaDb => match max_length {
+            Some(length) => format!("VARCHAR({length})"),
+            None if keyable => format!("VARCHAR({DEFAULT_BOUNDED_STRING_LENGTH})"),
+            None => "TEXT".to_string(),
+        },
+    }
+}
+
+fn render_uuid_type(kind: DialectKind, keyable: bool) -> String {
+    match kind {
+        DialectKind::Oracle => "VARCHAR2(36)".to_string(),
+        DialectKind::MySql | DialectKind::MariaDb if keyable => "VARCHAR(36)".to_string(),
+        _ => "TEXT".to_string(),
+    }
+}
+
+fn postgres_begin_transaction_sql(
+    dialect: &(impl Dialect + ?Sized),
+    options: &TransactionOptions,
+) -> Vec<String> {
+    let mut statements = Vec::new();
+    if let Some(isolation_level) = options.isolation_level() {
+        statements.push(dialect.set_isolation_sql(isolation_level));
+    }
+    let mut begin = "BEGIN".to_string();
+    if options.access_mode() == TransactionAccessMode::ReadOnly {
+        begin.push_str(" READ ONLY");
+    }
+    match options.deferrable_mode() {
+        Some(DeferrableMode::Deferrable) => begin.push_str(" DEFERRABLE"),
+        Some(DeferrableMode::NotDeferrable) => begin.push_str(" NOT DEFERRABLE"),
+        None => {}
+    }
+    statements.push(begin);
+    statements
+}
+
+fn mysql_begin_transaction_sql(
+    dialect: &(impl Dialect + ?Sized),
+    options: &TransactionOptions,
+) -> Vec<String> {
+    let mut statements = Vec::new();
+    if let Some(isolation_level) = options.isolation_level() {
+        statements.push(dialect.set_isolation_sql(isolation_level));
+    }
+    let mut begin = "START TRANSACTION".to_string();
+    if options.access_mode() == TransactionAccessMode::ReadOnly {
+        begin.push_str(" READ ONLY");
+    }
+    statements.push(begin);
+    statements
+}
+
+fn mssql_begin_transaction_sql(
+    dialect: &(impl Dialect + ?Sized),
+    options: &TransactionOptions,
+) -> Vec<String> {
+    let mut statements = Vec::new();
+    if let Some(isolation_level) = options.isolation_level() {
+        statements.push(dialect.set_isolation_sql(isolation_level));
+    }
+    statements.push("BEGIN TRANSACTION".to_string());
+    statements
+}
+
+fn oracle_begin_transaction_sql(
+    dialect: &(impl Dialect + ?Sized),
+    options: &TransactionOptions,
+) -> Vec<String> {
+    if options.access_mode() == TransactionAccessMode::ReadOnly {
+        return vec!["SET TRANSACTION READ ONLY".to_string()];
+    }
+    if let Some(isolation_level) = options.isolation_level() {
+        return vec![dialect.set_isolation_sql(isolation_level)];
+    }
+    Vec::new()
+}
+
+fn quote_qualified_name(dialect: &(impl Dialect + ?Sized), name: &str) -> String {
+    name.split('.')
+        .map(|part| dialect.quote_ident(part))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+fn drop_table_sql(dialect: &(impl Dialect + ?Sized), name: &str) -> String {
+    let qualified = quote_qualified_name(dialect, name);
+    if dialect.kind() == DialectKind::Oracle {
+        return format!("DROP TABLE {qualified}");
+    }
+    format!("DROP TABLE IF EXISTS {qualified}")
+}
+
+fn compile_create_namespace(
+    dialect: &(impl Dialect + ?Sized),
+    namespace: &NamespaceDef,
+) -> OrmdanticResult<Vec<String>> {
+    let name = namespace.name();
+    let mut statements = match dialect.kind() {
+        DialectKind::Postgres | DialectKind::MySql | DialectKind::MariaDb => vec![format!(
+            "CREATE SCHEMA IF NOT EXISTS {}",
+            dialect.quote_ident(name)
+        )],
+        DialectKind::MsSql => {
+            let create_sql = format!("CREATE SCHEMA {}", dialect.quote_ident(name));
+            vec![format!(
+                "IF SCHEMA_ID({}) IS NULL EXEC({})",
+                mssql_unicode_literal(name),
+                mssql_unicode_literal(&create_sql)
+            )]
+        }
+        DialectKind::Sqlite | DialectKind::Oracle => {
+            return Err(OrmdanticError::UnsupportedFeature {
+                feature: "namespaces/schemas".to_string(),
+                dialect: dialect.name().to_string(),
+            });
+        }
+    };
+    if let Some(comment) = namespace.comment() {
+        statements.extend(compile_namespace_comment(dialect, name, Some(comment))?);
+    }
+    Ok(statements)
+}
+
+fn compile_drop_namespace(
+    dialect: &(impl Dialect + ?Sized),
+    name: &str,
+) -> OrmdanticResult<Vec<String>> {
+    Ok(match dialect.kind() {
+        DialectKind::Postgres | DialectKind::MySql | DialectKind::MariaDb | DialectKind::MsSql => {
+            vec![format!(
+                "DROP SCHEMA IF EXISTS {}",
+                dialect.quote_ident(name)
+            )]
+        }
+        DialectKind::Sqlite | DialectKind::Oracle => {
+            return Err(OrmdanticError::UnsupportedFeature {
+                feature: "namespaces/schemas".to_string(),
+                dialect: dialect.name().to_string(),
+            });
+        }
+    })
+}
+
+fn compile_namespace_comment(
+    dialect: &(impl Dialect + ?Sized),
+    name: &str,
+    comment: Option<&str>,
+) -> OrmdanticResult<Vec<String>> {
+    Ok(match dialect.kind() {
+        DialectKind::Postgres => vec![format!(
+            "COMMENT ON SCHEMA {} IS {}",
+            dialect.quote_ident(name),
+            comment
+                .map(sql_string_literal)
+                .unwrap_or_else(|| "NULL".to_string())
+        )],
+        DialectKind::MsSql => vec![compile_mssql_namespace_comment(name, comment)],
+        _ => {
+            return Err(OrmdanticError::UnsupportedFeature {
+                feature: "namespace comments".to_string(),
+                dialect: dialect.name().to_string(),
+            });
+        }
+    })
+}
+
+fn compile_mssql_namespace_comment(name: &str, comment: Option<&str>) -> String {
+    let schema_literal = mssql_unicode_literal(name);
+    let exists_predicate = format!(
+        "EXISTS (SELECT 1 FROM sys.extended_properties ep \
+         JOIN sys.schemas s ON ep.major_id = s.schema_id \
+         WHERE ep.class = 3 AND ep.minor_id = 0 \
+         AND ep.name = N'MS_Description' \
+         AND s.name = {schema_literal})"
+    );
+    let level_args = format!("@level0type = N'SCHEMA', @level0name = {schema_literal}");
+    match comment {
+        Some(comment) => {
+            let comment_literal = mssql_unicode_literal(comment);
+            format!(
+                "IF {exists_predicate} \
+                 EXEC sys.sp_updateextendedproperty @name = N'MS_Description', \
+                 @value = {comment_literal}, {level_args}; \
+                 ELSE EXEC sys.sp_addextendedproperty @name = N'MS_Description', \
+                 @value = {comment_literal}, {level_args}"
+            )
+        }
+        None => format!(
+            "IF {exists_predicate} \
+             EXEC sys.sp_dropextendedproperty @name = N'MS_Description', {level_args}"
+        ),
+    }
+}
+
+fn sql_string_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+fn mssql_unicode_literal(value: &str) -> String {
+    format!("N'{}'", value.replace('\'', "''"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -4,7 +4,8 @@ use crate::{DbValue, QueryResult};
 
 #[cfg(feature = "oracle")]
 mod runtime {
-    use oracle_rs::{ColumnInfo, Config, Connection, OracleType, Value};
+    use oracle_rs::{ColumnInfo, Config, Connection, Error as OracleError, OracleType, Value};
+    use ormdantic_core::ExecutionErrorKind;
     use tokio::runtime::Runtime;
     use url::Url;
 
@@ -12,9 +13,14 @@ mod runtime {
     use crate::sql_error;
     use crate::url::normalize_driver_url;
 
+    const NON_TRANSACTIONAL_EXECUTES_BEFORE_RECONNECT: usize = 64;
+
     pub struct OracleConnection {
         runtime: Runtime,
         connection: Connection,
+        config: Config,
+        in_transaction: bool,
+        non_transactional_executes: usize,
     }
 
     impl OracleConnection {
@@ -22,37 +28,72 @@ mod runtime {
             let runtime = Runtime::new().map_err(sql_error)?;
             let config = config_from_url(url)?;
             let connection = runtime
-                .block_on(Connection::connect_with_config(config))
+                .block_on(Connection::connect_with_config(config.clone()))
                 .map_err(sql_error)?;
             Ok(Self {
                 runtime,
                 connection,
+                config,
+                in_transaction: false,
+                non_transactional_executes: 0,
             })
         }
 
         pub fn execute(&mut self, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
+            let returns_rows = crate::returns_rows(sql);
             let params = oracle_params(params);
             let result = self
                 .runtime
                 .block_on(self.connection.execute(sql, &params))
-                .map_err(sql_error)?;
+                .map_err(|error| oracle_error(error, sql))?;
+            if !self.in_transaction && !returns_rows {
+                self.runtime
+                    .block_on(self.connection.commit())
+                    .map_err(sql_error)?;
+                self.non_transactional_executes += 1;
+                if self.non_transactional_executes >= NON_TRANSACTIONAL_EXECUTES_BEFORE_RECONNECT {
+                    self.reconnect()?;
+                }
+            }
             Ok(result_to_query_result(result))
         }
 
+        fn reconnect(&mut self) -> OrmdanticResult<()> {
+            self.connection = self
+                .runtime
+                .block_on(Connection::connect_with_config(self.config.clone()))
+                .map_err(sql_error)?;
+            self.non_transactional_executes = 0;
+            Ok(())
+        }
+
         pub fn begin(&mut self) -> OrmdanticResult<()> {
+            self.in_transaction = true;
             Ok(())
         }
 
         pub fn commit(&mut self) -> OrmdanticResult<()> {
-            self.runtime
+            let result = self
+                .runtime
                 .block_on(self.connection.commit())
-                .map_err(sql_error)
+                .map_err(sql_error);
+            if result.is_ok() {
+                self.in_transaction = false;
+                self.non_transactional_executes = 0;
+            }
+            result
         }
 
         pub fn rollback(&mut self) -> OrmdanticResult<()> {
-            self.runtime
+            let result = self
+                .runtime
                 .block_on(self.connection.rollback())
-                .map_err(sql_error)
+                .map_err(sql_error);
+            if result.is_ok() {
+                self.in_transaction = false;
+                self.non_transactional_executes = 0;
+            }
+            result
         }
 
         pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
@@ -65,6 +106,81 @@ mod runtime {
     pub fn execute_url(url: &str, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
         let mut connection = OracleConnection::open(url)?;
         connection.execute(sql, params)
+    }
+
+    fn oracle_error(error: OracleError, sql: &str) -> OrmdanticError {
+        let message = error.to_string();
+        if let Some(kind) = classify_oracle_error(&error, sql, &message) {
+            return OrmdanticError::ExecutionError { kind, message };
+        }
+        sql_error(message)
+    }
+
+    fn classify_oracle_error(
+        error: &OracleError,
+        sql: &str,
+        message: &str,
+    ) -> Option<ExecutionErrorKind> {
+        match error {
+            OracleError::OracleError { code, .. }
+            | OracleError::ServerError { code, .. }
+            | OracleError::ConnectionRefused {
+                error_code: Some(code),
+                ..
+            } => classify_oracle_code(*code)
+                .or_else(|| classify_detailless_oracle_close(message, sql)),
+            OracleError::AuthenticationFailed(_) | OracleError::InvalidCredentials => {
+                Some(ExecutionErrorKind::Connection)
+            }
+            OracleError::ConnectionTimeout(_) => Some(ExecutionErrorKind::Timeout),
+            OracleError::ConnectionClosedByServer(reason) => {
+                classify_detailless_oracle_close(reason, sql)
+            }
+            OracleError::ConnectionClosed | OracleError::Io(_) => {
+                Some(ExecutionErrorKind::Connection)
+            }
+            _ => classify_detailless_oracle_close(message, sql),
+        }
+    }
+
+    fn classify_oracle_code(code: u32) -> Option<ExecutionErrorKind> {
+        match code {
+            1 => Some(ExecutionErrorKind::UniqueViolation),
+            60 | 8177 => Some(ExecutionErrorKind::SerializationFailure),
+            900 | 903 | 905 | 907 | 923 | 933 | 936 => Some(ExecutionErrorKind::Syntax),
+            1013 => Some(ExecutionErrorKind::Timeout),
+            1017 | 12505 | 12514 => Some(ExecutionErrorKind::Connection),
+            1031 => Some(ExecutionErrorKind::PermissionDenied),
+            1400 => Some(ExecutionErrorKind::NotNullViolation),
+            2290 => Some(ExecutionErrorKind::CheckViolation),
+            2291 | 2292 => Some(ExecutionErrorKind::ForeignKeyViolation),
+            _ => None,
+        }
+    }
+
+    fn classify_detailless_oracle_close(message: &str, sql: &str) -> Option<ExecutionErrorKind> {
+        let normalized_message = message.to_ascii_lowercase();
+        let normalized_sql = sql.trim().to_ascii_lowercase();
+        if normalized_message.contains("closed the connection without providing error details")
+            && looks_like_incomplete_select(&normalized_sql)
+        {
+            return Some(ExecutionErrorKind::Syntax);
+        }
+        if normalized_message.contains("server rejected the operation and closed the connection")
+            && normalized_message.contains("temporary lob")
+            && starts_with_sql_keyword(&normalized_sql, "insert")
+        {
+            return Some(ExecutionErrorKind::UniqueViolation);
+        }
+        None
+    }
+
+    fn looks_like_incomplete_select(sql: &str) -> bool {
+        sql == "select * from" || sql.ends_with(" from")
+    }
+
+    fn starts_with_sql_keyword(sql: &str, keyword: &str) -> bool {
+        sql.split_whitespace().next() == Some(keyword)
     }
 
     fn config_from_url(raw_url: &str) -> OrmdanticResult<Config> {
@@ -118,6 +234,11 @@ mod runtime {
             .map(|value| match value {
                 DbValue::Null => Value::Null,
                 DbValue::Integer(value) => Value::Integer(*value),
+                DbValue::UnsignedInteger(value) => match i64::try_from(*value) {
+                    Ok(value) => Value::Integer(value),
+                    Err(_) => Value::String(value.to_string()),
+                },
+                DbValue::Decimal(value) => Value::String(value.clone()),
                 DbValue::Real(value) => Value::Float(*value),
                 DbValue::Text(value) => Value::String(value.clone()),
                 DbValue::Bool(value) => Value::Integer(i64::from(*value)),
@@ -154,11 +275,8 @@ mod runtime {
             Value::Bytes(value) => DbValue::Text(String::from_utf8_lossy(value).to_string()),
             Value::Integer(value) => DbValue::Integer(*value),
             Value::Float(value) => DbValue::Real(*value),
-            Value::Number(value) => value
-                .to_i64()
-                .map(DbValue::Integer)
-                .or_else(|_| value.to_f64().map(DbValue::Real))
-                .unwrap_or_else(|_| DbValue::Text(format!("{value:?}"))),
+            Value::Number(value) => parse_oracle_number(value.as_str())
+                .unwrap_or_else(|| DbValue::Decimal(value.as_str().to_string())),
             Value::Boolean(value) => DbValue::Bool(*value),
             Value::Json(value) => DbValue::Text(value.to_string()),
             other => DbValue::Text(format!("{other:?}")),
@@ -177,10 +295,76 @@ mod runtime {
     }
 
     fn parse_oracle_number(value: &str) -> Option<DbValue> {
+        if value.contains('.') {
+            return Some(DbValue::Decimal(value.to_string()));
+        }
         if let Ok(integer) = value.parse::<i64>() {
             Some(DbValue::Integer(integer))
+        } else if let Ok(integer) = value.parse::<u64>() {
+            Some(DbValue::UnsignedInteger(integer))
         } else {
-            value.parse::<f64>().ok().map(DbValue::Real)
+            Some(DbValue::Decimal(value.to_string()))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{
+            classify_detailless_oracle_close, classify_oracle_code, looks_like_incomplete_select,
+        };
+        use ormdantic_core::ExecutionErrorKind;
+
+        #[test]
+        fn classifies_oracle_error_codes() {
+            let cases = [
+                (1, ExecutionErrorKind::UniqueViolation),
+                (900, ExecutionErrorKind::Syntax),
+                (936, ExecutionErrorKind::Syntax),
+                (1013, ExecutionErrorKind::Timeout),
+                (1017, ExecutionErrorKind::Connection),
+                (1031, ExecutionErrorKind::PermissionDenied),
+                (1400, ExecutionErrorKind::NotNullViolation),
+                (2290, ExecutionErrorKind::CheckViolation),
+                (2291, ExecutionErrorKind::ForeignKeyViolation),
+                (8177, ExecutionErrorKind::SerializationFailure),
+            ];
+
+            for (code, expected) in cases {
+                assert_eq!(classify_oracle_code(code), Some(expected));
+            }
+            assert_eq!(classify_oracle_code(99999), None);
+        }
+
+        #[test]
+        fn classifies_oracle_detailless_closed_connection_edges() {
+            assert_eq!(
+                classify_detailless_oracle_close(
+                    "Query failed - Oracle closed the connection without providing error details. This typically indicates insufficient privileges or the object doesn't exist.",
+                    "SELECT * FROM",
+                ),
+                Some(ExecutionErrorKind::Syntax),
+            );
+            assert_eq!(
+                classify_detailless_oracle_close(
+                    "ORA-00000: Server rejected the operation and closed the connection. This may happen when binding a temporary LOB to an INSERT statement.",
+                    "INSERT INTO flavors (id, name) VALUES (:1, :2)",
+                ),
+                Some(ExecutionErrorKind::UniqueViolation),
+            );
+            assert_eq!(
+                classify_detailless_oracle_close(
+                    "Oracle closed the connection without providing error details.",
+                    "SELECT * FROM flavors",
+                ),
+                None,
+            );
+        }
+
+        #[test]
+        fn detects_incomplete_select_shapes() {
+            assert!(looks_like_incomplete_select("select * from"));
+            assert!(looks_like_incomplete_select("select id from"));
+            assert!(!looks_like_incomplete_select("select * from flavor"));
         }
     }
 }

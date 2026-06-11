@@ -2,6 +2,7 @@
 
 import importlib
 import json
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -21,6 +22,8 @@ def model_instance_table(model: BaseModel, table_map: Map) -> str:
 
 def py_type_to_sql(table_map: Map, value: Any) -> Any:
     """Convert a Python value to a SQL-compatible value for Rust binding."""
+    if isinstance(value, Enum):
+        value = value.value
     if isinstance(value, (dict, list)):
         return json.dumps(value)
     if isinstance(value, BaseModel) and type(value) in table_map.model_to_data:

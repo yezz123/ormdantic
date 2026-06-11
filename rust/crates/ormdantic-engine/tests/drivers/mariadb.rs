@@ -18,6 +18,7 @@ fn mariadb_parameterized_selects_cover_core_values() {
         &url,
         common::ValueRoundTripSql {
             sql: "SELECT ? AS int_value, ? AS real_value, ? AS text_value, ? AS bool_value, ? AS null_value",
+            expected_real: DbValue::Real(3.25),
             expected_bool: DbValue::Integer(1),
         },
     );
@@ -33,12 +34,12 @@ fn mariadb_numeric_edges_round_trip() {
     common::run_numeric_edge_flow(
         &url,
         common::NumericEdgeSql {
-            sql: "SELECT CAST(9223372036854775807 AS UNSIGNED) AS unsigned_value, CAST(-2147483648 AS SIGNED) AS signed_value, CAST(3.5 AS DOUBLE) AS real_value, CAST(123.45 AS DECIMAL(10,2)) AS decimal_text",
+            sql: "SELECT CAST(18446744073709551615 AS UNSIGNED) AS unsigned_value, CAST(-2147483648 AS SIGNED) AS signed_value, CAST(3.5 AS DOUBLE) AS real_value, CAST(123.45 AS DECIMAL(10,2)) AS decimal_text",
             expected: vec![
-                DbValue::Integer(9_223_372_036_854_775_807),
+                DbValue::UnsignedInteger(u64::MAX),
                 DbValue::Integer(-2_147_483_648),
                 DbValue::Real(3.5),
-                DbValue::Text("123.45".to_string()),
+                DbValue::Decimal("123.45".to_string()),
             ],
         },
     );

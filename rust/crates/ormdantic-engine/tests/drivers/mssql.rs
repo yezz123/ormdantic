@@ -18,6 +18,7 @@ fn mssql_parameterized_selects_cover_core_values() {
         &url,
         common::ValueRoundTripSql {
             sql: "SELECT CAST(@P1 AS BIGINT) AS int_value, CAST(@P2 AS FLOAT) AS real_value, CAST(@P3 AS NVARCHAR(100)) AS text_value, CAST(@P4 AS BIT) AS bool_value, CAST(@P5 AS NVARCHAR(100)) AS null_value",
+            expected_real: DbValue::Real(3.25),
             expected_bool: DbValue::Bool(true),
         },
     );
@@ -39,7 +40,7 @@ fn mssql_numeric_edges_round_trip() {
                 DbValue::Integer(2_147_483_647),
                 DbValue::Integer(9_223_372_036_854_775_807),
                 DbValue::Real(3.5),
-                DbValue::Real(123.45),
+                DbValue::Decimal("123.45".to_string()),
             ],
         },
     );

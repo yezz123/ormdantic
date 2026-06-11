@@ -30,6 +30,7 @@ from ormdantic._migrations.sql import (
 UTC = timezone.utc
 MIGRATION_TABLE = "ormdantic_migrations"
 MIGRATION_LOCK_NAME = "ormdantic:migration:lock"
+_ORACLE_HISTORY_CHUNK_SIZE = 50
 
 
 def migration_table_column_defs(dialect: str) -> list[tuple[str, str, str | None]]:
@@ -234,6 +235,7 @@ def is_duplicate_column_error(error: Exception) -> bool:
 
 
 def history_entries(connection: Any, dialect: str) -> list[MigrationHistoryEntry]:
+    normalized_dialect = dialect_name(dialect)
     table = quote_ident(dialect, MIGRATION_TABLE)
     columns = [
         "revision",
@@ -247,7 +249,10 @@ def history_entries(connection: Any, dialect: str) -> list[MigrationHistoryEntry
         "ormdantic_version",
         "metadata",
     ]
-    selected = ", ".join(quote_ident(dialect, name) for name in columns)
+    if normalized_dialect == "oracle":
+        return _oracle_history_entries(connection, dialect, table, columns)
+    selected_columns = columns
+    selected = ", ".join(quote_ident(dialect, name) for name in selected_columns)
     rows = query_rows(
         connection,
         f"SELECT {selected} FROM {table} ORDER BY {quote_ident(dialect, 'applied_at')}, "
@@ -256,11 +261,12 @@ def history_entries(connection: Any, dialect: str) -> list[MigrationHistoryEntry
     history: list[MigrationHistoryEntry] = []
     for row in rows:
         metadata: dict[str, Any] = {}
-        if len(row) >= 10 and row[9]:
+        metadata_value = row[9] if len(row) >= 10 else None
+        if metadata_value:
             try:
-                metadata = dict(json.loads(str(row[9])))
+                metadata = dict(json.loads(str(metadata_value)))
             except Exception:
-                metadata = {"raw": str(row[9])}
+                metadata = {"raw": str(metadata_value)}
         history.append(
             MigrationHistoryEntry(
                 revision=str(row[0]),
@@ -278,6 +284,107 @@ def history_entries(connection: Any, dialect: str) -> list[MigrationHistoryEntry
             )
         )
     return history
+
+
+def _oracle_history_entries(
+    connection: Any,
+    dialect: str,
+    table: str,
+    columns: Sequence[str],
+) -> list[MigrationHistoryEntry]:
+    revision_column = quote_ident(dialect, "revision")
+    revisions = _oracle_history_revisions(connection, dialect, table, revision_column)
+    values_by_column = {
+        column: _oracle_history_column_values(
+            connection,
+            dialect,
+            table,
+            revision_column,
+            column,
+            revisions,
+        )
+        for column in columns[1:]
+    }
+    history: list[MigrationHistoryEntry] = []
+    for revision in revisions:
+        metadata: dict[str, Any] = {}
+        metadata_value = values_by_column["metadata"].get(revision)
+        if metadata_value:
+            try:
+                metadata = dict(json.loads(str(metadata_value)))
+            except Exception:
+                metadata = {"raw": str(metadata_value)}
+        history.append(
+            MigrationHistoryEntry(
+                revision=revision,
+                description=optional_str(values_by_column["description"].get(revision)),
+                checksum=optional_str(values_by_column["checksum"].get(revision)),
+                applied_at=optional_str(values_by_column["applied_at"].get(revision)),
+                execution_time_ms=optional_int(
+                    values_by_column["execution_time_ms"].get(revision)
+                ),
+                status=str(
+                    values_by_column["status"].get(revision) or MIGRATION_STATUS_APPLIED
+                ),
+                dirty=db_truthy(values_by_column["dirty"].get(revision)),
+                artifact_version=optional_int(
+                    values_by_column["artifact_version"].get(revision)
+                ),
+                ormdantic_version=optional_str(
+                    values_by_column["ormdantic_version"].get(revision)
+                ),
+                metadata=metadata,
+            )
+        )
+    return history
+
+
+def _oracle_history_revisions(
+    connection: Any,
+    dialect: str,
+    table: str,
+    revision_column: str,
+) -> list[str]:
+    revisions: list[str] = []
+    offset = 0
+    order_by = f"{quote_ident(dialect, 'applied_at')}, {revision_column}"
+    while True:
+        rows = query_rows(
+            connection,
+            f"SELECT {revision_column} FROM {table} ORDER BY {order_by} "
+            f"OFFSET {offset} ROWS FETCH NEXT {_ORACLE_HISTORY_CHUNK_SIZE} ROWS ONLY",
+        )
+        if not rows:
+            break
+        revisions.extend(str(row[0]) for row in rows if row)
+        if len(rows) < _ORACLE_HISTORY_CHUNK_SIZE:
+            break
+        offset += _ORACLE_HISTORY_CHUNK_SIZE
+    return revisions
+
+
+def _oracle_history_column_values(
+    connection: Any,
+    dialect: str,
+    table: str,
+    revision_column: str,
+    column: str,
+    revisions: Sequence[str],
+) -> dict[str, Any]:
+    column_name = quote_ident(dialect, column)
+    values: dict[str, Any] = {}
+    for index in range(0, len(revisions), _ORACLE_HISTORY_CHUNK_SIZE):
+        chunk = revisions[index : index + _ORACLE_HISTORY_CHUNK_SIZE]
+        if not chunk:
+            continue
+        revision_values = ", ".join(sql_literal(revision) for revision in chunk)
+        rows = query_rows(
+            connection,
+            f"SELECT {revision_column}, {column_name} FROM {table} "
+            f"WHERE {revision_column} IN ({revision_values})",
+        )
+        values.update({str(row[0]): row[1] for row in rows if len(row) > 1})
+    return values
 
 
 def history_entry(
@@ -326,6 +433,8 @@ def repair_history(
             ormdantic_version=entry.ormdantic_version,
             metadata=entry.metadata,
         )
+        if payload == entry:
+            continue
         write_history_entry(connection, dialect, payload)
         updated += 1
     return updated

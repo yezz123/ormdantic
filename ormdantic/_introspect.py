@@ -78,9 +78,24 @@ class FieldMetadata:
         return self.constraint("max_length")
 
     @property
+    def pattern(self) -> Any:
+        """Return the string pattern constraint."""
+        return self.constraint("pattern")
+
+    @property
     def multiple_of(self) -> Any:
         """Return the multiple-of constraint."""
         return self.constraint("multiple_of")
+
+    @property
+    def max_digits(self) -> int | None:
+        """Return the maximum digit count for Decimal fields."""
+        return self.constraint("max_digits")
+
+    @property
+    def decimal_places(self) -> int | None:
+        """Return the fixed decimal-place count for Decimal fields."""
+        return self.constraint("decimal_places")
 
     @property
     def ge(self) -> Any:

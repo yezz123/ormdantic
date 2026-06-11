@@ -2,7 +2,18 @@ use ormdantic_schema::{ColumnDef, ColumnDefault, ComputedDef, FieldKind, Identit
 
 #[test]
 fn column_builder_exposes_all_options() {
-    let identity = IdentityDef::new().start(10).increment(5).always(true);
+    let identity = IdentityDef::new()
+        .start(10)
+        .increment(5)
+        .min_value(1)
+        .max_value(1000)
+        .no_min_value(false)
+        .no_max_value(false)
+        .cycle(true)
+        .cache(20)
+        .order(true)
+        .on_null(true)
+        .always(true);
     let computed = ComputedDef::new("price * quantity").persisted(true);
     let column = ColumnDef::new("total", FieldKind::Decimal)
         .nullable(true)
@@ -26,6 +37,14 @@ fn column_builder_exposes_all_options() {
     );
     assert_eq!(column.server_default(), Some("0"));
     assert_eq!(column.identity(), Some(&identity));
+    assert_eq!(identity.minimum_value(), Some(1));
+    assert_eq!(identity.maximum_value(), Some(1000));
+    assert!(!identity.is_no_min_value());
+    assert!(!identity.is_no_max_value());
+    assert!(identity.is_cycle());
+    assert_eq!(identity.cache_value(), Some(20));
+    assert!(identity.is_ordered());
+    assert!(identity.is_on_null());
     assert_eq!(column.computed(), Some(&computed));
     assert!(column.is_autoincrement());
     assert_eq!(column.collation(), Some("NOCASE"));
@@ -41,7 +60,25 @@ fn identity_and_computed_defaults_are_minimal() {
 
     assert_eq!(identity.start_value(), None);
     assert_eq!(identity.increment_value(), None);
+    assert_eq!(identity.minimum_value(), None);
+    assert_eq!(identity.maximum_value(), None);
+    assert!(!identity.is_no_min_value());
+    assert!(!identity.is_no_max_value());
+    assert_eq!(identity.cache_value(), None);
     assert!(!identity.is_always());
+    assert!(!identity.is_cycle());
+    assert!(!identity.is_ordered());
+    assert!(!identity.is_on_null());
     assert_eq!(computed.expression(), "lower(name)");
     assert!(!computed.is_persisted());
+}
+
+#[test]
+fn identity_builder_exposes_no_bound_flags() {
+    let identity = IdentityDef::new().no_min_value(true).no_max_value(true);
+
+    assert!(identity.is_no_min_value());
+    assert!(identity.is_no_max_value());
+    assert_eq!(identity.minimum_value(), None);
+    assert_eq!(identity.maximum_value(), None);
 }

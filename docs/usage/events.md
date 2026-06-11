@@ -15,6 +15,12 @@ Supported events:
 - `after_update`
 - `before_delete`
 - `after_delete`
+- `before_begin`
+- `after_begin`
+- `before_commit`
+- `after_commit`
+- `before_rollback`
+- `after_rollback`
 - `before_flush`
 - `after_flush`
 

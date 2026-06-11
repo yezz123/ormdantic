@@ -14,6 +14,14 @@ pub enum Filter {
     IsNotNull { column: String },
     And(Vec<Filter>),
     Or(Vec<Filter>),
+    DecimalEq { column: String, param: String },
+    DecimalNe { column: String, param: String },
+    DecimalLt { column: String, param: String },
+    DecimalLe { column: String, param: String },
+    DecimalGt { column: String, param: String },
+    DecimalGe { column: String, param: String },
+    DecimalIn { column: String, params: Vec<String> },
+    DecimalNotIn { column: String, params: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +102,17 @@ pub(crate) enum PredicateExpr {
         op: ComparisonOp,
         right: BindParam,
     },
+    DecimalCompare {
+        left: ColumnRef,
+        op: ComparisonOp,
+        right: BindParam,
+    },
     InList {
+        left: ColumnRef,
+        params: Vec<BindParam>,
+        negated: bool,
+    },
+    DecimalInList {
         left: ColumnRef,
         params: Vec<BindParam>,
         negated: bool,
@@ -146,12 +164,48 @@ impl From<&Filter> for PredicateExpr {
                 op: BoolOp::Or,
                 exprs: filters.iter().map(PredicateExpr::from).collect(),
             },
+            Filter::DecimalEq { column, param } => {
+                decimal_comparison_expr(column, ComparisonOp::Eq, param)
+            }
+            Filter::DecimalNe { column, param } => {
+                decimal_comparison_expr(column, ComparisonOp::Ne, param)
+            }
+            Filter::DecimalLt { column, param } => {
+                decimal_comparison_expr(column, ComparisonOp::Lt, param)
+            }
+            Filter::DecimalLe { column, param } => {
+                decimal_comparison_expr(column, ComparisonOp::Le, param)
+            }
+            Filter::DecimalGt { column, param } => {
+                decimal_comparison_expr(column, ComparisonOp::Gt, param)
+            }
+            Filter::DecimalGe { column, param } => {
+                decimal_comparison_expr(column, ComparisonOp::Ge, param)
+            }
+            Filter::DecimalIn { column, params } => PredicateExpr::DecimalInList {
+                left: ColumnRef::new(column.clone()),
+                params: params.iter().cloned().map(BindParam::new).collect(),
+                negated: false,
+            },
+            Filter::DecimalNotIn { column, params } => PredicateExpr::DecimalInList {
+                left: ColumnRef::new(column.clone()),
+                params: params.iter().cloned().map(BindParam::new).collect(),
+                negated: true,
+            },
         }
     }
 }
 
 fn comparison_expr(column: &str, op: ComparisonOp, param: &str) -> PredicateExpr {
     PredicateExpr::Compare {
+        left: ColumnRef::new(column),
+        op,
+        right: BindParam::new(param),
+    }
+}
+
+fn decimal_comparison_expr(column: &str, op: ComparisonOp, param: &str) -> PredicateExpr {
+    PredicateExpr::DecimalCompare {
         left: ColumnRef::new(column),
         op,
         right: BindParam::new(param),

@@ -360,6 +360,20 @@ impl Display for RevisionId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExecutionErrorKind {
+    Connection,
+    Syntax,
+    UniqueViolation,
+    ForeignKeyViolation,
+    NotNullViolation,
+    CheckViolation,
+    SerializationFailure,
+    Timeout,
+    PermissionDenied,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OrmdanticError {
     MissingPrimaryKeyAlias {
         tablename: String,
@@ -413,6 +427,7 @@ pub enum OrmdanticError {
         message: String,
     },
     ExecutionError {
+        kind: ExecutionErrorKind,
         message: String,
     },
     SqlCompile {
@@ -475,7 +490,7 @@ impl Display for OrmdanticError {
             Self::SchemaDiffError { message } => write!(formatter, "schema diff error: {message}"),
             Self::UnitOfWorkError { message } => write!(formatter, "unit of work error: {message}"),
             Self::EventError { message } => write!(formatter, "event error: {message}"),
-            Self::ExecutionError { message } => write!(formatter, "execution error: {message}"),
+            Self::ExecutionError { message, .. } => write!(formatter, "execution error: {message}"),
             Self::SqlCompile { message } => write!(formatter, "{message}"),
         }
     }

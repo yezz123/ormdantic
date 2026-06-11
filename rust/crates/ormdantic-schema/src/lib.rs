@@ -44,7 +44,9 @@ mod table;
 pub use alias::ColumnAlias;
 pub use column::{ColumnDef, ColumnDefault, ComputedDef, FieldKind, IdentityDef};
 pub use constraints::{
-    CheckConstraintDef, ConstraintDef, ForeignKeyAction, ForeignKeyDef, UniqueConstraintDef,
+    CheckConstraintDef, ConstraintDef, ConstraintTiming, ExclusionConstraintDef,
+    ExclusionElementDef, ForeignKeyAction, ForeignKeyDef, ForeignKeyMatch, OracleIndexCompression,
+    UniqueConstraintDef,
 };
 pub use diff::{SchemaDiff, SchemaDiffer, SchemaOperation, SchemaSnapshot};
 pub use index::IndexDef;
@@ -54,4 +56,4 @@ pub use registry::SchemaRegistry;
 pub use relationships::{
     CascadeAction, LoaderStrategy, RelationshipCardinality, RelationshipDef, RelationshipDirection,
 };
-pub use table::TableDef;
+pub use table::{MysqlTableOptions, OracleTableCompression, TableDef};

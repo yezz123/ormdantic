@@ -80,6 +80,15 @@ impl NativeConnection {
 
     pub fn begin_with(&mut self, options: TransactionOptions) -> OrmdanticResult<()> {
         let dialect = AnyDialect::parse(self.dialect())?;
+        if let Self::Oracle(connection) = self {
+            connection.begin()?;
+            for statement in dialect.begin_transaction_sql(&options) {
+                if !statement.is_empty() {
+                    connection.execute(&statement, &[])?;
+                }
+            }
+            return Ok(());
+        }
         for statement in dialect.begin_transaction_sql(&options) {
             if !statement.is_empty() {
                 self.execute(&statement, &[])?;

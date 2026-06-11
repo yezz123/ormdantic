@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import re
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from os import PathLike
 from typing import Any
 
@@ -107,6 +109,15 @@ from ormdantic._migrations.models import (
     ColumnSnapshot as ColumnSnapshot,
 )
 from ormdantic._migrations.models import (
+    EnumTypeSnapshot as EnumTypeSnapshot,
+)
+from ormdantic._migrations.models import (
+    ExclusionConstraintSnapshot as ExclusionConstraintSnapshot,
+)
+from ormdantic._migrations.models import (
+    ForeignKeyConstraintSnapshot as ForeignKeyConstraintSnapshot,
+)
+from ormdantic._migrations.models import (
     IndexSnapshot as IndexSnapshot,
 )
 from ormdantic._migrations.models import (
@@ -119,13 +130,28 @@ from ormdantic._migrations.models import (
     MigrationWarning as MigrationWarning,
 )
 from ormdantic._migrations.models import (
+    NamespaceSnapshot as NamespaceSnapshot,
+)
+from ormdantic._migrations.models import (
     RuntimeCheck as RuntimeCheck,
 )
 from ormdantic._migrations.models import (
     SchemaDiff as SchemaDiff,
 )
 from ormdantic._migrations.models import (
+    SequenceSnapshot as SequenceSnapshot,
+)
+from ormdantic._migrations.models import (
+    TableCheckSnapshot as TableCheckSnapshot,
+)
+from ormdantic._migrations.models import (
     TableSnapshot as TableSnapshot,
+)
+from ormdantic._migrations.models import (
+    UniqueConstraintSnapshot as UniqueConstraintSnapshot,
+)
+from ormdantic._migrations.models import (
+    ViewSnapshot as ViewSnapshot,
 )
 from ormdantic._migrations.planning import (
     _build_plan,
@@ -147,10 +173,19 @@ from ormdantic._migrations.planning import (
     _classify_sql_operation as _classify_sql_operation,
 )
 from ormdantic._migrations.planning import (
+    _compile_enum_type_diff as _compile_enum_type_diff,
+)
+from ormdantic._migrations.planning import (
+    _compile_namespace_diff as _compile_namespace_diff,
+)
+from ormdantic._migrations.planning import (
     _compile_schema_diff as _compile_schema_diff,
 )
 from ormdantic._migrations.planning import (
     _compile_table_create_sql as _compile_table_create_sql,
+)
+from ormdantic._migrations.planning import (
+    _compile_view_diff as _compile_view_diff,
 )
 from ormdantic._migrations.planning import (
     _constraints as _constraints,
@@ -162,7 +197,16 @@ from ormdantic._migrations.planning import (
     _diff_constraints as _diff_constraints,
 )
 from ormdantic._migrations.planning import (
+    _diff_enum_types as _diff_enum_types,
+)
+from ormdantic._migrations.planning import (
     _diff_indexes as _diff_indexes,
+)
+from ormdantic._migrations.planning import (
+    _diff_namespaces as _diff_namespaces,
+)
+from ormdantic._migrations.planning import (
+    _diff_views as _diff_views,
 )
 from ormdantic._migrations.planning import (
     _is_destructive_column_change as _is_destructive_column_change,
@@ -178,6 +222,27 @@ from ormdantic._migrations.planning import (
 )
 from ormdantic._migrations.planning import (
     _rewrite_sqlite_rebuild_operations as _rewrite_sqlite_rebuild_operations,
+)
+from ormdantic._migrations.planning import (
+    _set_constraint_comment_sql as _set_constraint_comment_sql,
+)
+from ormdantic._migrations.planning import (
+    _set_enum_type_comment_sql as _set_enum_type_comment_sql,
+)
+from ormdantic._migrations.planning import (
+    _set_index_comment_sql as _set_index_comment_sql,
+)
+from ormdantic._migrations.planning import (
+    _set_index_tablespace_sql as _set_index_tablespace_sql,
+)
+from ormdantic._migrations.planning import (
+    _set_namespace_comment_sql as _set_namespace_comment_sql,
+)
+from ormdantic._migrations.planning import (
+    _set_sequence_comment_sql as _set_sequence_comment_sql,
+)
+from ormdantic._migrations.planning import (
+    _set_view_comment_sql as _set_view_comment_sql,
 )
 from ormdantic._migrations.planning import (
     _sql_identifier_after as _sql_identifier_after,
@@ -201,6 +266,9 @@ from ormdantic._migrations.reflection import (
     _normalize_reflected_type as _normalize_reflected_type,
 )
 from ormdantic._migrations.reflection import (
+    _normalize_reflected_validated as _normalize_reflected_validated,
+)
+from ormdantic._migrations.reflection import (
     _normalize_sqlite_type as _normalize_sqlite_type,
 )
 from ormdantic._migrations.reflection import (
@@ -219,13 +287,22 @@ from ormdantic._migrations.reflection import (
     _oracle_indexes_view as _oracle_indexes_view,
 )
 from ormdantic._migrations.reflection import (
+    _oracle_materialized_views_view as _oracle_materialized_views_view,
+)
+from ormdantic._migrations.reflection import (
     _oracle_owner_filter as _oracle_owner_filter,
+)
+from ormdantic._migrations.reflection import (
+    _oracle_sequences_view as _oracle_sequences_view,
 )
 from ormdantic._migrations.reflection import (
     _oracle_tab_columns_view as _oracle_tab_columns_view,
 )
 from ormdantic._migrations.reflection import (
     _oracle_table_view as _oracle_table_view,
+)
+from ormdantic._migrations.reflection import (
+    _oracle_views_view as _oracle_views_view,
 )
 from ormdantic._migrations.reflection import (
     _reflect_key_columns as _reflect_key_columns,
@@ -237,7 +314,22 @@ from ormdantic._migrations.reflection import (
     _reflect_schema_snapshot,
 )
 from ormdantic._migrations.reflection import (
+    _reflect_server_check_constraints as _reflect_server_check_constraints,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_column_comments as _reflect_server_column_comments,
+)
+from ormdantic._migrations.reflection import (
     _reflect_server_columns as _reflect_server_columns,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_enum_types as _reflect_server_enum_types,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_exclusion_constraints as _reflect_server_exclusion_constraints,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_foreign_key_constraints as _reflect_server_foreign_key_constraints,
 )
 from ormdantic._migrations.reflection import (
     _reflect_server_foreign_keys as _reflect_server_foreign_keys,
@@ -246,10 +338,46 @@ from ormdantic._migrations.reflection import (
     _reflect_server_indexes as _reflect_server_indexes,
 )
 from ormdantic._migrations.reflection import (
+    _reflect_server_mysql_table_options as _reflect_server_mysql_table_options,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_namespaces as _reflect_server_namespaces,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_oracle_table_compressions as _reflect_server_oracle_table_compressions,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_postgres_inherits as _reflect_server_postgres_inherits,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_postgres_partition_by as _reflect_server_postgres_partition_by,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_postgres_partitions as _reflect_server_postgres_partitions,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_postgres_unlogged as _reflect_server_postgres_unlogged,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_postgres_using as _reflect_server_postgres_using,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_postgres_with as _reflect_server_postgres_with,
+)
+from ormdantic._migrations.reflection import (
     _reflect_server_primary_keys as _reflect_server_primary_keys,
 )
 from ormdantic._migrations.reflection import (
+    _reflect_server_sequences as _reflect_server_sequences,
+)
+from ormdantic._migrations.reflection import (
     _reflect_server_snapshot as _reflect_server_snapshot,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_table_comments as _reflect_server_table_comments,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_server_table_tablespaces as _reflect_server_table_tablespaces,
 )
 from ormdantic._migrations.reflection import (
     _reflect_server_tables as _reflect_server_tables,
@@ -258,7 +386,13 @@ from ormdantic._migrations.reflection import (
     _reflect_server_unique_constraints as _reflect_server_unique_constraints,
 )
 from ormdantic._migrations.reflection import (
+    _reflect_server_views as _reflect_server_views,
+)
+from ormdantic._migrations.reflection import (
     _reflect_sqlite_snapshot as _reflect_sqlite_snapshot,
+)
+from ormdantic._migrations.reflection import (
+    _reflect_sqlite_views as _reflect_sqlite_views,
 )
 from ormdantic._migrations.reflection import (
     _reflected_max_length as _reflected_max_length,
@@ -272,11 +406,146 @@ from ormdantic._migrations.reflection import (
 from ormdantic._migrations.sql import (
     dialect_name as _dialect_name,
 )
+from ormdantic._migrations.sql import (
+    table_matches_filters as _table_matches_filters,
+)
 
 try:
     _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
 except ImportError:  # pragma: no cover - exercised when extension is not built
     _ormdantic = None
+
+
+def _filter_snapshot_for_autogenerate_scope(
+    snapshot: SchemaSnapshot,
+    *,
+    include_tables: Sequence[str] | None,
+    exclude_tables: Sequence[str] | None,
+    schema: str | None,
+) -> SchemaSnapshot:
+    if not include_tables and not exclude_tables:
+        return snapshot
+    tables = [
+        table
+        for table in snapshot.tables
+        if _table_matches_filters(table.name, include_tables, exclude_tables)
+    ]
+    enum_types = [
+        enum_type
+        for enum_type in snapshot.enum_types
+        if _enum_type_key(enum_type) in _enum_type_keys_for_tables(tables)
+    ]
+    sequences = [
+        sequence
+        for sequence in snapshot.sequences
+        if _sequence_key(sequence) in _sequence_keys_for_tables(tables)
+    ]
+    views = [
+        view
+        for view in snapshot.views
+        if _table_matches_filters(view.name, include_tables, exclude_tables)
+    ]
+    namespace_names = _namespace_names_for_scoped_objects(
+        tables,
+        enum_types,
+        sequences,
+        views,
+    )
+    if schema is not None and (tables or enum_types or sequences or views):
+        namespace_names.add(schema)
+    return replace(
+        snapshot,
+        tables=tables,
+        namespaces=[
+            namespace
+            for namespace in snapshot.namespaces
+            if namespace.name in namespace_names
+        ],
+        enum_types=enum_types,
+        sequences=sequences,
+        views=views,
+    )
+
+
+def _enum_type_keys_for_tables(
+    tables: Sequence[TableSnapshot],
+) -> set[tuple[str | None, str]]:
+    keys: set[tuple[str | None, str]] = set()
+    for table in tables:
+        for column in table.columns:
+            if column.kind.startswith("enum:"):
+                keys.add(_enum_column_kind_key(column.kind))
+    return keys
+
+
+def _enum_column_kind_key(kind: str) -> tuple[str | None, str]:
+    enum_name = kind.removeprefix("enum:")
+    if "." not in enum_name:
+        return None, enum_name
+    schema, name = enum_name.rsplit(".", 1)
+    return schema, name
+
+
+def _enum_type_key(enum_type: EnumTypeSnapshot) -> tuple[str | None, str]:
+    return enum_type.schema, enum_type.name
+
+
+def _sequence_keys_for_tables(
+    tables: Sequence[TableSnapshot],
+) -> set[tuple[str | None, str]]:
+    keys: set[tuple[str | None, str]] = set()
+    for table in tables:
+        for column in table.columns:
+            if column.server_default is None:
+                continue
+            key = _sequence_key_from_default(column.server_default)
+            if key is not None:
+                keys.add(key)
+    return keys
+
+
+def _sequence_key_from_default(default: str) -> tuple[str | None, str] | None:
+    match = re.search(r"\bnextval\s*\(\s*'((?:''|[^'])+)'", default, re.IGNORECASE)
+    if match is None:
+        return None
+    name = match.group(1).replace("''", "'")
+    if "." not in name:
+        return None, _unquote_sequence_part(name)
+    schema, sequence = name.rsplit(".", 1)
+    return _unquote_sequence_part(schema), _unquote_sequence_part(sequence)
+
+
+def _unquote_sequence_part(part: str) -> str:
+    part = part.strip()
+    if len(part) >= 2 and part[0] == '"' and part[-1] == '"':
+        return part[1:-1].replace('""', '"')
+    return part
+
+
+def _sequence_key(sequence: SequenceSnapshot) -> tuple[str | None, str]:
+    return sequence.schema, sequence.name
+
+
+def _namespace_names_for_scoped_objects(
+    tables: Sequence[TableSnapshot],
+    enum_types: Sequence[EnumTypeSnapshot],
+    sequences: Sequence[SequenceSnapshot],
+    views: Sequence[ViewSnapshot],
+) -> set[str]:
+    names: set[str] = set()
+    for table in tables:
+        if table.schema is not None:
+            names.add(table.schema)
+    for enum_type in enum_types:
+        if enum_type.schema is not None:
+            names.add(enum_type.schema)
+    for sequence in sequences:
+        if sequence.schema is not None:
+            names.add(sequence.schema)
+    for view in views:
+        if view.schema is not None:
+            names.add(view.schema)
+    return names
 
 
 class MigrationManager:
@@ -315,7 +584,10 @@ class MigrationManager:
 
     def snapshot(self) -> SchemaSnapshot:
         """Return a serializable snapshot for the currently registered models."""
-        return SchemaSnapshot.from_database(self._database)
+        return SchemaSnapshot.from_database(
+            self._database,
+            native_enum_types=self._dialect() == "postgresql",
+        )
 
     def live_snapshot(
         self,
@@ -353,7 +625,68 @@ class MigrationManager:
             exclude_tables=exclude_tables,
             schema=schema,
         )
-        after = self.snapshot()
+        after = _filter_snapshot_for_autogenerate_scope(
+            self.snapshot(),
+            include_tables=include_tables,
+            exclude_tables=exclude_tables,
+            schema=schema,
+        )
+        if schema is not None and after.tables:
+            after = replace(
+                after,
+                tables=[
+                    replace(table, schema=schema) if table.schema is None else table
+                    for table in after.tables
+                ],
+            )
+        if schema is not None and after.enum_types:
+            after = replace(
+                after,
+                enum_types=[
+                    (
+                        replace(enum_type, schema=schema)
+                        if enum_type.schema is None
+                        else enum_type
+                    )
+                    for enum_type in after.enum_types
+                ],
+            )
+        if schema is not None and after.sequences:
+            after = replace(
+                after,
+                sequences=[
+                    (
+                        replace(sequence, schema=schema)
+                        if sequence.schema is None
+                        else sequence
+                    )
+                    for sequence in after.sequences
+                ],
+            )
+        if schema is not None and after.views:
+            after = replace(
+                after,
+                views=[
+                    replace(view, schema=schema) if view.schema is None else view
+                    for view in after.views
+                ],
+            )
+        if before.enum_types and not after.enum_types:
+            # Non-PostgreSQL target snapshots do not infer native enum types.
+            # Preserve reflected objects so autogenerate does not plan accidental drops.
+            after = replace(after, enum_types=list(before.enum_types))
+        if before.namespaces and not after.namespaces:
+            # Namespace ownership is explicit. Preserve reflected namespaces unless
+            # the model snapshot registers its own namespace target.
+            after = replace(after, namespaces=list(before.namespaces))
+        if before.sequences and not after.sequences:
+            # Preserve reflected sequences unless the model snapshot registers its
+            # own sequence target.
+            after = replace(after, sequences=list(before.sequences))
+        if before.views and not after.views:
+            # Preserve reflected views unless the model snapshot registers its own
+            # view target.
+            after = replace(after, views=list(before.views))
         active_dialect = dialect or self._connection_url
         plan = _build_plan(active_dialect, before, after)
         if plan.is_empty() and skip_noop:
@@ -380,7 +713,7 @@ class MigrationManager:
     ) -> SchemaDiff:
         """Return structured schema changes between two snapshots."""
         before, after = self._resolve_snapshots(from_snapshot, to_snapshot)
-        return diff_snapshots(before, after)
+        return diff_snapshots(before, after, dialect=self._database._connection)
 
     def generate_plan(
         self,

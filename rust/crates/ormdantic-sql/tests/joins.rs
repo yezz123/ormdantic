@@ -1,4 +1,4 @@
-use ormdantic_dialects::SqliteDialect;
+use ormdantic_dialects::{OracleDialect, SqliteDialect};
 use ormdantic_sql::{
     Filter, JoinSpec, JoinedFilter, JoinedOrderBy, JoinedSelectColumn, OrderBy, QueryAst,
     SortDirection, TableRef,
@@ -65,6 +65,38 @@ fn compiles_one_to_many_back_reference_join() {
     assert_eq!(
         query.sql(),
         "SELECT \"one\".\"id\" AS \"one\\id\", \"one/many\".\"id\" AS \"one/many\\id\", \"one/many\".\"one_a\" AS \"one/many\\one_a\" FROM \"one\" LEFT JOIN \"many\" AS \"one/many\" ON \"one\".\"id\" = \"one/many\".\"one_a\""
+    );
+}
+
+#[test]
+fn compiles_oracle_join_without_table_alias_as_keyword() {
+    let query = QueryAst::JoinedSelect {
+        table: TableRef::new("coffee"),
+        columns: vec![
+            JoinedSelectColumn::aliased("coffee", "id", "coffee\\id"),
+            JoinedSelectColumn::aliased("coffee/flavor", "id", "coffee/flavor\\id"),
+        ],
+        joins: vec![JoinSpec::left_join(
+            "flavors",
+            "coffee/flavor",
+            "coffee",
+            "flavor",
+            "coffee/flavor",
+            "id",
+        )],
+        filters: Vec::new(),
+        relationship_filters: Vec::new(),
+        order_by: Vec::new(),
+        relationship_order_by: Vec::new(),
+        limit: None,
+        offset: None,
+    }
+    .compile(&OracleDialect)
+    .expect("oracle join query should compile");
+
+    assert_eq!(
+        query.sql(),
+        "SELECT \"coffee\".\"id\" AS \"coffee\\id\", \"coffee/flavor\".\"id\" AS \"coffee/flavor\\id\" FROM \"coffee\" LEFT JOIN \"flavors\" \"coffee/flavor\" ON \"coffee\".\"flavor\" = \"coffee/flavor\".\"id\""
     );
 }
 

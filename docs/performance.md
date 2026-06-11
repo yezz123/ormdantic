@@ -2,8 +2,10 @@
 
 Ormdantic benchmarks both sides of the runtime:
 
-- Python-facing serialization, hydration, table-handle CRUD, and query-expression paths.
-- Rust SQL compilation and joined-query planning.
+- Python-facing serialization and hydration, table-handle CRUD, query-expression paths, joined/select-in relationship loading, nested loader graphs, and reflection/migration flows.
+- Rust SQL/DML/expression compilation, dialect rendering, schema diffing, hydration planning, select-in merging, nested duplicate folding, engine migration/reflection planning, Python bridge conversion, and runtime driver execution.
+
+The release gate for these groups is `.github/workflows/codspeed.yml`. It runs the Python benchmark suite through `uv run pytest tests/benchmarks --codspeed` and the Rust workspace benches through `cargo codspeed build` plus `cargo codspeed run`.
 
 ## Python Benchmarks
 
@@ -37,7 +39,7 @@ cargo codspeed run
 Without CodSpeed, use Criterion compatibility locally:
 
 ```bash
-cargo bench -p ormdantic-sql
+cargo bench --workspace
 ```
 
 ## CodSpeed MCP

@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from ormdantic import Ormdantic, association_proxy, column, count, hybrid_property, sum
+from ormdantic import (
+    Ormdantic,
+    association_proxy,
+    column,
+    count,
+    hybrid_property,
+    selectinload,
+    sum,
+)
 from ormdantic.migrations import MigrationOperation, MigrationPlan
 
 
@@ -168,6 +176,88 @@ async def test_table_select_executes_grouped_aggregate_expression_query(
     assert [order.total for order in updated.data] == [30, 45]
 
 
+@pytest.mark.asyncio
+async def test_relation_predicates_and_relation_count_ordering(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'relation_predicates.sqlite3'}")
+
+    @db.table(pk="id", back_references={"posts": "author"})
+    class BlogAuthor(BaseModel):
+        id: str
+        name: str
+        posts: list[BlogPost] = Field(default_factory=list)
+
+    @db.table(pk="id")
+    class BlogPost(BaseModel):
+        id: str
+        title: str
+        status: str
+        author: BlogAuthor | str
+
+    BlogAuthor.model_rebuild()
+    BlogPost.model_rebuild()
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    alice = await db[BlogAuthor].insert(BlogAuthor(id="a", name="alice"))
+    bob = await db[BlogAuthor].insert(BlogAuthor(id="b", name="bob"))
+    await db[BlogAuthor].insert(BlogAuthor(id="c", name="cara"))
+    await db[BlogPost].insert(
+        BlogPost(id="1", title="first", status="published", author=alice)
+    )
+    await db[BlogPost].insert(
+        BlogPost(id="2", title="draft", status="draft", author=alice)
+    )
+    await db[BlogPost].insert(
+        BlogPost(id="3", title="second", status="published", author=bob)
+    )
+    await db[BlogPost].insert(
+        BlogPost(id="4", title="third", status="published", author=bob)
+    )
+
+    posts = db.relation(BlogAuthor, "posts")
+    published = posts.column("status") == "published"
+
+    with_published = await db[BlogAuthor].find_many(
+        where=posts.any(published),
+        order_by=[posts.count(published).desc(), "name"],
+        load=[selectinload("posts")],
+    )
+    assert [author.name for author in with_published.data] == ["bob", "alice"]
+    assert [
+        [post.title for post in author.posts] for author in with_published.data
+    ] == [
+        ["second", "third"],
+        ["first", "draft"],
+    ]
+
+    without_drafts = await db[BlogAuthor].find_many(
+        where=posts.none(posts.column("status") == "draft"),
+        order_by=["name"],
+    )
+    assert [author.name for author in without_drafts.data] == ["bob", "cara"]
+
+    every_post_published = await db[BlogAuthor].find_many(
+        where=posts.every(published),
+        order_by=["name"],
+    )
+    assert [author.name for author in every_post_published.data] == ["bob", "cara"]
+    assert await db[BlogAuthor].count(where=posts.any(published)) == 2
+
+    author = db.relation(BlogPost, "author")
+    authored_by_alice = await db[BlogPost].find_many(
+        where=author.has(author.column("name") == "alice"),
+        order_by=["title"],
+    )
+    assert [post.title for post in authored_by_alice.data] == ["draft", "first"]
+
+    with pytest.raises(ValueError, match="not a scalar relationship"):
+        posts.has()
+    with pytest.raises(ValueError, match="not a collection relationship"):
+        author.any()
+
+
 def test_event_removal_and_association_hybrid_descriptors() -> None:
     db = Ormdantic("sqlite:///:memory:")
     called = []
@@ -186,6 +276,10 @@ def test_event_removal_and_association_hybrid_descriptors() -> None:
         child = Child()
         child_name = association_proxy("child", "name")
 
+        @child_name.expression
+        def child_name(cls):
+            return column("child_name")
+
         @hybrid_property
         def label(self) -> str:
             return f"flavor:{self.child_name}"
@@ -200,3 +294,4 @@ def test_event_removal_and_association_hybrid_descriptors() -> None:
     assert parent.child.name == "latte"
     assert parent.label == "flavor:latte"
     assert Parent.label.like("la%").to_where() == {"name__like": "la%"}
+    assert Parent.child_name.like("la%").to_where() == {"child_name__like": "la%"}

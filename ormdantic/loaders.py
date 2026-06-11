@@ -52,6 +52,11 @@ class LoaderOption:
     strategy: LoaderStrategy
     filter_by: dict[str, Any] | None = None
     order_by: tuple[str, ...] = ()
+    batch_size: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.batch_size is not None and self.batch_size <= 0:
+            raise ValueError("loader batch size must be greater than zero")
 
     @property
     def depth(self) -> int:
@@ -65,6 +70,7 @@ class LoaderOption:
             strategy=self.strategy,
             filter_by={**(self.filter_by or {}), **criteria},
             order_by=self.order_by,
+            batch_size=self.batch_size,
         )
 
     def sorted_by(self, *columns: str) -> "LoaderOption":
@@ -74,6 +80,17 @@ class LoaderOption:
             strategy=self.strategy,
             filter_by=self.filter_by,
             order_by=tuple(columns),
+            batch_size=self.batch_size,
+        )
+
+    def batched(self, size: int) -> "LoaderOption":
+        """Return a copy with a select-in batch size for this relationship."""
+        return LoaderOption(
+            path=self.path,
+            strategy=self.strategy,
+            filter_by=self.filter_by,
+            order_by=self.order_by,
+            batch_size=size,
         )
 
 

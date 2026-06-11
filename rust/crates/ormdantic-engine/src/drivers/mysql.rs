@@ -1,3 +1,4 @@
+use mysql::consts::ColumnType;
 use mysql::prelude::Queryable;
 use mysql::{Params, Pool, PooledConn, Row, Value};
 use ormdantic_core::OrmdanticResult;
@@ -91,6 +92,8 @@ fn mysql_params(params: &[DbValue]) -> Vec<Value> {
         .map(|value| match value {
             DbValue::Null => Value::NULL,
             DbValue::Integer(value) => Value::Int(*value),
+            DbValue::UnsignedInteger(value) => Value::UInt(*value),
+            DbValue::Decimal(value) => Value::Bytes(value.as_bytes().to_vec()),
             DbValue::Real(value) => Value::Double(*value),
             DbValue::Text(value) => Value::Bytes(value.as_bytes().to_vec()),
             DbValue::Bool(value) => Value::Int(i64::from(*value)),
@@ -99,16 +102,64 @@ fn mysql_params(params: &[DbValue]) -> Vec<Value> {
 }
 
 fn mysql_row(row: Row) -> Vec<DbValue> {
+    let column_types = row
+        .columns_ref()
+        .iter()
+        .map(|column| column.column_type())
+        .collect::<Vec<_>>();
     row.unwrap()
         .into_iter()
-        .map(|value| match value {
-            Value::NULL => DbValue::Null,
-            Value::Int(value) => DbValue::Integer(value),
-            Value::UInt(value) => DbValue::Integer(value as i64),
-            Value::Float(value) => DbValue::Real(value.into()),
-            Value::Double(value) => DbValue::Real(value),
-            Value::Bytes(value) => DbValue::Text(String::from_utf8_lossy(&value).to_string()),
-            other => DbValue::Text(format!("{other:?}")),
-        })
+        .enumerate()
+        .map(|(idx, value)| mysql_value(value, column_types.get(idx).copied()))
         .collect()
+}
+
+fn mysql_value(value: Value, column_type: Option<ColumnType>) -> DbValue {
+    match value {
+        Value::NULL => DbValue::Null,
+        Value::Int(value) => DbValue::Integer(value),
+        Value::UInt(value) => DbValue::UnsignedInteger(value),
+        Value::Float(value) => DbValue::Real(value.into()),
+        Value::Double(value) => DbValue::Real(value),
+        Value::Bytes(value)
+            if matches!(
+                column_type,
+                Some(ColumnType::MYSQL_TYPE_DECIMAL | ColumnType::MYSQL_TYPE_NEWDECIMAL)
+            ) =>
+        {
+            DbValue::Decimal(String::from_utf8_lossy(&value).to_string())
+        }
+        Value::Bytes(value) => DbValue::Text(String::from_utf8_lossy(&value).to_string()),
+        other => DbValue::Text(format!("{other:?}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mysql_decimal_bytes_use_column_type_metadata() {
+        assert_eq!(
+            mysql_value(
+                Value::Bytes(b"123.45".to_vec()),
+                Some(ColumnType::MYSQL_TYPE_NEWDECIMAL)
+            ),
+            DbValue::Decimal("123.45".to_string())
+        );
+        assert_eq!(
+            mysql_value(
+                Value::Bytes(b"123.45".to_vec()),
+                Some(ColumnType::MYSQL_TYPE_DECIMAL)
+            ),
+            DbValue::Decimal("123.45".to_string())
+        );
+        assert_eq!(
+            mysql_value(
+                Value::Bytes(b"123.45".to_vec()),
+                Some(ColumnType::MYSQL_TYPE_VAR_STRING)
+            ),
+            DbValue::Text("123.45".to_string())
+        );
+    }
 }

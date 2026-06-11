@@ -43,6 +43,38 @@ fn compiles_mysql_insert_for_driver_sql() {
 }
 
 #[test]
+fn compiles_schema_qualified_table_refs() {
+    let select = QueryAst::Select {
+        table: TableRef::new("inventory.flavors"),
+        columns: vec![SelectColumn::aliased("id", "flavors\\id")],
+        filters: vec![Filter::Eq {
+            column: "id".to_string(),
+            param: "id".to_string(),
+        }],
+        order_by: Vec::new(),
+        limit: None,
+        offset: None,
+    }
+    .compile(&PostgresDialect)
+    .expect("schema-qualified select should compile");
+    let insert = QueryAst::Insert {
+        table: TableRef::new("inventory.flavors"),
+        columns: vec!["id".to_string(), "name".to_string()],
+    }
+    .compile(&PostgresDialect)
+    .expect("schema-qualified insert should compile");
+
+    assert_eq!(
+        select.sql(),
+        "SELECT \"inventory\".\"flavors\".\"id\" AS \"flavors\\id\" FROM \"inventory\".\"flavors\" WHERE \"id\" = $1"
+    );
+    assert_eq!(
+        insert.sql(),
+        "INSERT INTO \"inventory\".\"flavors\" (\"id\", \"name\") VALUES ($1, $2)"
+    );
+}
+
+#[test]
 fn compiles_sqlite_delete() {
     let query = QueryAst::Delete {
         table: TableRef::new("flavors"),

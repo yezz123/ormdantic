@@ -18,6 +18,7 @@ fn oracle_parameterized_selects_cover_core_values() {
         &url,
         common::ValueRoundTripSql {
             sql: "SELECT :1 AS int_value, CAST(:2 AS NUMBER(10,2)) AS real_value, :3 AS text_value, CAST(:4 AS NUMBER(1)) AS bool_value, CAST(:5 AS VARCHAR2(100)) AS null_value FROM dual",
+            expected_real: DbValue::Decimal("3.25".to_string()),
             expected_bool: DbValue::Integer(1),
         },
     );
@@ -38,8 +39,8 @@ fn oracle_number_edges_round_trip() {
                 DbValue::Integer(-32768),
                 DbValue::Integer(2_147_483_647),
                 DbValue::Integer(9_223_372_036_854_775_807),
-                DbValue::Real(3.5),
-                DbValue::Real(123.45),
+                DbValue::Decimal("3.5".to_string()),
+                DbValue::Decimal("123.45".to_string()),
             ],
         },
     );

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use ormdantic_core::OrmdanticResult;
 use ormdantic_dialects::Dialect;
 use ormdantic_schema::{SchemaDiff, SchemaOperation};
@@ -102,6 +104,7 @@ pub enum SortDirection {
 pub struct OrderBy {
     column: String,
     direction: SortDirection,
+    decimal: bool,
 }
 
 impl OrderBy {
@@ -109,7 +112,13 @@ impl OrderBy {
         Self {
             column: column.into(),
             direction,
+            decimal: false,
         }
+    }
+
+    pub fn decimal(mut self, decimal: bool) -> Self {
+        self.decimal = decimal;
+        self
     }
 
     pub fn column(&self) -> &str {
@@ -118,6 +127,10 @@ impl OrderBy {
 
     pub fn direction(&self) -> &SortDirection {
         &self.direction
+    }
+
+    pub fn is_decimal(&self) -> bool {
+        self.decimal
     }
 }
 
@@ -184,21 +197,6 @@ pub enum OrderNulls {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WindowSpec {
-    pub(crate) partition_by: Vec<Expr>,
-    pub(crate) order_by: Vec<OrderExpr>,
-}
-
-impl WindowSpec {
-    pub fn new(partition_by: Vec<Expr>, order_by: Vec<OrderExpr>) -> Self {
-        Self {
-            partition_by,
-            order_by,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Column {
         table: Option<String>,
@@ -218,7 +216,11 @@ pub enum Expr {
     Function {
         name: String,
         args: Vec<Expr>,
-        over: Option<WindowSpec>,
+    },
+    Window {
+        expr: Box<Expr>,
+        partition_by: Vec<Expr>,
+        order_by: Vec<OrderExpr>,
     },
     Between {
         expr: Box<Expr>,
@@ -230,12 +232,6 @@ pub enum Expr {
         values: Vec<Expr>,
         negated: bool,
     },
-    InSubquery {
-        expr: Box<Expr>,
-        subquery: Box<SelectAst>,
-        negated: bool,
-    },
-    Exists(Box<SelectAst>),
     Case {
         whens: Vec<(Expr, Expr)>,
         else_expr: Option<Box<Expr>>,
@@ -245,6 +241,16 @@ pub enum Expr {
         type_name: String,
     },
     Tuple(Vec<Expr>),
+    Subquery(Box<SelectAst>),
+    Exists {
+        select: Box<SelectAst>,
+        negated: bool,
+    },
+    InSubquery {
+        expr: Box<Expr>,
+        select: Box<SelectAst>,
+        negated: bool,
+    },
     RawSafe(String),
 }
 
@@ -297,14 +303,7 @@ impl Projection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TableSource {
-    Table {
-        name: String,
-        alias: Option<String>,
-    },
-    Subquery {
-        subquery: Box<SelectAst>,
-        alias: String,
-    },
+    Table { name: String, alias: Option<String> },
     RawSafe(String),
 }
 
@@ -323,8 +322,6 @@ impl TableSource {
         }
     }
 }
-
-pub type Subquery = SelectAst;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JoinKind {
@@ -349,19 +346,26 @@ impl JoinAst {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CteAst {
+pub struct CommonTableExpr {
     pub(crate) name: String,
-    pub(crate) query: Box<SelectAst>,
+    pub(crate) query: SelectAst,
+    pub(crate) columns: Vec<String>,
     pub(crate) recursive: bool,
 }
 
-impl CteAst {
+impl CommonTableExpr {
     pub fn new(name: impl Into<String>, query: SelectAst) -> Self {
         Self {
             name: name.into(),
-            query: Box::new(query),
+            query,
+            columns: Vec::new(),
             recursive: false,
         }
+    }
+
+    pub fn columns(mut self, columns: Vec<String>) -> Self {
+        self.columns = columns;
+        self
     }
 
     pub fn recursive(mut self, recursive: bool) -> Self {
@@ -372,6 +376,7 @@ impl CteAst {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectAst {
+    pub(crate) ctes: Vec<CommonTableExpr>,
     pub(crate) projections: Vec<Projection>,
     pub(crate) from: Option<TableSource>,
     pub(crate) joins: Vec<JoinAst>,
@@ -382,12 +387,12 @@ pub struct SelectAst {
     pub(crate) distinct: bool,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
-    pub(crate) ctes: Vec<CteAst>,
 }
 
 impl SelectAst {
     pub fn new(projections: Vec<Projection>) -> Self {
         Self {
+            ctes: Vec::new(),
             projections,
             from: None,
             joins: Vec::new(),
@@ -398,7 +403,6 @@ impl SelectAst {
             distinct: false,
             limit: None,
             offset: None,
-            ctes: Vec::new(),
         }
     }
 
@@ -409,6 +413,11 @@ impl SelectAst {
 
     pub fn join(mut self, join: JoinAst) -> Self {
         self.joins.push(join);
+        self
+    }
+
+    pub fn with_cte(mut self, cte: CommonTableExpr) -> Self {
+        self.ctes.push(cte);
         self
     }
 
@@ -447,13 +456,54 @@ impl SelectAst {
         self
     }
 
-    pub fn with_cte(mut self, cte: CteAst) -> Self {
-        self.ctes.push(cte);
-        self
-    }
-
     pub fn compile(&self, dialect: &impl Dialect) -> OrmdanticResult<CompiledQuery> {
         compile_select_ast(dialect, self)
+    }
+
+    pub fn rewrite_sqlite_decimal_columns(
+        mut self,
+        decimal_columns: &HashSet<String>,
+        table_names: &[String],
+    ) -> Self {
+        if decimal_columns.is_empty() {
+            return self;
+        }
+        self.projections = self
+            .projections
+            .into_iter()
+            .map(|projection| Projection {
+                expr: rewrite_sqlite_decimal_expr(projection.expr, decimal_columns, table_names),
+                alias: projection.alias,
+            })
+            .collect();
+        self.joins = self
+            .joins
+            .into_iter()
+            .map(|join| JoinAst {
+                kind: join.kind,
+                source: join.source,
+                on: join
+                    .on
+                    .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names)),
+            })
+            .collect();
+        self.where_expr = self
+            .where_expr
+            .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names));
+        self.group_by = self
+            .group_by
+            .into_iter()
+            .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names))
+            .collect();
+        self.having = self
+            .having
+            .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names));
+        self.order_by = self
+            .order_by
+            .into_iter()
+            .map(|order| rewrite_sqlite_decimal_order(order, decimal_columns, table_names))
+            .collect();
+        self
     }
 }
 
@@ -490,6 +540,283 @@ impl DmlAst {
     pub fn compile(&self, dialect: &impl Dialect) -> OrmdanticResult<CompiledQuery> {
         compile_dml_ast(dialect, self)
     }
+
+    pub fn rewrite_sqlite_decimal_columns(
+        self,
+        decimal_columns: &HashSet<String>,
+        table_names: &[String],
+    ) -> Self {
+        if decimal_columns.is_empty() {
+            return self;
+        }
+        match self {
+            Self::Insert {
+                table,
+                columns,
+                rows,
+                returning,
+            } => Self::Insert {
+                table,
+                columns,
+                rows,
+                returning,
+            },
+            Self::Update {
+                table,
+                assignments,
+                where_expr,
+                returning,
+            } => Self::Update {
+                table,
+                assignments,
+                where_expr: where_expr
+                    .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names)),
+                returning,
+            },
+            Self::Delete {
+                table,
+                where_expr,
+                returning,
+            } => Self::Delete {
+                table,
+                where_expr: where_expr
+                    .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names)),
+                returning,
+            },
+            Self::Upsert {
+                table,
+                columns,
+                rows,
+                conflict_target,
+                update_assignments,
+                returning,
+            } => Self::Upsert {
+                table,
+                columns,
+                rows,
+                conflict_target,
+                update_assignments,
+                returning,
+            },
+        }
+    }
+}
+
+fn rewrite_sqlite_decimal_order(
+    order: OrderExpr,
+    decimal_columns: &HashSet<String>,
+    table_names: &[String],
+) -> OrderExpr {
+    let expr = if is_sqlite_decimal_column(&order.expr, decimal_columns, table_names) {
+        Expr::Function {
+            name: "ormdantic_decimal_sort_key".to_string(),
+            args: vec![order.expr],
+        }
+    } else {
+        rewrite_sqlite_decimal_expr(order.expr, decimal_columns, table_names)
+    };
+    OrderExpr {
+        expr,
+        direction: order.direction,
+        nulls: order.nulls,
+    }
+}
+
+fn rewrite_sqlite_decimal_expr(
+    expr: Expr,
+    decimal_columns: &HashSet<String>,
+    table_names: &[String],
+) -> Expr {
+    match expr {
+        Expr::Binary { left, op, right } => {
+            let left = rewrite_sqlite_decimal_expr(*left, decimal_columns, table_names);
+            let right = rewrite_sqlite_decimal_expr(*right, decimal_columns, table_names);
+            if is_decimal_comparison_op(&op)
+                && (is_sqlite_decimal_column(&left, decimal_columns, table_names)
+                    || is_sqlite_decimal_column(&right, decimal_columns, table_names))
+            {
+                return sqlite_decimal_comparison(left, op, right);
+            }
+            Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            }
+        }
+        Expr::Unary { op, expr } => Expr::Unary {
+            op,
+            expr: Box::new(rewrite_sqlite_decimal_expr(
+                *expr,
+                decimal_columns,
+                table_names,
+            )),
+        },
+        Expr::Function { name, args } => Expr::Function {
+            name,
+            args: args
+                .into_iter()
+                .map(|arg| rewrite_sqlite_decimal_expr(arg, decimal_columns, table_names))
+                .collect(),
+        },
+        Expr::Window {
+            expr,
+            partition_by,
+            order_by,
+        } => Expr::Window {
+            expr: Box::new(rewrite_sqlite_decimal_expr(
+                *expr,
+                decimal_columns,
+                table_names,
+            )),
+            partition_by: partition_by
+                .into_iter()
+                .map(|expr| rewrite_sqlite_decimal_expr(expr, decimal_columns, table_names))
+                .collect(),
+            order_by: order_by
+                .into_iter()
+                .map(|order| rewrite_sqlite_decimal_order(order, decimal_columns, table_names))
+                .collect(),
+        },
+        Expr::Between { expr, low, high } => {
+            let expr = rewrite_sqlite_decimal_expr(*expr, decimal_columns, table_names);
+            let low = rewrite_sqlite_decimal_expr(*low, decimal_columns, table_names);
+            let high = rewrite_sqlite_decimal_expr(*high, decimal_columns, table_names);
+            if is_sqlite_decimal_column(&expr, decimal_columns, table_names) {
+                return Expr::Binary {
+                    left: Box::new(sqlite_decimal_comparison(expr.clone(), BinaryOp::Ge, low)),
+                    op: BinaryOp::And,
+                    right: Box::new(sqlite_decimal_comparison(expr, BinaryOp::Le, high)),
+                };
+            }
+            Expr::Between {
+                expr: Box::new(expr),
+                low: Box::new(low),
+                high: Box::new(high),
+            }
+        }
+        Expr::InList {
+            expr,
+            values,
+            negated,
+        } => {
+            let expr = rewrite_sqlite_decimal_expr(*expr, decimal_columns, table_names);
+            let values = values
+                .into_iter()
+                .map(|value| rewrite_sqlite_decimal_expr(value, decimal_columns, table_names))
+                .collect::<Vec<_>>();
+            if !values.is_empty() && is_sqlite_decimal_column(&expr, decimal_columns, table_names) {
+                let comparisons = values
+                    .into_iter()
+                    .map(|value| sqlite_decimal_comparison(expr.clone(), BinaryOp::Eq, value))
+                    .collect::<Vec<_>>();
+                let comparison = combine_sqlite_decimal_comparisons(comparisons);
+                return if negated {
+                    Expr::Unary {
+                        op: UnaryOp::Not,
+                        expr: Box::new(comparison),
+                    }
+                } else {
+                    comparison
+                };
+            }
+            Expr::InList {
+                expr: Box::new(expr),
+                values,
+                negated,
+            }
+        }
+        Expr::Case { whens, else_expr } => Expr::Case {
+            whens: whens
+                .into_iter()
+                .map(|(when, then)| {
+                    (
+                        rewrite_sqlite_decimal_expr(when, decimal_columns, table_names),
+                        rewrite_sqlite_decimal_expr(then, decimal_columns, table_names),
+                    )
+                })
+                .collect(),
+            else_expr: else_expr.map(|expr| {
+                Box::new(rewrite_sqlite_decimal_expr(
+                    *expr,
+                    decimal_columns,
+                    table_names,
+                ))
+            }),
+        },
+        Expr::Cast { expr, type_name } => Expr::Cast {
+            expr: Box::new(rewrite_sqlite_decimal_expr(
+                *expr,
+                decimal_columns,
+                table_names,
+            )),
+            type_name,
+        },
+        Expr::Tuple(values) => Expr::Tuple(
+            values
+                .into_iter()
+                .map(|value| rewrite_sqlite_decimal_expr(value, decimal_columns, table_names))
+                .collect(),
+        ),
+        Expr::Subquery(select) => Expr::Subquery(select),
+        Expr::Exists { select, negated } => Expr::Exists { select, negated },
+        Expr::InSubquery {
+            expr,
+            select,
+            negated,
+        } => Expr::InSubquery {
+            expr: Box::new(rewrite_sqlite_decimal_expr(
+                *expr,
+                decimal_columns,
+                table_names,
+            )),
+            select,
+            negated,
+        },
+        expr => expr,
+    }
+}
+
+fn is_sqlite_decimal_column(
+    expr: &Expr,
+    decimal_columns: &HashSet<String>,
+    table_names: &[String],
+) -> bool {
+    match expr {
+        Expr::Column { table, name } if decimal_columns.contains(name) => table
+            .as_ref()
+            .map_or(true, |table| table_names.iter().any(|known| known == table)),
+        _ => false,
+    }
+}
+
+fn is_decimal_comparison_op(op: &BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
+    )
+}
+
+fn sqlite_decimal_comparison(left: Expr, op: BinaryOp, right: Expr) -> Expr {
+    Expr::Binary {
+        left: Box::new(Expr::Function {
+            name: "ormdantic_decimal_cmp".to_string(),
+            args: vec![left, right],
+        }),
+        op,
+        right: Box::new(Expr::Literal(SqlLiteral::Integer(0))),
+    }
+}
+
+fn combine_sqlite_decimal_comparisons(comparisons: Vec<Expr>) -> Expr {
+    let mut comparisons = comparisons.into_iter();
+    let first = comparisons
+        .next()
+        .expect("non-empty decimal IN comparisons are validated before combining");
+    comparisons.fold(first, |left, right| Expr::Binary {
+        left: Box::new(left),
+        op: BinaryOp::Or,
+        right: Box::new(right),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
