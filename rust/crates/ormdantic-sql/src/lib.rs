@@ -34,9 +34,9 @@ mod compiler;
 mod filters;
 
 pub use ast::{
-    BinaryOp, CompiledQuery, DdlAst, DmlAst, Expr, JoinAst, JoinKind, JoinSpec, JoinedFilter,
-    JoinedOrderBy, JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, Projection, QueryAst,
-    QueryOperation, SelectAst, SelectColumn, SelectInPlan, SelectInQuery, SortDirection,
+    BinaryOp, CommonTableExpr, CompiledQuery, DdlAst, DmlAst, Expr, JoinAst, JoinKind, JoinSpec,
+    JoinedFilter, JoinedOrderBy, JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, Projection,
+    QueryAst, QueryOperation, SelectAst, SelectColumn, SelectInPlan, SelectInQuery, SortDirection,
     SqlLiteral, TableRef, TableSource, UnaryOp,
 };
 pub use compiler::DdlCompiler;

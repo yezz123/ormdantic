@@ -1,4 +1,4 @@
-use ormdantic_dialects::{MySqlDialect, PostgresDialect, SqliteDialect};
+use ormdantic_dialects::{MsSqlDialect, MySqlDialect, PostgresDialect, SqliteDialect};
 use ormdantic_sql::{
     BinaryOp, DmlAst, Expr, Projection, QueryAst, SelectAst, SelectInPlan, SqlLiteral, TableRef,
     TableSource,
@@ -54,6 +54,32 @@ fn select_in_plan_compiles_batch_parameters() {
         compiled.params(),
         &["first".to_string(), "second".to_string()]
     );
+}
+
+#[test]
+fn rejects_queries_that_exceed_backend_bind_parameter_limits() {
+    let allowed = SelectInPlan::new(
+        "flavors",
+        "coffee",
+        vec!["id".to_string()],
+        vec!["flavor_id".to_string()],
+    )
+    .query_for_batch((0..2_100).map(|index| format!("id_{index}")).collect())
+    .compile(&MsSqlDialect)
+    .expect("sql server max bind count should compile");
+    let error = SelectInPlan::new(
+        "flavors",
+        "coffee",
+        vec!["id".to_string()],
+        vec!["flavor_id".to_string()],
+    )
+    .query_for_batch((0..2_101).map(|index| format!("id_{index}")).collect())
+    .compile(&MsSqlDialect)
+    .expect_err("sql server bind parameter overflow should fail");
+
+    assert_eq!(allowed.params().len(), 2_100);
+    assert!(error.to_string().contains("exceeding the 2100 limit"));
+    assert!(error.to_string().contains("mssql"));
 }
 
 #[test]

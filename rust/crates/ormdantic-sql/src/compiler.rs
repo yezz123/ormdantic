@@ -1,11 +1,12 @@
 use ormdantic_core::{OrmdanticError, OrmdanticResult};
-use ormdantic_dialects::Dialect;
+use ormdantic_dialects::{Dialect, DialectKind};
 use ormdantic_schema::SchemaOperation;
 
 use crate::ast::{
-    BinaryOp, CompiledQuery, DmlAst, Expr, JoinKind, JoinSpec, JoinedFilter, JoinedOrderBy,
-    JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, QueryAst, QueryOperation, SelectAst,
-    SelectColumn, SelectInQuery, SortDirection, SqlLiteral, TableRef, TableSource, UnaryOp,
+    BinaryOp, CommonTableExpr, CompiledQuery, DmlAst, Expr, JoinKind, JoinSpec, JoinedFilter,
+    JoinedOrderBy, JoinedSelectColumn, OrderBy, OrderExpr, OrderNulls, QueryAst, QueryOperation,
+    SelectAst, SelectColumn, SelectInQuery, SortDirection, SqlLiteral, TableRef, TableSource,
+    UnaryOp,
 };
 use crate::filters::{BindParam, BoolOp, ComparisonOp, Filter, PredicateExpr};
 
@@ -26,6 +27,27 @@ impl DdlCompiler {
         }
         Ok(compiled)
     }
+}
+
+fn compiled_query(
+    dialect: &impl Dialect,
+    sql: String,
+    params: Vec<String>,
+    operation: QueryOperation,
+) -> OrmdanticResult<CompiledQuery> {
+    if let Some(max_params) = dialect.max_bind_parameters() {
+        if params.len() > max_params {
+            return Err(OrmdanticError::SqlCompile {
+                message: format!(
+                    "query uses {} bind parameters, exceeding the {} limit for {}",
+                    params.len(),
+                    max_params,
+                    dialect.name()
+                ),
+            });
+        }
+    }
+    Ok(CompiledQuery::new(sql, params, operation))
 }
 
 pub(crate) fn compile_query_ast(
@@ -78,7 +100,7 @@ pub(crate) fn compile_select_ast(
     let mut params = Vec::new();
     let mut bind_index = 1;
     let sql = render_select_ast(dialect, select, &mut params, &mut bind_index)?;
-    Ok(CompiledQuery::new(sql, params, QueryOperation::Select))
+    compiled_query(dialect, sql, params, QueryOperation::Select)
 }
 
 pub(crate) fn compile_dml_ast(
@@ -88,7 +110,7 @@ pub(crate) fn compile_dml_ast(
     let mut params = Vec::new();
     let mut bind_index = 1;
     let (sql, operation) = render_dml_ast(dialect, dml, &mut params, &mut bind_index)?;
-    Ok(CompiledQuery::new(sql, params, operation))
+    compiled_query(dialect, sql, params, operation)
 }
 
 pub(crate) fn compile_select_in_query(
@@ -118,14 +140,15 @@ pub(crate) fn compile_select_in_query(
         })
         .collect::<Vec<_>>()
         .join(" AND ");
-    Ok(CompiledQuery::new(
+    compiled_query(
+        dialect,
         format!(
             "SELECT {selected} FROM {} WHERE {predicates}",
-            dialect.quote_ident(&query.plan.child_table)
+            quote_table_name(dialect, &query.plan.child_table)
         ),
         params,
         QueryOperation::Select,
-    ))
+    )
 }
 
 fn render_select_ast(
@@ -141,6 +164,7 @@ fn render_select_ast(
     }
 
     let mut sql = String::new();
+    append_ctes(dialect, &mut sql, &select.ctes, params, bind_index)?;
     sql.push_str("SELECT ");
     if select.distinct {
         sql.push_str("DISTINCT ");
@@ -373,7 +397,7 @@ fn render_expr(
         Expr::Column { table, name } => match table {
             Some(table) => format!(
                 "{}.{}",
-                dialect.quote_ident(table),
+                quote_table_name(dialect, table),
                 dialect.quote_ident(name)
             ),
             None => dialect.quote_ident(name),
@@ -412,6 +436,38 @@ fn render_expr(
                 .collect::<OrmdanticResult<Vec<_>>>()?
                 .join(", ");
             format!("{name}({args})")
+        }
+        Expr::Window {
+            expr,
+            partition_by,
+            order_by,
+        } => {
+            let mut clauses = Vec::new();
+            if !partition_by.is_empty() {
+                clauses.push(format!(
+                    "PARTITION BY {}",
+                    partition_by
+                        .iter()
+                        .map(|expr| render_expr(dialect, expr, params, bind_index))
+                        .collect::<OrmdanticResult<Vec<_>>>()?
+                        .join(", ")
+                ));
+            }
+            if !order_by.is_empty() {
+                clauses.push(format!(
+                    "ORDER BY {}",
+                    order_by
+                        .iter()
+                        .map(|order| render_order_expr(dialect, order, params, bind_index))
+                        .collect::<OrmdanticResult<Vec<_>>>()?
+                        .join(", ")
+                ));
+            }
+            format!(
+                "{} OVER ({})",
+                render_expr(dialect, expr, params, bind_index)?,
+                clauses.join(" ")
+            )
         }
         Expr::Between { expr, low, high } => format!(
             "({} BETWEEN {} AND {})",
@@ -469,8 +525,74 @@ fn render_expr(
                 .collect::<OrmdanticResult<Vec<_>>>()?
                 .join(", ")
         ),
+        Expr::Subquery(select) => format!(
+            "({})",
+            render_select_ast(dialect, select, params, bind_index)?
+        ),
+        Expr::Exists { select, negated } => {
+            let operator = if *negated { "NOT EXISTS" } else { "EXISTS" };
+            format!(
+                "({operator} ({}))",
+                render_select_ast(dialect, select, params, bind_index)?
+            )
+        }
+        Expr::InSubquery {
+            expr,
+            select,
+            negated,
+        } => {
+            let operator = if *negated { "NOT IN" } else { "IN" };
+            format!(
+                "({} {operator} ({}))",
+                render_expr(dialect, expr, params, bind_index)?,
+                render_select_ast(dialect, select, params, bind_index)?
+            )
+        }
         Expr::RawSafe(sql) => sql.clone(),
     })
+}
+
+fn append_ctes(
+    dialect: &impl Dialect,
+    sql: &mut String,
+    ctes: &[CommonTableExpr],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<()> {
+    if ctes.is_empty() {
+        return Ok(());
+    }
+    sql.push_str("WITH ");
+    if ctes.iter().any(|cte| cte.recursive) {
+        sql.push_str("RECURSIVE ");
+    }
+    sql.push_str(
+        &ctes
+            .iter()
+            .map(|cte| {
+                let columns = if cte.columns.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        " ({})",
+                        cte.columns
+                            .iter()
+                            .map(|column| dialect.quote_ident(column))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                Ok(format!(
+                    "{}{columns} AS ({})",
+                    dialect.quote_ident(&cte.name),
+                    render_select_ast(dialect, &cte.query, params, bind_index)?
+                ))
+            })
+            .collect::<OrmdanticResult<Vec<_>>>()?
+            .join(", "),
+    );
+    sql.push(' ');
+    Ok(())
 }
 
 fn render_table_source(dialect: &impl Dialect, source: &TableSource) -> String {
@@ -478,10 +600,10 @@ fn render_table_source(dialect: &impl Dialect, source: &TableSource) -> String {
         TableSource::Table { name, alias } => match alias {
             Some(alias) => format!(
                 "{} AS {}",
-                dialect.quote_ident(name),
+                quote_table_name(dialect, name),
                 dialect.quote_ident(alias)
             ),
-            None => dialect.quote_ident(name),
+            None => quote_table_name(dialect, name),
         },
         TableSource::RawSafe(sql) => sql.clone(),
     }
@@ -585,13 +707,10 @@ fn compile_joined_select(
         .map(|column| joined_selected_column(dialect, column))
         .collect::<Vec<_>>()
         .join(", ");
-    let mut sql = format!(
-        "SELECT {selected} FROM {}",
-        dialect.quote_ident(table.name())
-    );
+    let mut sql = format!("SELECT {selected} FROM {}", quote_table_ref(dialect, table));
     for join in joins {
         sql.push_str(" LEFT JOIN ");
-        sql.push_str(&dialect.quote_ident(join.table()));
+        sql.push_str(&quote_table_name(dialect, join.table()));
         sql.push_str(" AS ");
         sql.push_str(&dialect.quote_ident(join.alias()));
         sql.push_str(" ON ");
@@ -640,7 +759,7 @@ fn compile_joined_select(
     if let Some(offset) = offset {
         sql.push_str(&format!(" OFFSET {offset}"));
     }
-    Ok(CompiledQuery::new(sql, params, QueryOperation::Select))
+    compiled_query(dialect, sql, params, QueryOperation::Select)
 }
 
 fn compile_select(
@@ -659,10 +778,7 @@ fn compile_select(
         .map(|column| selected_column(dialect, table, column))
         .collect::<Vec<_>>()
         .join(", ");
-    let mut sql = format!(
-        "SELECT {selected} FROM {}",
-        dialect.quote_ident(table.name())
-    );
+    let mut sql = format!("SELECT {selected} FROM {}", quote_table_ref(dialect, table));
     let params = append_filters(dialect, &mut sql, filters, &mut bind_index);
     append_ordering(dialect, &mut sql, order_by);
     if let Some(limit) = limit {
@@ -671,7 +787,7 @@ fn compile_select(
     if let Some(offset) = offset {
         sql.push_str(&format!(" OFFSET {offset}"));
     }
-    Ok(CompiledQuery::new(sql, params, QueryOperation::Select))
+    compiled_query(dialect, sql, params, QueryOperation::Select)
 }
 
 fn compile_count(
@@ -680,9 +796,9 @@ fn compile_count(
     filters: &[Filter],
 ) -> OrmdanticResult<CompiledQuery> {
     let mut bind_index = 1;
-    let mut sql = format!("SELECT COUNT(*) FROM {}", dialect.quote_ident(table.name()));
+    let mut sql = format!("SELECT COUNT(*) FROM {}", quote_table_ref(dialect, table));
     let params = append_filters(dialect, &mut sql, filters, &mut bind_index);
-    Ok(CompiledQuery::new(sql, params, QueryOperation::Count))
+    compiled_query(dialect, sql, params, QueryOperation::Count)
 }
 
 fn compile_insert(
@@ -693,14 +809,15 @@ fn compile_insert(
     require_columns(columns, "insert")?;
     let rendered_columns = column_list(dialect, columns);
     let placeholders = placeholders(dialect, 1, columns.len());
-    Ok(CompiledQuery::new(
+    compiled_query(
+        dialect,
         format!(
             "INSERT INTO {} ({rendered_columns}) VALUES ({placeholders})",
-            dialect.quote_ident(table.name())
+            quote_table_ref(dialect, table)
         ),
         columns.to_vec(),
         QueryOperation::Insert,
-    ))
+    )
 }
 
 fn compile_update(
@@ -725,15 +842,16 @@ fn compile_update(
     let pk_placeholder = dialect.placeholder(columns.len() + 1);
     let mut params = columns.to_vec();
     params.push(pk.to_string());
-    Ok(CompiledQuery::new(
+    compiled_query(
+        dialect,
         format!(
             "UPDATE {} SET {assignments} WHERE {} = {pk_placeholder}",
-            dialect.quote_ident(table.name()),
+            quote_table_ref(dialect, table),
             dialect.quote_ident(pk)
         ),
         params,
         QueryOperation::Update,
-    ))
+    )
 }
 
 fn compile_upsert(
@@ -749,7 +867,8 @@ fn compile_upsert(
         .filter(|column| column.as_str() != pk)
         .cloned()
         .collect::<Vec<_>>();
-    Ok(CompiledQuery::new(
+    compiled_query(
+        dialect,
         format!(
             "{} {}",
             insert.sql(),
@@ -757,7 +876,7 @@ fn compile_upsert(
         ),
         columns.to_vec(),
         QueryOperation::Upsert,
-    ))
+    )
 }
 
 fn compile_delete(
@@ -765,16 +884,17 @@ fn compile_delete(
     table: &TableRef,
     pk: &str,
 ) -> OrmdanticResult<CompiledQuery> {
-    Ok(CompiledQuery::new(
+    compiled_query(
+        dialect,
         format!(
             "DELETE FROM {} WHERE {} = {}",
-            dialect.quote_ident(table.name()),
+            quote_table_ref(dialect, table),
             dialect.quote_ident(pk),
             dialect.placeholder(1)
         ),
         vec![pk.to_string()],
         QueryOperation::Delete,
-    ))
+    )
 }
 
 fn append_filters(
@@ -814,7 +934,10 @@ fn append_ordering(dialect: &impl Dialect, sql: &mut String, order_by: &[OrderBy
                 SortDirection::Asc => "ASC",
                 SortDirection::Desc => "DESC",
             };
-            format!("{} {direction}", dialect.quote_ident(order.column()))
+            format!(
+                "{} {direction}",
+                render_order_column(dialect, dialect.quote_ident(order.column()), order)
+            )
         })
         .collect::<Vec<_>>()
         .join(", ");
@@ -875,11 +998,31 @@ fn render_expression(
             bind_index,
             params,
         ),
+        PredicateExpr::DecimalCompare { left, op, right } => render_decimal_comparison_expression(
+            dialect,
+            render_column(left.name()),
+            op,
+            right,
+            bind_index,
+            params,
+        ),
         PredicateExpr::InList {
             left,
             params: names,
             negated,
         } => render_in_expression(
+            dialect,
+            render_column(left.name()),
+            *negated,
+            names,
+            bind_index,
+            params,
+        ),
+        PredicateExpr::DecimalInList {
+            left,
+            params: names,
+            negated,
+        } => render_decimal_in_expression(
             dialect,
             render_column(left.name()),
             *negated,
@@ -914,6 +1057,34 @@ fn render_comparison_expression(
     format!("{} {} {placeholder}", column, operator.sql_operator())
 }
 
+fn render_decimal_comparison_expression(
+    dialect: &impl Dialect,
+    column: String,
+    operator: &ComparisonOp,
+    param: &BindParam,
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+) -> String {
+    params.push(param.name().to_string());
+    let placeholder = dialect.placeholder(*bind_index);
+    *bind_index += 1;
+    if dialect.kind() != DialectKind::Sqlite {
+        return format!("{} {} {placeholder}", column, operator.sql_operator());
+    }
+    let comparison = format!("ormdantic_decimal_cmp({column}, {placeholder})");
+    match operator {
+        ComparisonOp::Eq => format!("{comparison} = 0"),
+        ComparisonOp::Ne => format!("{comparison} != 0"),
+        ComparisonOp::Lt => format!("{comparison} < 0"),
+        ComparisonOp::Le => format!("{comparison} <= 0"),
+        ComparisonOp::Gt => format!("{comparison} > 0"),
+        ComparisonOp::Ge => format!("{comparison} >= 0"),
+        ComparisonOp::Like | ComparisonOp::ILike => {
+            format!("{} {} {placeholder}", column, operator.sql_operator())
+        }
+    }
+}
+
 fn render_in_expression(
     dialect: &impl Dialect,
     column: String,
@@ -941,6 +1112,41 @@ fn render_in_expression(
         .collect::<Vec<_>>()
         .join(", ");
     format!("{column} {operator} ({placeholders})")
+}
+
+fn render_decimal_in_expression(
+    dialect: &impl Dialect,
+    column: String,
+    negated: bool,
+    names: &[BindParam],
+    bind_index: &mut usize,
+    params: &mut Vec<String>,
+) -> String {
+    if dialect.kind() != DialectKind::Sqlite {
+        return render_in_expression(dialect, column, negated, names, bind_index, params);
+    }
+    if names.is_empty() {
+        return if negated {
+            "1 = 1".to_string()
+        } else {
+            "1 = 0".to_string()
+        };
+    }
+    let comparisons = names
+        .iter()
+        .map(|name| {
+            params.push(name.name().to_string());
+            let placeholder = dialect.placeholder(*bind_index);
+            *bind_index += 1;
+            format!("ormdantic_decimal_cmp({column}, {placeholder}) = 0")
+        })
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    if negated {
+        format!("NOT ({comparisons})")
+    } else {
+        format!("({comparisons})")
+    }
 }
 
 fn render_bool_expression(
@@ -990,8 +1196,20 @@ fn render_order_for_alias(dialect: &impl Dialect, table_alias: &str, order: &Ord
     };
     format!(
         "{} {direction}",
-        qualified_alias_column(dialect, table_alias, order.column())
+        render_order_column(
+            dialect,
+            qualified_alias_column(dialect, table_alias, order.column()),
+            order,
+        )
     )
+}
+
+fn render_order_column(dialect: &impl Dialect, column: String, order: &OrderBy) -> String {
+    if order.is_decimal() && dialect.kind() == DialectKind::Sqlite {
+        format!("ormdantic_decimal_sort_key({column})")
+    } else {
+        column
+    }
 }
 
 fn require_columns(columns: &[String], operation: &str) -> OrmdanticResult<()> {
@@ -1030,9 +1248,13 @@ fn selected_column(dialect: &impl Dialect, table: &TableRef, column: &SelectColu
 }
 
 fn qualified_column(dialect: &impl Dialect, table: &TableRef, column: &str) -> String {
+    qualified_table_column(dialect, table.name(), column)
+}
+
+fn qualified_table_column(dialect: &impl Dialect, table: &str, column: &str) -> String {
     format!(
         "{}.{}",
-        dialect.quote_ident(table.name()),
+        quote_table_name(dialect, table),
         dialect.quote_ident(column)
     )
 }
@@ -1040,9 +1262,21 @@ fn qualified_column(dialect: &impl Dialect, table: &TableRef, column: &str) -> S
 fn qualified_alias_column(dialect: &impl Dialect, table_alias: &str, column: &str) -> String {
     format!(
         "{}.{}",
-        dialect.quote_ident(table_alias),
+        quote_table_name(dialect, table_alias),
         dialect.quote_ident(column)
     )
+}
+
+fn quote_table_ref(dialect: &impl Dialect, table: &TableRef) -> String {
+    quote_table_name(dialect, table.name())
+}
+
+fn quote_table_name(dialect: &impl Dialect, table: &str) -> String {
+    table
+        .split('.')
+        .map(|part| dialect.quote_ident(part))
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 fn joined_selected_column(dialect: &impl Dialect, column: &JoinedSelectColumn) -> String {
