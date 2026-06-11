@@ -15,6 +15,7 @@ mod runtime {
     pub struct OracleConnection {
         runtime: Runtime,
         connection: Connection,
+        in_transaction: bool,
     }
 
     impl OracleConnection {
@@ -27,6 +28,7 @@ mod runtime {
             Ok(Self {
                 runtime,
                 connection,
+                in_transaction: false,
             })
         }
 
@@ -36,23 +38,39 @@ mod runtime {
                 .runtime
                 .block_on(self.connection.execute(sql, &params))
                 .map_err(sql_error)?;
+            if !self.in_transaction && !crate::returns_rows(sql) {
+                self.runtime
+                    .block_on(self.connection.commit())
+                    .map_err(sql_error)?;
+            }
             Ok(result_to_query_result(result))
         }
 
         pub fn begin(&mut self) -> OrmdanticResult<()> {
+            self.in_transaction = true;
             Ok(())
         }
 
         pub fn commit(&mut self) -> OrmdanticResult<()> {
-            self.runtime
+            let result = self
+                .runtime
                 .block_on(self.connection.commit())
-                .map_err(sql_error)
+                .map_err(sql_error);
+            if result.is_ok() {
+                self.in_transaction = false;
+            }
+            result
         }
 
         pub fn rollback(&mut self) -> OrmdanticResult<()> {
-            self.runtime
+            let result = self
+                .runtime
                 .block_on(self.connection.rollback())
-                .map_err(sql_error)
+                .map_err(sql_error);
+            if result.is_ok() {
+                self.in_transaction = false;
+            }
+            result
         }
 
         pub fn savepoint(&mut self, name: &str) -> OrmdanticResult<()> {
