@@ -40,6 +40,26 @@ fn column_types_follow_backend_capabilities() {
         "TEXT"
     );
     assert_eq!(
+        SqliteDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
+        "TEXT"
+    );
+    assert_eq!(
+        MySqlDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
+        "VARCHAR(255)"
+    );
+    assert_eq!(
+        MariaDbDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
+        "VARCHAR(255)"
+    );
+    assert_eq!(
+        MsSqlDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
+        "NVARCHAR(255)"
+    );
+    assert_eq!(
+        OracleDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
+        "VARCHAR2(255)"
+    );
+    assert_eq!(
         PostgresDialect
             .render_column_type(&ColumnDef::new("name", FieldKind::String).with_max_length(255)),
         "VARCHAR(255)"

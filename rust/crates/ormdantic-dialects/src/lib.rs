@@ -362,14 +362,29 @@ pub trait Dialect {
     }
 }
 
+const DEFAULT_KEYABLE_STRING_LENGTH: u32 = 255;
+
 fn render_string_type(kind: DialectKind, max_length: Option<u32>) -> String {
-    let Some(max_length) = max_length.filter(|length| *length > 0) else {
-        return "TEXT".to_string();
-    };
+    let max_length = max_length.filter(|length| *length > 0);
     match kind {
-        DialectKind::MsSql => format!("NVARCHAR({max_length})"),
-        DialectKind::Oracle => format!("VARCHAR2({max_length})"),
-        _ => format!("VARCHAR({max_length})"),
+        DialectKind::Sqlite => "TEXT".to_string(),
+        DialectKind::Postgres => max_length
+            .map(|length| format!("VARCHAR({length})"))
+            .unwrap_or_else(|| "TEXT".to_string()),
+        DialectKind::MsSql => format!(
+            "NVARCHAR({})",
+            max_length.unwrap_or(DEFAULT_KEYABLE_STRING_LENGTH)
+        ),
+        DialectKind::Oracle => format!(
+            "VARCHAR2({})",
+            max_length.unwrap_or(DEFAULT_KEYABLE_STRING_LENGTH)
+        ),
+        DialectKind::MySql | DialectKind::MariaDb => {
+            format!(
+                "VARCHAR({})",
+                max_length.unwrap_or(DEFAULT_KEYABLE_STRING_LENGTH)
+            )
+        }
     }
 }
 

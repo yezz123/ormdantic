@@ -104,7 +104,6 @@ RuntimeForeignKeyConstraint = tuple[
     bool,
     bool,
     str | None,
-    str | None,
 ]
 RuntimeEnumType = tuple[str, list[str], str | None, str | None]
 RuntimeNamespace = tuple[str, str | None]
@@ -870,7 +869,6 @@ class ForeignKeyConstraintSnapshot:
             self.initially_deferred,
             self.validated,
             self.match,
-            self.comment,
         )
 
     def to_dict(self) -> dict[str, Any]:
