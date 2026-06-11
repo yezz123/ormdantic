@@ -2,6 +2,10 @@
 
 ## Latest Changes
 
+### Breaking Changes
+
+* ♻️ Refactor SQL AST and expression handling, enhance tests and docs. PR [#256](https://github.com/yezz123/ormdantic/pull/256) by [@yezz123](https://github.com/yezz123).
+
 ### Features
 
 * ✨  Enhance Ormdantic migration functionality and CLI support. PR [#254](https://github.com/yezz123/ormdantic/pull/254) by [@yezz123](https://github.com/yezz123).
