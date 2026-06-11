@@ -11,9 +11,12 @@ class association_proxy:
     def __init__(self, relationship: str, attribute: str) -> None:
         self.relationship = relationship
         self.attribute = attribute
+        self.expression_func: Callable[[type[Any]], Any] | None = None
 
     def __get__(self, instance: Any, owner: type[Any]) -> Any:
         if instance is None:
+            if self.expression_func is not None:
+                return self.expression_func(owner)
             return self
         target = getattr(instance, self.relationship)
         if isinstance(target, list):
@@ -26,9 +29,14 @@ class association_proxy:
             raise TypeError("cannot assign scalar value through a collection proxy")
         setattr(target, self.attribute, value)
 
+    def expression(self, func: Callable[[type[Any]], Any]) -> "association_proxy":
+        """Attach a class-level query expression for this proxy."""
+        self.expression_func = func
+        return self
+
 
 class hybrid_attribute:
-    """Descriptor for Python-computed attributes that may later lower to Rust expressions."""
+    """Descriptor for Python-computed attributes with optional query expressions."""
 
     def __init__(self, func: Callable[[Any], Any]) -> None:
         self.func = func

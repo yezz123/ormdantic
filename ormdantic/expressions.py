@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import count as counter
 from typing import Any, Literal, Protocol, Sequence
 
@@ -111,6 +111,37 @@ class SqlExpression:
                     for value in self.data.get("values", ())
                 ],
             }
+        if kind == "subquery":
+            return {
+                "kind": "subquery",
+                "query": self.data["query"].to_query_payload(ctx),
+            }
+        if kind == "exists":
+            return {
+                "kind": "exists",
+                "query": self.data["query"].to_query_payload(ctx),
+                "negated": self.data.get("negated", False),
+            }
+        if kind == "in_subquery":
+            return {
+                "kind": "in_subquery",
+                "expr": expression_payload(self.data["expr"], ctx),
+                "query": self.data["query"].to_query_payload(ctx),
+                "negated": self.data.get("negated", False),
+            }
+        if kind == "window":
+            return {
+                "kind": "window",
+                "expr": expression_payload(self.data["expr"], ctx),
+                "partition_by": [
+                    expression_payload(expr, ctx)
+                    for expr in self.data.get("partition_by", ())
+                ],
+                "order_by": [
+                    window_order_payload(order, ctx)
+                    for order in self.data.get("order_by", ())
+                ],
+            }
         raise ValueError(f"unsupported expression kind '{kind}'")
 
     def as_(self, alias: str) -> "ProjectionExpression":
@@ -128,6 +159,15 @@ class SqlExpression:
     ) -> "OrderExpression":
         """Order by this expression descending."""
         return OrderExpression(self, "desc", nulls)
+
+    def over(
+        self,
+        *,
+        partition_by: Sequence[SerializableExpression] = (),
+        order_by: Sequence["OrderExpression | SerializableExpression"] = (),
+    ) -> "SqlExpression":
+        """Use this expression as a SQL window expression."""
+        return over(self, partition_by=partition_by, order_by=order_by)
 
     def eq(self, value: Any) -> "QueryExpression":
         if value is None:
@@ -221,6 +261,22 @@ class SqlExpression:
             ),
         )
 
+    def in_query(
+        self, query: "SelectExpressionQuery", *, negated: bool = False
+    ) -> "QueryExpression":
+        """Compare this expression against the result of a typed subquery."""
+        return QueryExpression(
+            "leaf",
+            expr=SqlExpression(
+                "in_subquery",
+                {
+                    "expr": self,
+                    "query": query,
+                    "negated": negated,
+                },
+            ),
+        )
+
     def not_in(self, values: Sequence[Any]) -> "QueryExpression":
         return QueryExpression(
             "leaf",
@@ -234,6 +290,10 @@ class SqlExpression:
                 },
             ),
         )
+
+    def not_in_query(self, query: "SelectExpressionQuery") -> "QueryExpression":
+        """Compare this expression against rows absent from a typed subquery."""
+        return self.in_query(query, negated=True)
 
     def is_null(self) -> "QueryExpression":
         return QueryExpression(
@@ -358,7 +418,7 @@ class QueryExpression:
     def to_where(self) -> dict[str, Any]:
         """Lower simple AND expressions into the current Rust filter contract."""
         if self.connector == "leaf":
-            return dict(self.legacy_filters or {})
+            return self._legacy_filter_payload()
         if self.connector == "and":
             merged: dict[str, Any] = {}
             for child in self.children:
@@ -369,11 +429,17 @@ class QueryExpression:
     def to_filter_tree(self) -> dict[str, Any]:
         """Return the recursive payload consumed by the Rust filter normalizer."""
         if self.connector == "leaf":
-            return {"connector": "leaf", "filters": dict(self.legacy_filters or {})}
+            return {"connector": "leaf", "filters": self._legacy_filter_payload()}
         return {
             "connector": self.connector,
             "children": [child.to_filter_tree() for child in self.children],
         }
+
+    def supports_legacy_filters(self) -> bool:
+        """Return whether this expression can lower into legacy filter specs."""
+        if self.connector == "leaf":
+            return self.legacy_filters is not None
+        return all(child.supports_legacy_filters() for child in self.children)
 
     def to_expression_payload(
         self, ctx: SerializationContext | None = None
@@ -381,6 +447,14 @@ class QueryExpression:
         if self.expr is None:
             raise ValueError("query expression does not have a typed SQL expression")
         return self.expr.to_expression_payload(ctx)
+
+    def _legacy_filter_payload(self) -> dict[str, Any]:
+        if self.legacy_filters is None:
+            raise ValueError(
+                "expression-only predicates require typed SQL compilation; "
+                "use select_query(), Table.select(), or update_query()"
+            )
+        return dict(self.legacy_filters)
 
 
 @dataclass(frozen=True)
@@ -421,6 +495,8 @@ class SelectExpressionQuery:
 
     table: str
     projections: tuple[ProjectionExpression, ...]
+    table_alias: str | None = None
+    ctes: tuple["CommonTableExpression", ...] = ()
     where: QueryExpression | None = None
     group_by: tuple[SerializableExpression, ...] = ()
     having: QueryExpression | None = None
@@ -435,11 +511,15 @@ class SelectExpressionQuery:
         ctx = ctx or SerializationContext()
         payload: dict[str, Any] = {
             "table": self.table,
-            "projections": [
-                projection.to_projection_payload(ctx) for projection in self.projections
-            ],
             "values": ctx.values,
         }
+        if self.table_alias is not None:
+            payload["table_alias"] = self.table_alias
+        if self.ctes:
+            payload["ctes"] = [cte.to_cte_payload(ctx) for cte in self.ctes]
+        payload["projections"] = [
+            projection.to_projection_payload(ctx) for projection in self.projections
+        ]
         if self.where is not None:
             payload["where"] = self.where.to_expression_payload(ctx)
         if self.group_by:
@@ -461,6 +541,37 @@ class SelectExpressionQuery:
         payload["values"] = ctx.values
         return payload
 
+    def to_expression_payload(
+        self, ctx: SerializationContext | None = None
+    ) -> dict[str, Any]:
+        """Serialize this SELECT as a scalar subquery expression."""
+        return subquery(self).to_expression_payload(ctx)
+
+    def with_cte(self, *ctes: "CommonTableExpression") -> "SelectExpressionQuery":
+        """Return a copy with additional common table expressions."""
+        return replace(self, ctes=self.ctes + tuple(ctes))
+
+
+@dataclass(frozen=True)
+class CommonTableExpression:
+    """Serializable common table expression used by typed SELECT queries."""
+
+    name: str
+    query: SelectExpressionQuery
+    columns: tuple[str, ...] = ()
+    recursive: bool = False
+
+    def to_cte_payload(self, ctx: SerializationContext) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "name": self.name,
+            "query": self.query.to_query_payload(ctx),
+        }
+        if self.columns:
+            payload["columns"] = list(self.columns)
+        if self.recursive:
+            payload["recursive"] = True
+        return payload
+
 
 @dataclass(frozen=True)
 class AssignmentExpression:
@@ -471,6 +582,80 @@ class AssignmentExpression:
 
     def to_assignment_payload(self, ctx: SerializationContext) -> dict[str, Any]:
         return {"column": self.column, "expr": expression_payload(self.expr, ctx)}
+
+
+@dataclass(frozen=True)
+class RelationExpression:
+    """Registered relationship helper for typed predicates and aggregate ordering."""
+
+    source_table: str
+    source_pk: str
+    relationship: str
+    target_table: str
+    target_pk: str
+    target_alias: str
+    correlation_source_column: str
+    correlation_target_column: str
+    kind: Literal["collection", "scalar"]
+    outer_alias: str | None = None
+
+    def column(self, name: str) -> ColumnExpression:
+        """Return a target-table column qualified to this relation subquery."""
+        return column(name, table=self.target_alias)
+
+    def any(self, where: QueryExpression | None = None) -> QueryExpression:
+        """Match rows where a collection relationship has at least one row."""
+        self._require_kind("collection", "any")
+        return exists(self._select(literal(1), where=where))
+
+    def none(self, where: QueryExpression | None = None) -> QueryExpression:
+        """Match rows where no related row satisfies the optional predicate."""
+        return not_exists(self._select(literal(1), where=where))
+
+    def every(self, where: QueryExpression) -> QueryExpression:
+        """Match collection rows where every related row satisfies a predicate."""
+        self._require_kind("collection", "every")
+        return not_exists(self._select(literal(1), where=not_(where)))
+
+    def has(self, where: QueryExpression | None = None) -> QueryExpression:
+        """Match rows where a scalar relationship target satisfies a predicate."""
+        self._require_kind("scalar", "has")
+        return exists(self._select(literal(1), where=where))
+
+    def count(self, where: QueryExpression | None = None) -> SqlExpression:
+        """Return a scalar subquery counting rows for this relationship."""
+        return subquery(self._select(func("COUNT", raw_sql_safe("*")), where=where))
+
+    def _select(
+        self,
+        projection: ProjectionExpression | SerializableExpression,
+        *,
+        where: QueryExpression | None = None,
+    ) -> SelectExpressionQuery:
+        return select_query(
+            self.target_table,
+            projection,
+            table_alias=self.target_alias,
+            where=self._correlation() if where is None else self._correlation() & where,
+        )
+
+    def _correlation(self) -> QueryExpression:
+        return column(
+            self.correlation_target_column, table=self.target_alias
+        ) == column(
+            self.correlation_source_column,
+            table=self.outer_alias or self.source_table,
+        )
+
+    def _require_kind(
+        self, expected: Literal["collection", "scalar"], operation: str
+    ) -> None:
+        if self.kind != expected:
+            label = "collection" if expected == "collection" else "scalar"
+            raise ValueError(
+                f"relation '{self.source_table}.{self.relationship}' is not a "
+                f"{label} relationship; cannot use {operation}()"
+            )
 
 
 @dataclass(frozen=True)
@@ -539,15 +724,28 @@ def tuple_(*values: SerializableExpression | Any) -> SqlExpression:
     return SqlExpression("tuple", {"values": values})
 
 
+def window_order_payload(
+    order: "OrderExpression | SerializableExpression", ctx: SerializationContext
+) -> dict[str, Any]:
+    if isinstance(order, OrderExpression):
+        return order.to_order_payload(ctx)
+    return OrderExpression(order, "asc").to_order_payload(ctx)
+
+
 def binary(op: str, left: Any, right: Any) -> SqlExpression:
     return SqlExpression("binary", {"op": op, "left": left, "right": right})
 
 
 def predicate(op: str, left: SqlExpression, right: Any) -> QueryExpression:
+    legacy_filters = (
+        None
+        if hasattr(right, "to_expression_payload")
+        else left._legacy_filter(op, right)
+    )
     return QueryExpression(
         "leaf",
-        legacy_filters=left._legacy_filter(op, right),
-        expr=binary(op, left, bind_value(right)),
+        legacy_filters=legacy_filters,
+        expr=binary(op, left, right),
     )
 
 
@@ -555,6 +753,41 @@ def not_(expr: QueryExpression) -> QueryExpression:
     """Negate a boolean expression."""
     return QueryExpression(
         "leaf", expr=SqlExpression("unary", {"op": "not", "expr": expr})
+    )
+
+
+def exists(query: "SelectExpressionQuery", *, negated: bool = False) -> QueryExpression:
+    """Build an `EXISTS (SELECT ...)` predicate."""
+    return QueryExpression(
+        "leaf",
+        expr=SqlExpression("exists", {"query": query, "negated": negated}),
+    )
+
+
+def not_exists(query: "SelectExpressionQuery") -> QueryExpression:
+    """Build a `NOT EXISTS (SELECT ...)` predicate."""
+    return exists(query, negated=True)
+
+
+def subquery(query: "SelectExpressionQuery") -> SqlExpression:
+    """Use a typed SELECT as a scalar subquery expression."""
+    return SqlExpression("subquery", {"query": query})
+
+
+def over(
+    expr: SerializableExpression,
+    *,
+    partition_by: Sequence[SerializableExpression] = (),
+    order_by: Sequence["OrderExpression | SerializableExpression"] = (),
+) -> SqlExpression:
+    """Create a SQL window expression."""
+    return SqlExpression(
+        "window",
+        {
+            "expr": expr,
+            "partition_by": tuple(partition_by),
+            "order_by": tuple(order_by),
+        },
     )
 
 
@@ -585,6 +818,8 @@ def assignment(
 def select_query(
     table: str,
     *projections: ProjectionExpression | SerializableExpression,
+    table_alias: str | None = None,
+    with_: Sequence[CommonTableExpression] = (),
     where: QueryExpression | None = None,
     group_by: Sequence[SerializableExpression] = (),
     having: QueryExpression | None = None,
@@ -601,6 +836,8 @@ def select_query(
     return SelectExpressionQuery(
         table=table,
         projections=normalized,
+        table_alias=table_alias,
+        ctes=tuple(with_),
         where=where,
         group_by=tuple(group_by),
         having=having,
@@ -608,6 +845,54 @@ def select_query(
         limit=limit,
         offset=offset,
         distinct=distinct,
+    )
+
+
+def relation(
+    table_map: Any,
+    model: type[Any],
+    relationship: str,
+    *,
+    outer_alias: str | None = None,
+    target_alias: str | None = None,
+) -> RelationExpression:
+    """Create a typed relationship helper from registered ORM metadata."""
+    table = table_map.model_to_data.get(model)
+    if table is None:
+        raise ValueError(f"model '{model.__name__}' is not registered as a table")
+    relation_info = table.relationships.get(relationship)
+    if relation_info is None:
+        available = ", ".join(sorted(table.relationships)) or "none"
+        raise ValueError(
+            f"'{table.model.__name__}.{relationship}' is not a relationship; "
+            f"available relationships: {available}"
+        )
+    target = table_map.name_to_data[relation_info.foreign_table]
+    alias = target_alias or f"ormdantic_rel_{relationship}"
+    if relation_info.back_references is not None:
+        return RelationExpression(
+            source_table=table.tablename,
+            source_pk=table.pk,
+            relationship=relationship,
+            target_table=target.tablename,
+            target_pk=target.pk,
+            target_alias=alias,
+            correlation_source_column=table.pk,
+            correlation_target_column=relation_info.back_references,
+            kind="collection",
+            outer_alias=outer_alias,
+        )
+    return RelationExpression(
+        source_table=table.tablename,
+        source_pk=table.pk,
+        relationship=relationship,
+        target_table=target.tablename,
+        target_pk=target.pk,
+        target_alias=alias,
+        correlation_source_column=relationship,
+        correlation_target_column=target.pk,
+        kind="scalar",
+        outer_alias=outer_alias,
     )
 
 
@@ -623,6 +908,22 @@ def update_query(
 def func(name: str, *args: SerializableExpression | Any) -> SqlExpression:
     """Create a SQL function expression."""
     return SqlExpression("function", {"name": name.upper(), "args": args})
+
+
+def cte(
+    name: str,
+    query: SelectExpressionQuery,
+    *,
+    columns: Sequence[str] = (),
+    recursive: bool = False,
+) -> CommonTableExpression:
+    """Create a common table expression for a typed SELECT query."""
+    return CommonTableExpression(
+        name=name,
+        query=query,
+        columns=tuple(columns),
+        recursive=recursive,
+    )
 
 
 def count(expr: SerializableExpression | None = None) -> SqlExpression:

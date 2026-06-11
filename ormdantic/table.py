@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generic
+from typing import Any, Generic, Literal
 
 from pydantic import BaseModel
 
@@ -22,6 +22,12 @@ from ormdantic.expressions import (
     select_query,
     update_query,
 )
+from ormdantic.expressions import (
+    column as expr_column,
+)
+from ormdantic.expressions import (
+    count as count_expr,
+)
 from ormdantic.loaders import LoaderOption, path_parts
 from ormdantic.models import Map, OrmTable, Result
 from ormdantic.serializer import OrmSerializer
@@ -29,6 +35,7 @@ from ormdantic.types import ModelType
 from ormdantic.values import py_type_to_sql
 
 _ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
+DEFAULT_SELECTIN_BATCH_SIZE = 500
 
 
 class Order(Enum):
@@ -104,7 +111,7 @@ class Table(Generic[ModelType]):
     async def find_many(
         self,
         where: dict[str, Any] | QueryExpression | None = None,
-        order_by: list[str] | None = None,
+        order_by: list[str | OrderExpression] | None = None,
         order: Order = Order.asc,
         limit: int = 0,
         offset: int = 0,
@@ -113,7 +120,17 @@ class Table(Generic[ModelType]):
     ) -> Result[ModelType]:
         """Find many model instances."""
         load_plan = self._resolve_load_plan(depth, load)
+        if self._requires_expression_select(where, order_by):
+            return await self._find_many_expression(
+                where=where if isinstance(where, QueryExpression) else None,
+                order_by=order_by or [],
+                order=order,
+                limit=limit,
+                offset=offset,
+                load_plan=load_plan,
+            )
         filters, values = self._compile_where(where)
+        legacy_order_by = self._legacy_order_columns(order_by)
         if load_plan.paths:
             joined_filters, joined_order_by, joined_values = (
                 self._joined_loader_query_parts(load_plan)
@@ -122,7 +139,7 @@ class Table(Generic[ModelType]):
             result = self._rust_handle.find_many_with_paths(
                 filters,
                 values,
-                order_by or [],
+                legacy_order_by,
                 order.value,
                 limit or None,
                 offset or None,
@@ -146,7 +163,7 @@ class Table(Generic[ModelType]):
             result = self._rust_handle.find_many(
                 filters,
                 values,
-                order_by or [],
+                legacy_order_by,
                 order.value,
                 limit or None,
                 offset or None,
@@ -171,7 +188,7 @@ class Table(Generic[ModelType]):
         await self._events.dispatch(
             "before_insert", model=model_instance, table=self._table_data
         )
-        self._rust_handle.insert(self._payload(model_instance))
+        self._rust_handle.insert(self._payload(model_instance, mode="insert"))
         await self._events.dispatch(
             "after_insert", model=model_instance, table=self._table_data
         )
@@ -182,7 +199,7 @@ class Table(Generic[ModelType]):
         await self._events.dispatch(
             "before_update", model=model_instance, table=self._table_data
         )
-        self._rust_handle.update(self._payload(model_instance))
+        self._rust_handle.update(self._payload(model_instance, mode="update"))
         await self._events.dispatch(
             "after_update", model=model_instance, table=self._table_data
         )
@@ -193,7 +210,7 @@ class Table(Generic[ModelType]):
         await self._events.dispatch(
             "before_upsert", model=model_instance, table=self._table_data
         )
-        self._rust_handle.upsert(self._payload(model_instance))
+        self._rust_handle.upsert(self._payload(model_instance, mode="upsert"))
         await self._events.dispatch(
             "after_upsert", model=model_instance, table=self._table_data
         )
@@ -210,6 +227,9 @@ class Table(Generic[ModelType]):
         self, where: dict[str, Any] | QueryExpression | None = None, depth: int = 0
     ) -> int:
         """Count records matching an optional filter."""
+        if isinstance(where, QueryExpression) and not where.supports_legacy_filters():
+            result = await self.select(count_expr(), where=where)
+            return int(result.scalar())
         filters, values = self._compile_where(where)
         result = self._rust_handle.count(filters, values)
         return NativeResult(
@@ -277,6 +297,133 @@ class Table(Generic[ModelType]):
             rows=[tuple(row) for row in result["rows"]],
         )
 
+    async def _find_many_expression(
+        self,
+        *,
+        where: QueryExpression | None,
+        order_by: list[str | OrderExpression],
+        order: Order,
+        limit: int,
+        offset: int,
+        load_plan: _ResolvedLoadPlan,
+    ) -> Result[ModelType]:
+        if load_plan.depth > 0 or load_plan.paths:
+            data = await self._find_many_expression_by_primary_keys(
+                where=where,
+                order_by=order_by,
+                order=order,
+                limit=limit,
+                offset=offset,
+                load_plan=load_plan,
+            )
+            return Result(offset=offset, limit=limit, data=data)
+
+        query = select_query(
+            self.tablename,
+            *(
+                expr_column(name).as_(f"{self.tablename}\\{name}")
+                for name in self._table_data.columns
+            ),
+            where=where,
+            order_by=self._expression_order_by(order_by, order),
+            limit=limit or None,
+            offset=offset or None,
+        )
+        result = self._rust_handle.select_expression(query.to_query_payload())
+        data = (
+            self._deserialize(
+                result,
+                is_array=True,
+                depth=0,
+                load_paths=load_plan.paths,
+                load_options=load_plan.options,
+            )
+            or []
+        )
+        if load_plan.selectin_paths:
+            await self._load_selectin_graph(data, load_plan)
+        return Result(offset=offset, limit=limit, data=data)
+
+    async def _find_many_expression_by_primary_keys(
+        self,
+        *,
+        where: QueryExpression | None,
+        order_by: list[str | OrderExpression],
+        order: Order,
+        limit: int,
+        offset: int,
+        load_plan: _ResolvedLoadPlan,
+    ) -> list[ModelType]:
+        query = select_query(
+            self.tablename,
+            expr_column(self._table_data.pk),
+            where=where,
+            order_by=self._expression_order_by(order_by, order),
+            limit=limit or None,
+            offset=offset or None,
+        )
+        result = self._rust_handle.select_expression(query.to_query_payload())
+        native_result = NativeResult(
+            columns=list(result["columns"]),
+            rows=[tuple(row) for row in result["rows"]],
+        )
+        primary_keys = [row[0] for row in native_result]
+        if not primary_keys:
+            return []
+
+        filters, values = self._compile_where(
+            expr_column(self._table_data.pk).in_(primary_keys)
+        )
+        if load_plan.paths:
+            joined_filters, joined_order_by, joined_values = (
+                self._joined_loader_query_parts(load_plan)
+            )
+            values.update(joined_values)
+            loaded = self._rust_handle.find_many_with_paths(
+                filters,
+                values,
+                [],
+                Order.asc.value,
+                None,
+                None,
+                list(load_plan.paths),
+                joined_filters,
+                joined_order_by,
+            )
+            data = (
+                self._deserialize(
+                    loaded,
+                    is_array=True,
+                    depth=load_plan.depth,
+                    load_paths=load_plan.paths,
+                    load_options=load_plan.options,
+                )
+                or []
+            )
+        else:
+            loaded = self._rust_handle.find_many(
+                filters,
+                values,
+                [],
+                Order.asc.value,
+                None,
+                None,
+                load_plan.depth,
+            )
+            data = (
+                self._deserialize(
+                    loaded,
+                    is_array=True,
+                    depth=load_plan.depth,
+                    load_paths=load_plan.paths,
+                    load_options=load_plan.options,
+                )
+                or []
+            )
+        if load_plan.selectin_paths:
+            await self._load_selectin_graph(data, load_plan)
+        return self._order_by_primary_key_sequence(data, primary_keys)
+
     def _deserialize(
         self,
         result: dict[str, Any],
@@ -310,6 +457,8 @@ class Table(Generic[ModelType]):
                 "select-in relationship loading requires an initialized runtime"
             )
         identity_map: dict[tuple[type[Any], str], Any] = {}
+        for root in roots:
+            self._remember_identity(root, self._table_data, identity_map)
         option_by_path = {
             option.path.replace(".", "/"): option for option in load_plan.options
         }
@@ -344,6 +493,10 @@ class Table(Generic[ModelType]):
                 related = self._loaded_relationship_values(
                     parents, field_name, related_table
                 )
+                related = [
+                    self._remember_identity(model, related_table, identity_map)
+                    for model in related
+                ]
             else:
                 related = await self._selectin_load_relationship(
                     parents,
@@ -384,8 +537,10 @@ class Table(Generic[ModelType]):
                 for parent in parents:
                     object.__setattr__(parent, field_name, [])
                 return []
-            where = self._selectin_where(back_reference, parent_ids, option)
-            children = (await related_handle.find_many(where=where)).data
+            children = []
+            for batch in self._selectin_batches(parent_ids, option):
+                where = self._selectin_where(back_reference, batch, option)
+                children.extend((await related_handle.find_many(where=where)).data)
             children = [
                 self._remember_identity(child, related_table, identity_map)
                 for child in children
@@ -411,8 +566,10 @@ class Table(Generic[ModelType]):
             for parent in parents:
                 object.__setattr__(parent, field_name, None)
             return []
-        where = self._selectin_where(related_table.pk, foreign_keys, option)
-        related_rows = (await related_handle.find_many(where=where)).data
+        related_rows = []
+        for batch in self._selectin_batches(foreign_keys, option):
+            where = self._selectin_where(related_table.pk, batch, option)
+            related_rows.extend((await related_handle.find_many(where=where)).data)
         related_by_pk = {
             str(getattr(related, related_table.pk)): self._remember_identity(
                 related, related_table, identity_map
@@ -502,6 +659,36 @@ class Table(Generic[ModelType]):
                 unique.setdefault(str(value), value)
         return list(unique.values())
 
+    def _selectin_batches(
+        self, values: list[Any], option: LoaderOption | None
+    ) -> list[list[Any]]:
+        batch_size = self._selectin_batch_size(option)
+        return [
+            values[index : index + batch_size]
+            for index in range(0, len(values), batch_size)
+        ]
+
+    def _selectin_batch_size(self, option: LoaderOption | None) -> int:
+        requested = option.batch_size if option and option.batch_size else None
+        requested = requested or DEFAULT_SELECTIN_BATCH_SIZE
+        max_bind_parameters = self._max_bind_parameters()
+        if max_bind_parameters is None:
+            return requested
+        reserved_filter_binds = (
+            len(option.filter_by) if option and option.filter_by else 0
+        )
+        backend_limit = max(1, max_bind_parameters - reserved_filter_binds)
+        return min(requested, backend_limit)
+
+    def _max_bind_parameters(self) -> int | None:
+        get_max_bind_parameters = getattr(
+            self._rust_handle, "max_bind_parameters", None
+        )
+        if get_max_bind_parameters is None:
+            return None
+        value = get_max_bind_parameters()
+        return int(value) if value is not None else None
+
     @staticmethod
     def _remember_identity(
         model: Any,
@@ -588,17 +775,85 @@ class Table(Generic[ModelType]):
                 )
         return filters, order_by, values
 
-    def _payload(self, model_instance: ModelType) -> dict[str, Any]:
-        return {
-            column: py_type_to_sql(self._table_map, getattr(model_instance, column))
-            for column in self._table_data.columns
-        }
+    def _payload(
+        self,
+        model_instance: ModelType,
+        *,
+        mode: Literal["insert", "update", "upsert"],
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        for column in self._table_data.columns:
+            options = self._table_data.column_options.get(column)
+            if options is not None and options.computed is not None:
+                continue
+            value = getattr(model_instance, column)
+            if (
+                mode in {"insert", "upsert"}
+                and options is not None
+                and (options.server_default is not None or options.autoincrement)
+                and value is None
+            ):
+                continue
+            if options is not None and options.has_identity:
+                if mode in {"insert", "upsert"} and (
+                    options.identity_always or value is None
+                ):
+                    continue
+                if mode == "update" and column != self._table_data.pk:
+                    continue
+            payload[column] = py_type_to_sql(self._table_map, value)
+        return payload
 
     @staticmethod
     def _normalize_where(where: dict[str, Any] | None) -> dict[str, Any]:
         if where is None:
             return {}
         return where
+
+    @staticmethod
+    def _requires_expression_select(
+        where: dict[str, Any] | QueryExpression | None,
+        order_by: list[str | OrderExpression] | None,
+    ) -> bool:
+        if isinstance(where, QueryExpression) and not where.supports_legacy_filters():
+            return True
+        return any(isinstance(item, OrderExpression) for item in order_by or [])
+
+    @staticmethod
+    def _legacy_order_columns(
+        order_by: list[str | OrderExpression] | None,
+    ) -> list[str]:
+        return [item for item in order_by or [] if isinstance(item, str)]
+
+    @staticmethod
+    def _expression_order_by(
+        order_by: list[str | OrderExpression],
+        order: Order,
+    ) -> list[OrderExpression]:
+        expressions = []
+        for item in order_by:
+            if isinstance(item, OrderExpression):
+                expressions.append(item)
+                continue
+            if item.startswith("-"):
+                expressions.append(expr_column(item[1:]).desc())
+                continue
+            if order is Order.desc:
+                expressions.append(expr_column(item).desc())
+            else:
+                expressions.append(expr_column(item).asc())
+        return expressions
+
+    def _order_by_primary_key_sequence(
+        self, data: list[ModelType], primary_keys: list[Any]
+    ) -> list[ModelType]:
+        order = {str(pk): index for index, pk in enumerate(primary_keys)}
+        return sorted(
+            data,
+            key=lambda model: order.get(
+                str(getattr(model, self._table_data.pk)), len(order)
+            ),
+        )
 
     def _compile_where(
         self, where: dict[str, Any] | QueryExpression | None
