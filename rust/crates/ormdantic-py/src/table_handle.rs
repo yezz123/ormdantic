@@ -4,12 +4,15 @@ use crate::query::{
     RuntimeJoinedOrder, RuntimeJoinedQuery,
 };
 use crate::runtime::{py_to_db_value, query_result_to_python};
-use crate::schema::{RuntimeColumn, RuntimeIndex, RuntimeRelationship};
-use ormdantic_dialects::AnyDialect;
+use crate::schema::{
+    RuntimeColumn, RuntimeExclusionConstraint, RuntimeForeignKeyConstraint, RuntimeIndex,
+    RuntimeRelationship, RuntimeTableCheck, RuntimeUniqueConstraint,
+};
+use ormdantic_dialects::{AnyDialect, Dialect, DialectKind};
 use ormdantic_engine::{DbValue, NativeConnection};
 use ormdantic_sql::{
-    CompiledQuery, Filter, JoinSpec, JoinedSelectColumn, OrderBy, QueryAst, QueryOperation,
-    SortDirection, TableRef,
+    CompiledQuery, Filter, JoinSpec, JoinedFilter, JoinedOrderBy, JoinedSelectColumn, OrderBy,
+    QueryAst, QueryOperation, SortDirection, TableRef,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -20,11 +23,62 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone)]
 pub(crate) struct RuntimeTable {
     pub(crate) table: String,
+    pub(crate) schema: Option<String>,
     pub(crate) primary_key: String,
     pub(crate) columns: Vec<RuntimeColumn>,
     pub(crate) indexes: Vec<RuntimeIndex>,
     pub(crate) unique_constraints: Vec<Vec<String>>,
+    pub(crate) named_unique_constraints: Vec<RuntimeUniqueConstraint>,
+    pub(crate) check_constraints: Vec<RuntimeTableCheck>,
+    pub(crate) foreign_key_constraints: Vec<RuntimeForeignKeyConstraint>,
+    pub(crate) exclusion_constraints: Vec<RuntimeExclusionConstraint>,
+    pub(crate) comment: Option<String>,
+    pub(crate) tablespace: Option<String>,
+    pub(crate) mysql_engine: Option<String>,
+    pub(crate) mysql_charset: Option<String>,
+    pub(crate) mysql_collation: Option<String>,
+    pub(crate) mysql_row_format: Option<String>,
+    pub(crate) mysql_key_block_size: Option<u32>,
+    pub(crate) mysql_pack_keys: Option<bool>,
+    pub(crate) mysql_checksum: Option<bool>,
+    pub(crate) mysql_delay_key_write: Option<bool>,
+    pub(crate) mysql_stats_persistent: Option<bool>,
+    pub(crate) mysql_stats_auto_recalc: Option<bool>,
+    pub(crate) mysql_stats_sample_pages: Option<u32>,
+    pub(crate) mysql_avg_row_length: Option<u32>,
+    pub(crate) mysql_max_rows: Option<u32>,
+    pub(crate) mysql_min_rows: Option<u32>,
+    pub(crate) mysql_insert_method: Option<String>,
+    pub(crate) mysql_data_directory: Option<String>,
+    pub(crate) mysql_index_directory: Option<String>,
+    pub(crate) mysql_connection: Option<String>,
+    pub(crate) mysql_union: Vec<String>,
+    pub(crate) mysql_partition_by: Option<String>,
+    pub(crate) mysql_partitions: Option<u32>,
+    pub(crate) mysql_subpartition_by: Option<String>,
+    pub(crate) mysql_subpartitions: Option<u32>,
+    pub(crate) mysql_auto_increment: Option<u32>,
+    pub(crate) postgres_inherits: Vec<String>,
+    pub(crate) postgres_with: Vec<(String, String)>,
+    pub(crate) postgres_using: Option<String>,
+    pub(crate) postgres_partition_by: Option<String>,
+    pub(crate) postgres_partition_of: Option<String>,
+    pub(crate) postgres_partition_for: Option<String>,
+    pub(crate) postgres_unlogged: bool,
+    pub(crate) sqlite_strict: bool,
+    pub(crate) sqlite_without_rowid: bool,
+    pub(crate) mssql_primary_key_nonclustered: bool,
+    pub(crate) oracle_compress: Option<String>,
     pub(crate) relationships: Vec<RuntimeRelationship>,
+}
+
+struct JoinedQueryInput {
+    filters: Vec<Filter>,
+    order_by: Vec<String>,
+    direction: SortDirection,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    depth: usize,
 }
 
 impl RuntimeTable {
@@ -33,6 +87,13 @@ impl RuntimeTable {
             .iter()
             .map(|(name, ..)| name.clone())
             .collect::<Vec<_>>()
+    }
+
+    pub(crate) fn qualified_table_name(&self) -> String {
+        match &self.schema {
+            Some(schema) => format!("{schema}.{}", self.table),
+            None => self.table.clone(),
+        }
     }
 }
 
@@ -60,7 +121,7 @@ impl PyTableHandle {
 
     fn delete(&self, py: Python<'_>, primary_key: Py<PyAny>) -> PyResult<Py<PyAny>> {
         let compiled = QueryAst::Delete {
-            table: TableRef::new(&self.table.table),
+            table: TableRef::new(self.table.qualified_table_name()),
             pk: self.table.primary_key.clone(),
         }
         .compile(
@@ -78,6 +139,7 @@ impl PyTableHandle {
         primary_key: Py<PyAny>,
         depth: usize,
     ) -> PyResult<Py<PyAny>> {
+        let dialect = self.dialect()?;
         let columns = if depth == 0 {
             self.flat_select_columns()
         } else {
@@ -90,34 +152,38 @@ impl PyTableHandle {
         };
         let query = if depth == 0 {
             QueryAst::Select {
-                table: TableRef::new(&self.table.table),
+                table: TableRef::new(self.table.qualified_table_name()),
                 columns: select_columns(columns, aliases)?,
-                filters: vec![Filter::Eq {
-                    column: self.table.primary_key.clone(),
-                    param: self.table.primary_key.clone(),
-                }],
+                filters: sqlite_decimal_filters(
+                    vec![Filter::Eq {
+                        column: self.table.primary_key.clone(),
+                        param: self.table.primary_key.clone(),
+                    }],
+                    &self.table,
+                    &dialect,
+                ),
                 order_by: Vec::new(),
                 limit: None,
                 offset: None,
             }
         } else {
             self.joined_query(
-                vec![Filter::Eq {
-                    column: self.table.primary_key.clone(),
-                    param: self.table.primary_key.clone(),
-                }],
-                Vec::new(),
-                SortDirection::Asc,
-                None,
-                None,
-                depth,
+                JoinedQueryInput {
+                    filters: vec![Filter::Eq {
+                        column: self.table.primary_key.clone(),
+                        param: self.table.primary_key.clone(),
+                    }],
+                    order_by: Vec::new(),
+                    direction: SortDirection::Asc,
+                    limit: None,
+                    offset: None,
+                    depth,
+                },
+                &dialect,
             )?
         };
         let compiled = query
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
+            .compile(&dialect)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         self.execute_compiled(py, compiled, vec![py_to_db_value(py, primary_key)?])
     }
@@ -130,24 +196,25 @@ impl PyTableHandle {
         relationship_filters: Vec<RuntimeJoinedFilter>,
         relationship_order_by: Vec<RuntimeJoinedOrder>,
     ) -> PyResult<Py<PyAny>> {
-        let query = self.joined_query_for_paths(RuntimeJoinedQuery {
-            filters: vec![Filter::Eq {
-                column: self.table.primary_key.clone(),
-                param: self.table.primary_key.clone(),
-            }],
-            order_by: Vec::new(),
-            direction: SortDirection::Asc,
-            limit: None,
-            offset: None,
-            paths,
-            relationship_filters,
-            relationship_order_by,
-        })?;
+        let dialect = self.dialect()?;
+        let query = self.joined_query_for_paths(
+            RuntimeJoinedQuery {
+                filters: vec![Filter::Eq {
+                    column: self.table.primary_key.clone(),
+                    param: self.table.primary_key.clone(),
+                }],
+                order_by: Vec::new(),
+                direction: SortDirection::Asc,
+                limit: None,
+                offset: None,
+                paths,
+                relationship_filters,
+                relationship_order_by,
+            },
+            &dialect,
+        )?;
         let compiled = query
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
+            .compile(&dialect)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let params = bind_values(py, compiled.params(), values)?;
         self.execute_compiled(py, compiled, params)
@@ -166,28 +233,38 @@ impl PyTableHandle {
         offset: Option<usize>,
         depth: usize,
     ) -> PyResult<Py<PyAny>> {
+        let dialect = self.dialect()?;
         let direction = parse_sort_direction(order_direction)?;
         let filter_params = parse_filter_input(filters)?;
         let query = if depth == 0 {
             QueryAst::Select {
-                table: TableRef::new(&self.table.table),
+                table: TableRef::new(self.table.qualified_table_name()),
                 columns: select_columns(self.flat_select_columns(), Some(self.flat_aliases()))?,
-                filters: filter_params,
+                filters: sqlite_decimal_filters(filter_params, &self.table, &dialect),
                 order_by: order_by
                     .into_iter()
-                    .map(|column| OrderBy::new(column, direction.clone()))
+                    .map(|column| {
+                        sqlite_decimal_order_by(column, direction.clone(), &self.table, &dialect)
+                    })
                     .collect(),
                 limit,
                 offset,
             }
         } else {
-            self.joined_query(filter_params, order_by, direction, limit, offset, depth)?
+            self.joined_query(
+                JoinedQueryInput {
+                    filters: filter_params,
+                    order_by,
+                    direction,
+                    limit,
+                    offset,
+                    depth,
+                },
+                &dialect,
+            )?
         };
         let compiled = query
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
+            .compile(&dialect)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let params = bind_values(py, compiled.params(), values)?;
         self.execute_compiled(py, compiled, params)
@@ -218,23 +295,24 @@ impl PyTableHandle {
         relationship_filters: Vec<RuntimeJoinedFilter>,
         relationship_order_by: Vec<RuntimeJoinedOrder>,
     ) -> PyResult<Py<PyAny>> {
+        let dialect = self.dialect()?;
         let direction = parse_sort_direction(order_direction)?;
         let filter_params = parse_filter_input(filters)?;
-        let query = self.joined_query_for_paths(RuntimeJoinedQuery {
-            filters: filter_params,
-            order_by,
-            direction,
-            limit,
-            offset,
-            paths,
-            relationship_filters,
-            relationship_order_by,
-        })?;
+        let query = self.joined_query_for_paths(
+            RuntimeJoinedQuery {
+                filters: filter_params,
+                order_by,
+                direction,
+                limit,
+                offset,
+                paths,
+                relationship_filters,
+                relationship_order_by,
+            },
+            &dialect,
+        )?;
         let compiled = query
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
+            .compile(&dialect)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let params = bind_values(py, compiled.params(), values)?;
         self.execute_compiled(py, compiled, params)
@@ -246,14 +324,12 @@ impl PyTableHandle {
         filters: &Bound<'_, PyAny>,
         values: &Bound<'_, PyDict>,
     ) -> PyResult<Py<PyAny>> {
+        let dialect = self.dialect()?;
         let compiled = QueryAst::Count {
-            table: TableRef::new(&self.table.table),
-            filters: parse_filter_input(filters)?,
+            table: TableRef::new(self.table.qualified_table_name()),
+            filters: sqlite_decimal_filters(parse_filter_input(filters)?, &self.table, &dialect),
         }
-        .compile(
-            &AnyDialect::parse(&self.url)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?,
-        )
+        .compile(&dialect)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let params = bind_values(py, compiled.params(), values)?;
         self.execute_compiled(py, compiled, params)
@@ -261,11 +337,16 @@ impl PyTableHandle {
 
     fn select_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let query = query.downcast::<PyDict>()?;
-        let compiled = select_ast_from_payload(py, query)?
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
+        let dialect = self.dialect()?;
+        let mut ast = select_ast_from_payload(py, query)?;
+        if dialect.kind() == DialectKind::Sqlite {
+            ast = ast.rewrite_sqlite_decimal_columns(
+                &decimal_columns(&self.table),
+                &runtime_table_names(&self.table),
+            );
+        }
+        let compiled = ast
+            .compile(&dialect)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let empty_values = PyDict::new(py);
         let values = match query.get_item("values")? {
@@ -278,11 +359,16 @@ impl PyTableHandle {
 
     fn update_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let query = query.downcast::<PyDict>()?;
-        let compiled = update_ast_from_payload(py, query)?
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
+        let dialect = self.dialect()?;
+        let mut ast = update_ast_from_payload(py, query)?;
+        if dialect.kind() == DialectKind::Sqlite {
+            ast = ast.rewrite_sqlite_decimal_columns(
+                &decimal_columns(&self.table),
+                &runtime_table_names(&self.table),
+            );
+        }
+        let compiled = ast
+            .compile(&dialect)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let empty_values = PyDict::new(py);
         let values = match query.get_item("values")? {
@@ -292,29 +378,41 @@ impl PyTableHandle {
         let params = bind_values(py, compiled.params(), &values)?;
         self.execute_compiled(py, compiled, params)
     }
+
+    fn max_bind_parameters(&self) -> PyResult<Option<usize>> {
+        Ok(self.dialect()?.max_bind_parameters())
+    }
 }
 
 impl PyTableHandle {
+    fn dialect(&self) -> PyResult<AnyDialect> {
+        AnyDialect::parse(&self.url).map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
     fn execute_write(
         &self,
         py: Python<'_>,
         operation: QueryOperation,
         payload: &Bound<'_, PyDict>,
     ) -> PyResult<Py<PyAny>> {
-        let columns = self.table.persisted_columns();
+        let payload_columns = payload_columns(payload)?;
         let query = match operation {
             QueryOperation::Insert => QueryAst::Insert {
-                table: TableRef::new(&self.table.table),
-                columns: columns.clone(),
+                table: TableRef::new(self.table.qualified_table_name()),
+                columns: payload_columns.clone(),
             },
             QueryOperation::Update => QueryAst::Update {
-                table: TableRef::new(&self.table.table),
-                columns: columns.clone(),
+                table: TableRef::new(self.table.qualified_table_name()),
+                columns: payload_columns
+                    .iter()
+                    .filter(|column| column.as_str() != self.table.primary_key.as_str())
+                    .cloned()
+                    .collect(),
                 pk: self.table.primary_key.clone(),
             },
             QueryOperation::Upsert => QueryAst::Upsert {
-                table: TableRef::new(&self.table.table),
-                columns: columns.clone(),
+                table: TableRef::new(self.table.qualified_table_name()),
+                columns: payload_columns.clone(),
                 pk: self.table.primary_key.clone(),
             },
             _ => {
@@ -359,24 +457,26 @@ impl PyTableHandle {
             .collect()
     }
 
-    fn joined_query(
-        &self,
-        filters: Vec<Filter>,
-        order_by: Vec<String>,
-        direction: SortDirection,
-        limit: Option<usize>,
-        offset: Option<usize>,
-        depth: usize,
-    ) -> PyResult<QueryAst> {
+    fn joined_query(&self, input: JoinedQueryInput, dialect: &AnyDialect) -> PyResult<QueryAst> {
+        let JoinedQueryInput {
+            filters,
+            order_by,
+            direction,
+            limit,
+            offset,
+            depth,
+        } = input;
         Ok(QueryAst::JoinedSelect {
-            table: TableRef::new(&self.table.table),
+            table: TableRef::new(self.table.qualified_table_name()),
             columns: self.joined_columns(&self.table, depth, None),
             joins: self.join_specs(&self.table, depth, None),
-            filters,
+            filters: sqlite_decimal_filters(filters, &self.table, dialect),
             relationship_filters: Vec::new(),
             order_by: order_by
                 .into_iter()
-                .map(|column| OrderBy::new(column, direction.clone()))
+                .map(|column| {
+                    sqlite_decimal_order_by(column, direction.clone(), &self.table, dialect)
+                })
                 .collect(),
             relationship_order_by: Vec::new(),
             limit,
@@ -384,7 +484,11 @@ impl PyTableHandle {
         })
     }
 
-    fn joined_query_for_paths(&self, query: RuntimeJoinedQuery) -> PyResult<QueryAst> {
+    fn joined_query_for_paths(
+        &self,
+        query: RuntimeJoinedQuery,
+        dialect: &AnyDialect,
+    ) -> PyResult<QueryAst> {
         let RuntimeJoinedQuery {
             filters,
             order_by,
@@ -396,17 +500,32 @@ impl PyTableHandle {
             relationship_order_by,
         } = query;
         let included_paths = normalize_loader_paths(paths);
+        let joins = self.join_specs_for_paths(&self.table, &included_paths, None, None);
+        let relationship_filters = sqlite_decimal_joined_filters(
+            joined_filters(relationship_filters)?,
+            &joins,
+            self.tables.as_ref(),
+            dialect,
+        );
+        let relationship_order_by = sqlite_decimal_joined_order_by(
+            joined_order_by(relationship_order_by)?,
+            &joins,
+            self.tables.as_ref(),
+            dialect,
+        );
         Ok(QueryAst::JoinedSelect {
-            table: TableRef::new(&self.table.table),
+            table: TableRef::new(self.table.qualified_table_name()),
             columns: self.joined_columns_for_paths(&self.table, &included_paths, None, None),
-            joins: self.join_specs_for_paths(&self.table, &included_paths, None, None),
-            filters,
-            relationship_filters: joined_filters(relationship_filters)?,
+            joins,
+            filters: sqlite_decimal_filters(filters, &self.table, dialect),
+            relationship_filters,
             order_by: order_by
                 .into_iter()
-                .map(|column| OrderBy::new(column, direction.clone()))
+                .map(|column| {
+                    sqlite_decimal_order_by(column, direction.clone(), &self.table, dialect)
+                })
                 .collect(),
-            relationship_order_by: joined_order_by(relationship_order_by)?,
+            relationship_order_by,
             limit,
             offset,
         })
@@ -527,7 +646,7 @@ impl PyTableHandle {
             let relation_path = format!("{table_path}/{field}");
             if let Some(back_reference) = back_reference {
                 joins.push(JoinSpec::left_join(
-                    foreign_table,
+                    related.qualified_table_name(),
                     &relation_path,
                     &table_path,
                     &table.primary_key,
@@ -536,7 +655,7 @@ impl PyTableHandle {
                 ));
             } else {
                 joins.push(JoinSpec::left_join(
-                    foreign_table,
+                    related.qualified_table_name(),
                     &relation_path,
                     &table_path,
                     field,
@@ -573,7 +692,7 @@ impl PyTableHandle {
             let relation_table_path = format!("{table_path}/{field}");
             if let Some(back_reference) = back_reference {
                 joins.push(JoinSpec::left_join(
-                    foreign_table,
+                    related.qualified_table_name(),
                     &relation_table_path,
                     &table_path,
                     &table.primary_key,
@@ -582,7 +701,7 @@ impl PyTableHandle {
                 ));
             } else {
                 joins.push(JoinSpec::left_join(
-                    foreign_table,
+                    related.qualified_table_name(),
                     &relation_table_path,
                     &table_path,
                     field,
@@ -599,6 +718,178 @@ impl PyTableHandle {
         }
         joins
     }
+}
+
+fn sqlite_decimal_filters(
+    filters: Vec<Filter>,
+    table: &RuntimeTable,
+    dialect: &AnyDialect,
+) -> Vec<Filter> {
+    if dialect.kind() != DialectKind::Sqlite {
+        return filters;
+    }
+    let columns = decimal_columns(table);
+    filters
+        .into_iter()
+        .map(|filter| sqlite_decimal_filter(filter, &columns))
+        .collect()
+}
+
+fn sqlite_decimal_filter(filter: Filter, decimal_columns: &HashSet<String>) -> Filter {
+    match filter {
+        Filter::Eq { column, param } if decimal_columns.contains(&column) => {
+            Filter::DecimalEq { column, param }
+        }
+        Filter::Ne { column, param } if decimal_columns.contains(&column) => {
+            Filter::DecimalNe { column, param }
+        }
+        Filter::Lt { column, param } if decimal_columns.contains(&column) => {
+            Filter::DecimalLt { column, param }
+        }
+        Filter::Le { column, param } if decimal_columns.contains(&column) => {
+            Filter::DecimalLe { column, param }
+        }
+        Filter::Gt { column, param } if decimal_columns.contains(&column) => {
+            Filter::DecimalGt { column, param }
+        }
+        Filter::Ge { column, param } if decimal_columns.contains(&column) => {
+            Filter::DecimalGe { column, param }
+        }
+        Filter::In { column, params } if decimal_columns.contains(&column) => {
+            Filter::DecimalIn { column, params }
+        }
+        Filter::NotIn { column, params } if decimal_columns.contains(&column) => {
+            Filter::DecimalNotIn { column, params }
+        }
+        Filter::And(filters) => Filter::And(
+            filters
+                .into_iter()
+                .map(|filter| sqlite_decimal_filter(filter, decimal_columns))
+                .collect(),
+        ),
+        Filter::Or(filters) => Filter::Or(
+            filters
+                .into_iter()
+                .map(|filter| sqlite_decimal_filter(filter, decimal_columns))
+                .collect(),
+        ),
+        filter => filter,
+    }
+}
+
+fn sqlite_decimal_order_by(
+    column: String,
+    direction: SortDirection,
+    table: &RuntimeTable,
+    dialect: &AnyDialect,
+) -> OrderBy {
+    let order = OrderBy::new(column.clone(), direction);
+    if dialect.kind() == DialectKind::Sqlite && decimal_columns(table).contains(&column) {
+        order.decimal(true)
+    } else {
+        order
+    }
+}
+
+fn sqlite_decimal_joined_filters(
+    filters: Vec<JoinedFilter>,
+    joins: &[JoinSpec],
+    tables: &HashMap<String, RuntimeTable>,
+    dialect: &AnyDialect,
+) -> Vec<JoinedFilter> {
+    if dialect.kind() != DialectKind::Sqlite {
+        return filters;
+    }
+    filters
+        .into_iter()
+        .map(|filter| {
+            let Some(table) = joined_filter_table(&filter, joins, tables) else {
+                return filter;
+            };
+            let columns = decimal_columns(table);
+            JoinedFilter::new(
+                filter.table_alias().to_string(),
+                sqlite_decimal_filter(filter.filter().clone(), &columns),
+            )
+        })
+        .collect()
+}
+
+fn sqlite_decimal_joined_order_by(
+    order_by: Vec<JoinedOrderBy>,
+    joins: &[JoinSpec],
+    tables: &HashMap<String, RuntimeTable>,
+    dialect: &AnyDialect,
+) -> Vec<JoinedOrderBy> {
+    if dialect.kind() != DialectKind::Sqlite {
+        return order_by;
+    }
+    order_by
+        .into_iter()
+        .map(|order| {
+            let Some(table) = joined_order_table(&order, joins, tables) else {
+                return order;
+            };
+            JoinedOrderBy::new(
+                order.table_alias().to_string(),
+                sqlite_decimal_order_by(
+                    order.order_by().column().to_string(),
+                    order.order_by().direction().clone(),
+                    table,
+                    dialect,
+                ),
+            )
+        })
+        .collect()
+}
+
+fn joined_filter_table<'a>(
+    filter: &JoinedFilter,
+    joins: &[JoinSpec],
+    tables: &'a HashMap<String, RuntimeTable>,
+) -> Option<&'a RuntimeTable> {
+    joins
+        .iter()
+        .find(|join| join.alias() == filter.table_alias())
+        .and_then(|join| table_by_sql_name(tables, join.table()))
+}
+
+fn joined_order_table<'a>(
+    order: &JoinedOrderBy,
+    joins: &[JoinSpec],
+    tables: &'a HashMap<String, RuntimeTable>,
+) -> Option<&'a RuntimeTable> {
+    joins
+        .iter()
+        .find(|join| join.alias() == order.table_alias())
+        .and_then(|join| table_by_sql_name(tables, join.table()))
+}
+
+fn table_by_sql_name<'a>(
+    tables: &'a HashMap<String, RuntimeTable>,
+    table_name: &str,
+) -> Option<&'a RuntimeTable> {
+    tables
+        .values()
+        .find(|table| table.table == table_name || table.qualified_table_name() == table_name)
+}
+
+fn decimal_columns(table: &RuntimeTable) -> HashSet<String> {
+    table
+        .columns
+        .iter()
+        .filter(|(_name, kind, ..)| kind == "decimal")
+        .map(|(name, ..)| name.clone())
+        .collect()
+}
+
+fn runtime_table_names(table: &RuntimeTable) -> Vec<String> {
+    let mut names = vec![table.table.clone()];
+    let qualified = table.qualified_table_name();
+    if qualified != table.table {
+        names.push(qualified);
+    }
+    names
 }
 
 fn normalize_loader_paths(paths: Vec<String>) -> HashSet<String> {
@@ -622,6 +913,14 @@ fn loader_path_included(included_paths: &HashSet<String>, path: &str) -> bool {
         || included_paths
             .iter()
             .any(|included| included.starts_with(&format!("{path}/")))
+}
+
+fn payload_columns(payload: &Bound<'_, PyDict>) -> PyResult<Vec<String>> {
+    payload
+        .keys()
+        .iter()
+        .map(|key| key.extract::<String>())
+        .collect::<PyResult<Vec<_>>>()
 }
 
 fn bind_values(

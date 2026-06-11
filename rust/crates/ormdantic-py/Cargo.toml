@@ -15,7 +15,9 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["extension-module"]
+# Keep PyO3's extension-module mode opt-in: it is required for Python wheels,
+# but standalone Rust benches/tests must link libpython normally.
+default = []
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]

@@ -1,13 +1,13 @@
-use crate::ddl::{create_table_sql, drop_table_sql};
+use crate::ddl::{create_enum_type_sql, create_table_sql, drop_enum_type_sql, drop_table_sql};
 use crate::migrations::{
     applied_revisions_sql, ensure_revision_table, py_operations_to_db, run_migration,
     MigrationDirection,
 };
 use crate::runtime::{
-    columns_sql, db_value_to_bool, db_value_to_string, foreign_keys_sql, indexes_sql,
-    table_names_sql,
+    columns_sql, db_value_to_bool, db_value_to_string, foreign_keys_sql, index_columns_sql,
+    indexes_sql, table_names_sql,
 };
-use crate::schema::RuntimeTableSpec;
+use crate::schema::{runtime_table_specs_from_py, RuntimeEnumType};
 use crate::table_handle::{PyTableHandle, RuntimeTable};
 use crate::transactions::PyTransactionOptions;
 use ormdantic_dialects::AnyDialect;
@@ -24,14 +24,20 @@ pub(crate) struct PyDatabase {
     connection: Arc<Mutex<NativeConnection>>,
     tables: Arc<HashMap<String, RuntimeTable>>,
     table_order: Arc<Vec<String>>,
+    enum_types: Arc<Vec<RuntimeEnumType>>,
 }
 
 #[pymethods]
 impl PyDatabase {
     #[new]
-    fn new(url: &str, tables: Vec<RuntimeTableSpec>) -> PyResult<Self> {
+    #[pyo3(signature = (url, tables, enum_types=None))]
+    fn new(
+        url: &str,
+        tables: &Bound<'_, PyAny>,
+        enum_types: Option<Vec<RuntimeEnumType>>,
+    ) -> PyResult<Self> {
         let mut table_order = Vec::new();
-        let tables = tables
+        let tables = runtime_table_specs_from_py(tables)?
             .into_iter()
             .map(
                 |(
@@ -41,17 +47,104 @@ impl PyDatabase {
                     columns,
                     indexes,
                     unique_constraints,
+                    named_unique_constraints,
+                    check_constraints,
+                    foreign_key_constraints,
+                    exclusion_constraints,
+                    table_options,
                     relationships,
                 )| {
+                    let (
+                        comment,
+                        tablespace,
+                        mysql_engine,
+                        mysql_charset,
+                        mysql_collation,
+                        mysql_row_format,
+                        postgres_inherits,
+                        postgres_with,
+                        postgres_using,
+                        postgres_partition_by,
+                        postgres_partition_of,
+                        postgres_partition_for,
+                        postgres_unlogged,
+                        sqlite_strict,
+                        sqlite_without_rowid,
+                        schema,
+                        mssql_primary_key_nonclustered,
+                        oracle_compress,
+                        mysql_key_block_size,
+                        mysql_pack_keys,
+                        mysql_checksum,
+                        mysql_delay_key_write,
+                        mysql_stats_persistent,
+                        mysql_stats_auto_recalc,
+                        mysql_stats_sample_pages,
+                        mysql_avg_row_length,
+                        mysql_max_rows,
+                        mysql_min_rows,
+                        mysql_insert_method,
+                        mysql_data_directory,
+                        mysql_index_directory,
+                        mysql_connection,
+                        mysql_union,
+                        mysql_partition_by,
+                        mysql_partitions,
+                        mysql_subpartition_by,
+                        mysql_subpartitions,
+                        mysql_auto_increment,
+                    ) = table_options;
                     table_order.push(model_key.clone());
                     (
                         model_key.clone(),
                         RuntimeTable {
                             table,
+                            schema,
                             primary_key,
                             columns,
                             indexes,
                             unique_constraints,
+                            named_unique_constraints,
+                            check_constraints,
+                            foreign_key_constraints,
+                            exclusion_constraints,
+                            comment,
+                            tablespace,
+                            mysql_engine,
+                            mysql_charset,
+                            mysql_collation,
+                            mysql_row_format,
+                            mysql_key_block_size,
+                            mysql_pack_keys,
+                            mysql_checksum,
+                            mysql_delay_key_write,
+                            mysql_stats_persistent,
+                            mysql_stats_auto_recalc,
+                            mysql_stats_sample_pages,
+                            mysql_avg_row_length,
+                            mysql_max_rows,
+                            mysql_min_rows,
+                            mysql_insert_method,
+                            mysql_data_directory,
+                            mysql_index_directory,
+                            mysql_connection,
+                            mysql_union,
+                            mysql_partition_by,
+                            mysql_partitions,
+                            mysql_subpartition_by,
+                            mysql_subpartitions,
+                            mysql_auto_increment,
+                            postgres_inherits,
+                            postgres_with,
+                            postgres_using,
+                            postgres_partition_by,
+                            postgres_partition_of,
+                            postgres_partition_for,
+                            postgres_unlogged,
+                            sqlite_strict,
+                            sqlite_without_rowid,
+                            mssql_primary_key_nonclustered,
+                            oracle_compress,
                             relationships,
                         },
                     )
@@ -66,6 +159,7 @@ impl PyDatabase {
             )),
             tables: Arc::new(tables),
             table_order: Arc::new(table_order),
+            enum_types: Arc::new(enum_types.unwrap_or_default()),
         })
     }
 
@@ -89,6 +183,13 @@ impl PyDatabase {
             .connection
             .lock()
             .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?;
+        for enum_type in self.enum_types.iter() {
+            if let Some(sql) = create_enum_type_sql(&self.url, enum_type)? {
+                connection
+                    .execute(&sql, &[])
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            }
+        }
         for model_key in self.table_order.iter() {
             let Some(table) = self.tables.get(model_key) else {
                 continue;
@@ -99,6 +200,48 @@ impl PyDatabase {
                 table.columns.clone(),
                 table.indexes.clone(),
                 table.unique_constraints.clone(),
+                table.named_unique_constraints.clone(),
+                table.check_constraints.clone(),
+                table.foreign_key_constraints.clone(),
+                table.exclusion_constraints.clone(),
+                table.comment.clone(),
+                table.tablespace.clone(),
+                table.mysql_engine.clone(),
+                table.mysql_charset.clone(),
+                table.mysql_collation.clone(),
+                table.mysql_row_format.clone(),
+                table.postgres_inherits.clone(),
+                table.postgres_with.clone(),
+                table.postgres_using.clone(),
+                table.postgres_partition_by.clone(),
+                table.postgres_partition_of.clone(),
+                table.postgres_partition_for.clone(),
+                table.postgres_unlogged,
+                table.sqlite_strict,
+                table.sqlite_without_rowid,
+                table.schema.clone(),
+                table.mssql_primary_key_nonclustered,
+                table.oracle_compress.clone(),
+                table.mysql_key_block_size,
+                table.mysql_pack_keys,
+                table.mysql_checksum,
+                table.mysql_delay_key_write,
+                table.mysql_stats_persistent,
+                table.mysql_stats_auto_recalc,
+                table.mysql_stats_sample_pages,
+                table.mysql_avg_row_length,
+                table.mysql_max_rows,
+                table.mysql_min_rows,
+                table.mysql_insert_method.clone(),
+                table.mysql_data_directory.clone(),
+                table.mysql_index_directory.clone(),
+                table.mysql_connection.clone(),
+                table.mysql_union.clone(),
+                table.mysql_partition_by.clone(),
+                table.mysql_partitions,
+                table.mysql_subpartition_by.clone(),
+                table.mysql_subpartitions,
+                table.mysql_auto_increment,
             )? {
                 connection
                     .execute(&sql, &[])
@@ -117,10 +260,17 @@ impl PyDatabase {
             let Some(table) = self.tables.get(model_key) else {
                 continue;
             };
-            let sql = drop_table_sql(&self.url, &table.table)?;
+            let sql = drop_table_sql(&self.url, &table.qualified_table_name())?;
             connection
                 .execute(&sql, &[])
                 .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        }
+        for enum_type in self.enum_types.iter().rev() {
+            if let Some(sql) = drop_enum_type_sql(&self.url, enum_type)? {
+                connection
+                    .execute(&sql, &[])
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            }
         }
         Ok(())
     }
@@ -170,7 +320,13 @@ impl PyDatabase {
         Ok(columns.into_any().unbind())
     }
 
-    fn indexes(&self, py: Python<'_>, table: &str) -> PyResult<Py<PyAny>> {
+    #[pyo3(signature = (table, include_autoindexes=false))]
+    fn indexes(
+        &self,
+        py: Python<'_>,
+        table: &str,
+        include_autoindexes: bool,
+    ) -> PyResult<Py<PyAny>> {
         let mut connection = self
             .connection
             .lock()
@@ -188,12 +344,25 @@ impl PyDatabase {
             let Some(name) = row.first().and_then(db_value_to_string) else {
                 continue;
             };
-            if name.starts_with("sqlite_autoindex_") {
+            if name.starts_with("sqlite_autoindex_") && !include_autoindexes {
                 continue;
             }
             let index = PyDict::new(py);
+            if let Some(sql) = index_columns_sql(&dialect) {
+                let columns_result = connection
+                    .execute(sql.as_str(), &[DbValue::Text(name.clone())])
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                let columns = PyList::empty(py);
+                for column_row in columns_result.rows() {
+                    if let Some(column_name) = column_row.first().and_then(db_value_to_string) {
+                        columns.append(column_name)?;
+                    }
+                }
+                index.set_item("columns", columns)?;
+            }
             index.set_item("name", name)?;
             index.set_item("unique", row.get(1).is_some_and(db_value_to_bool))?;
+            index.set_item("origin", row.get(2).and_then(db_value_to_string))?;
             indexes.append(index)?;
         }
         Ok(indexes.into_any().unbind())
@@ -218,6 +387,9 @@ impl PyDatabase {
             foreign_key.set_item("table", row.first().and_then(db_value_to_string))?;
             foreign_key.set_item("from", row.get(1).and_then(db_value_to_string))?;
             foreign_key.set_item("to", row.get(2).and_then(db_value_to_string))?;
+            foreign_key.set_item("on_update", row.get(3).and_then(db_value_to_string))?;
+            foreign_key.set_item("on_delete", row.get(4).and_then(db_value_to_string))?;
+            foreign_key.set_item("name", row.get(5).and_then(db_value_to_string))?;
             foreign_keys.append(foreign_key)?;
         }
         Ok(foreign_keys.into_any().unbind())

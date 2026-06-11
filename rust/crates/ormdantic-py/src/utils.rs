@@ -38,6 +38,11 @@ pub(crate) fn sql_value(py: Python<'_>, value: Py<PyAny>) -> PyResult<Py<PyAny>>
     match py_to_db_value(py, value)? {
         DbValue::Null => Ok(py.None()),
         DbValue::Integer(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::UnsignedInteger(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
+        DbValue::Decimal(value) => {
+            let decimal = py.import("decimal")?.getattr("Decimal")?;
+            decimal.call1((value,)).map(|value| value.unbind())
+        }
         DbValue::Real(value) => Ok(value.into_pyobject(py)?.into_any().unbind()),
         DbValue::Text(value) => Ok(PyString::new(py, &value).into_any().unbind()),
         DbValue::Bool(value) => Ok(value.into_py_any(py)?),
