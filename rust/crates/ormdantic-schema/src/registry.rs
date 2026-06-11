@@ -26,6 +26,8 @@ impl SchemaRegistry {
         validate_primary_key(&table)?;
         validate_indexes(&table)?;
         validate_unique_constraints(&table)?;
+        validate_foreign_keys(&table)?;
+        validate_exclusion_constraints(&table)?;
 
         let table_id = TableId(self.tables.len());
         table.set_id(table_id);
@@ -100,7 +102,19 @@ fn validate_primary_key(table: &TableDef) -> OrmdanticResult<()> {
 
 fn validate_indexes(table: &TableDef) -> OrmdanticResult<()> {
     for index in table.indexes() {
+        if index.columns().is_empty() && index.expressions_ref().is_empty() {
+            return Err(OrmdanticError::SqlCompile {
+                message: format!(
+                    "index '{}' on table '{}' must reference at least one column or expression",
+                    index.name(),
+                    table.name()
+                ),
+            });
+        }
         for column in index.columns() {
+            validate_column_reference(table, column, "index", index.name())?;
+        }
+        for column in index.include_columns_ref() {
             validate_column_reference(table, column, "index", index.name())?;
         }
     }
@@ -111,6 +125,32 @@ fn validate_unique_constraints(table: &TableDef) -> OrmdanticResult<()> {
     for constraint in table.unique_constraints() {
         for column in constraint.columns() {
             validate_column_reference(table, column, "unique constraint", constraint.name())?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_foreign_keys(table: &TableDef) -> OrmdanticResult<()> {
+    for constraint in table.foreign_keys() {
+        let owner_name = constraint.name().unwrap_or("foreign_key");
+        for column in constraint.local_columns() {
+            validate_column_reference(table, column, "foreign key", owner_name)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_exclusion_constraints(table: &TableDef) -> OrmdanticResult<()> {
+    for constraint in table.exclusion_constraints() {
+        for element in constraint.elements() {
+            if element.is_quoted() {
+                validate_column_reference(
+                    table,
+                    element.value(),
+                    "exclusion constraint",
+                    constraint.name(),
+                )?;
+            }
         }
     }
     Ok(())

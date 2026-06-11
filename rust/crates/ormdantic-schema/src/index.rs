@@ -2,10 +2,12 @@
 pub struct IndexDef {
     name: String,
     columns: Vec<String>,
+    expressions: Vec<String>,
     unique: bool,
     where_expr: Option<String>,
     include_columns: Vec<String>,
     method: Option<String>,
+    postgres_with: Vec<(String, String)>,
 }
 
 impl IndexDef {
@@ -13,10 +15,12 @@ impl IndexDef {
         Self {
             name: name.into(),
             columns,
+            expressions: Vec::new(),
             unique: false,
             where_expr: None,
             include_columns: Vec::new(),
             method: None,
+            postgres_with: Vec::new(),
         }
     }
 
@@ -30,6 +34,11 @@ impl IndexDef {
         self
     }
 
+    pub fn expressions(mut self, expressions: Vec<String>) -> Self {
+        self.expressions = expressions;
+        self
+    }
+
     pub fn include_columns(mut self, include_columns: Vec<String>) -> Self {
         self.include_columns = include_columns;
         self
@@ -40,12 +49,21 @@ impl IndexDef {
         self
     }
 
+    pub fn postgres_with(mut self, parameters: Vec<(String, String)>) -> Self {
+        self.postgres_with = parameters;
+        self
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
 
     pub fn columns(&self) -> &[String] {
         &self.columns
+    }
+
+    pub fn expressions_ref(&self) -> &[String] {
+        &self.expressions
     }
 
     pub fn is_unique(&self) -> bool {
@@ -62,5 +80,9 @@ impl IndexDef {
 
     pub fn method_name(&self) -> Option<&str> {
         self.method.as_deref()
+    }
+
+    pub fn postgres_with_ref(&self) -> &[(String, String)] {
+        &self.postgres_with
     }
 }
