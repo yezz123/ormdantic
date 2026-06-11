@@ -18,6 +18,7 @@ fn mariadb_parameterized_selects_cover_core_values() {
         &url,
         common::ValueRoundTripSql {
             sql: "SELECT ? AS int_value, ? AS real_value, ? AS text_value, ? AS bool_value, ? AS null_value",
+            expected_real: DbValue::Real(3.25),
             expected_bool: DbValue::Integer(1),
         },
     );

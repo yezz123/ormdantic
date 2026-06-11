@@ -27,6 +27,7 @@ pub struct ConstraintSql {
 
 pub struct ValueRoundTripSql {
     pub sql: &'static str,
+    pub expected_real: DbValue,
     pub expected_bool: DbValue,
 }
 
@@ -98,7 +99,7 @@ pub fn run_value_round_trip_flow(url: &str, sql: ValueRoundTripSql) {
         result.rows(),
         &[vec![
             DbValue::Integer(42),
-            DbValue::Real(3.25),
+            sql.expected_real,
             DbValue::Text("vanilla".to_string()),
             sql.expected_bool,
             DbValue::Null,

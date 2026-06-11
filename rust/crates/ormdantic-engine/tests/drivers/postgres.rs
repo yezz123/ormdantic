@@ -18,6 +18,7 @@ fn postgres_parameterized_selects_cover_core_values() {
         &url,
         common::ValueRoundTripSql {
             sql: "SELECT $1::BIGINT AS int_value, $2::DOUBLE PRECISION AS real_value, $3::TEXT AS text_value, $4::BOOLEAN AS bool_value, $5::TEXT AS null_value",
+            expected_real: DbValue::Real(3.25),
             expected_bool: DbValue::Bool(true),
         },
     );
