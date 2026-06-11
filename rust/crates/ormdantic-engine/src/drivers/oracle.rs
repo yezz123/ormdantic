@@ -12,10 +12,14 @@ mod runtime {
     use crate::sql_error;
     use crate::url::normalize_driver_url;
 
+    const NON_TRANSACTIONAL_EXECUTES_BEFORE_RECONNECT: usize = 64;
+
     pub struct OracleConnection {
         runtime: Runtime,
         connection: Connection,
+        config: Config,
         in_transaction: bool,
+        non_transactional_executes: usize,
     }
 
     impl OracleConnection {
@@ -23,27 +27,43 @@ mod runtime {
             let runtime = Runtime::new().map_err(sql_error)?;
             let config = config_from_url(url)?;
             let connection = runtime
-                .block_on(Connection::connect_with_config(config))
+                .block_on(Connection::connect_with_config(config.clone()))
                 .map_err(sql_error)?;
             Ok(Self {
                 runtime,
                 connection,
+                config,
                 in_transaction: false,
+                non_transactional_executes: 0,
             })
         }
 
         pub fn execute(&mut self, sql: &str, params: &[DbValue]) -> OrmdanticResult<QueryResult> {
+            let returns_rows = crate::returns_rows(sql);
             let params = oracle_params(params);
             let result = self
                 .runtime
                 .block_on(self.connection.execute(sql, &params))
                 .map_err(sql_error)?;
-            if !self.in_transaction && !crate::returns_rows(sql) {
+            if !self.in_transaction && !returns_rows {
                 self.runtime
                     .block_on(self.connection.commit())
                     .map_err(sql_error)?;
+                self.non_transactional_executes += 1;
+                if self.non_transactional_executes >= NON_TRANSACTIONAL_EXECUTES_BEFORE_RECONNECT {
+                    self.reconnect()?;
+                }
             }
             Ok(result_to_query_result(result))
+        }
+
+        fn reconnect(&mut self) -> OrmdanticResult<()> {
+            self.connection = self
+                .runtime
+                .block_on(Connection::connect_with_config(self.config.clone()))
+                .map_err(sql_error)?;
+            self.non_transactional_executes = 0;
+            Ok(())
         }
 
         pub fn begin(&mut self) -> OrmdanticResult<()> {
@@ -58,6 +78,7 @@ mod runtime {
                 .map_err(sql_error);
             if result.is_ok() {
                 self.in_transaction = false;
+                self.non_transactional_executes = 0;
             }
             result
         }
@@ -69,6 +90,7 @@ mod runtime {
                 .map_err(sql_error);
             if result.is_ok() {
                 self.in_transaction = false;
+                self.non_transactional_executes = 0;
             }
             result
         }

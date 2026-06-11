@@ -711,7 +711,11 @@ fn compile_joined_select(
     for join in joins {
         sql.push_str(" LEFT JOIN ");
         sql.push_str(&quote_table_name(dialect, join.table()));
-        sql.push_str(" AS ");
+        if dialect.kind() == DialectKind::Oracle {
+            sql.push(' ');
+        } else {
+            sql.push_str(" AS ");
+        }
         sql.push_str(&dialect.quote_ident(join.alias()));
         sql.push_str(" ON ");
         sql.push_str(&qualified_alias_column(
