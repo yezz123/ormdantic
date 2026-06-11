@@ -1,4 +1,4 @@
-use ormdantic_core::OrmdanticResult;
+use ormdantic_core::{ExecutionErrorKind, OrmdanticError, OrmdanticResult};
 use postgres::types::{FromSql, ToSql, Type};
 use postgres::{Client, NoTls, Row};
 use std::error::Error;
@@ -13,7 +13,7 @@ pub struct PostgresConnection {
 impl PostgresConnection {
     pub fn open(url: &str) -> OrmdanticResult<Self> {
         Ok(Self {
-            client: Client::connect(&normalize_driver_url(url), NoTls).map_err(sql_error)?,
+            client: Client::connect(&normalize_driver_url(url), NoTls).map_err(postgres_error)?,
         })
     }
 
@@ -38,11 +38,38 @@ fn execute_client(
         .map(|value| &**value as &(dyn ToSql + Sync))
         .collect::<Vec<_>>();
     if crate::returns_rows(sql) {
-        let rows = client.query(sql, &refs).map_err(sql_error)?;
+        let rows = client.query(sql, &refs).map_err(postgres_error)?;
         Ok(rows_to_result(&rows))
     } else {
-        client.execute(sql, &refs).map_err(sql_error)?;
+        client.execute(sql, &refs).map_err(postgres_error)?;
         Ok(QueryResult::empty())
+    }
+}
+
+fn postgres_error(error: postgres::Error) -> OrmdanticError {
+    let message = error.to_string();
+    if let Some(db_error) = error.as_db_error() {
+        if let Some(kind) = classify_postgres_sqlstate(db_error.code().code()) {
+            return OrmdanticError::ExecutionError { kind, message };
+        }
+    }
+    sql_error(message)
+}
+
+fn classify_postgres_sqlstate(code: &str) -> Option<ExecutionErrorKind> {
+    match code {
+        "08000" | "08001" | "08003" | "08004" | "08006" | "08007" | "08P01" | "28000" | "28P01" => {
+            Some(ExecutionErrorKind::Connection)
+        }
+        "23505" => Some(ExecutionErrorKind::UniqueViolation),
+        "23503" => Some(ExecutionErrorKind::ForeignKeyViolation),
+        "23502" => Some(ExecutionErrorKind::NotNullViolation),
+        "23514" => Some(ExecutionErrorKind::CheckViolation),
+        "40001" | "40P01" => Some(ExecutionErrorKind::SerializationFailure),
+        "42501" => Some(ExecutionErrorKind::PermissionDenied),
+        "42601" => Some(ExecutionErrorKind::Syntax),
+        "57014" => Some(ExecutionErrorKind::Timeout),
+        _ => None,
     }
 }
 
@@ -201,7 +228,29 @@ fn parse_pg_numeric(raw: &[u8]) -> Result<String, Box<dyn Error + Sync + Send>> 
 
 #[cfg(test)]
 mod tests {
-    use super::parse_pg_numeric;
+    use super::{classify_postgres_sqlstate, parse_pg_numeric};
+    use ormdantic_core::ExecutionErrorKind;
+
+    #[test]
+    fn classifies_postgres_sqlstate_codes() {
+        let cases = [
+            ("23505", ExecutionErrorKind::UniqueViolation),
+            ("23503", ExecutionErrorKind::ForeignKeyViolation),
+            ("23502", ExecutionErrorKind::NotNullViolation),
+            ("23514", ExecutionErrorKind::CheckViolation),
+            ("40001", ExecutionErrorKind::SerializationFailure),
+            ("40P01", ExecutionErrorKind::SerializationFailure),
+            ("42501", ExecutionErrorKind::PermissionDenied),
+            ("42601", ExecutionErrorKind::Syntax),
+            ("57014", ExecutionErrorKind::Timeout),
+            ("28P01", ExecutionErrorKind::Connection),
+        ];
+
+        for (code, expected) in cases {
+            assert_eq!(classify_postgres_sqlstate(code), Some(expected));
+        }
+        assert_eq!(classify_postgres_sqlstate("99999"), None);
+    }
 
     #[test]
     fn parses_postgres_numeric_decimal_payload() {
