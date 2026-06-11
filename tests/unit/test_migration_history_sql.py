@@ -180,7 +180,7 @@ def test_history_entries_parse_metadata_and_dirty_state() -> None:
                 "applied",
                 0,
                 2,
-                "1.7.0",
+                "2.0.0",
                 '{"phase": "completed"}',
             ],
             ["002", None, None, None, None, "failed", 1, None, None, "not-json"],
@@ -216,7 +216,7 @@ def test_history_entries_reads_oracle_columns_separately() -> None:
                 "status": "applied",
                 "dirty": 0,
                 "artifact_version": 2,
-                "ormdantic_version": "1.7.0",
+                "ormdantic_version": "2.0.0",
                 "metadata": '{"phase": "completed"}',
             }
             for column, value in values.items():
@@ -240,7 +240,7 @@ def test_history_entries_reads_oracle_columns_separately() -> None:
     )
     assert entries[0].metadata == {"phase": "completed"}
     assert entries[0].artifact_version == 2
-    assert entries[0].ormdantic_version == "1.7.0"
+    assert entries[0].ormdantic_version == "2.0.0"
 
 
 def test_history_entries_paginates_oracle_revisions_before_column_reads() -> None:
@@ -293,7 +293,7 @@ def test_repair_history_skips_unchanged_entries() -> None:
                 "applied",
                 0,
                 2,
-                "1.7.0",
+                "2.0.0",
                 '{"phase": "completed"}',
             ],
             [
@@ -305,7 +305,7 @@ def test_repair_history_skips_unchanged_entries() -> None:
                 "failed",
                 1,
                 2,
-                "1.7.0",
+                "2.0.0",
                 '{"phase": "failed"}',
             ],
         ]

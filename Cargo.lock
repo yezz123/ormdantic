@@ -1927,11 +1927,11 @@ dependencies = [
 
 [[package]]
 name = "ormdantic-core"
-version = "1.7.0"
+version = "2.0.0"
 
 [[package]]
 name = "ormdantic-dialects"
-version = "1.7.0"
+version = "2.0.0"
 dependencies = [
  "codspeed-criterion-compat",
  "ormdantic-core",
@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "ormdantic-engine"
-version = "1.7.0"
+version = "2.0.0"
 dependencies = [
  "codspeed-criterion-compat",
  "mysql",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "ormdantic-hydrate"
-version = "1.7.0"
+version = "2.0.0"
 dependencies = [
  "codspeed-criterion-compat",
  "ormdantic-core",
@@ -1968,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "ormdantic-py"
-version = "1.7.0"
+version = "2.0.0"
 dependencies = [
  "codspeed-criterion-compat",
  "ormdantic-core",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "ormdantic-schema"
-version = "1.7.0"
+version = "2.0.0"
 dependencies = [
  "codspeed-criterion-compat",
  "ormdantic-core",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "ormdantic-sql"
-version = "1.7.0"
+version = "2.0.0"
 dependencies = [
  "codspeed-criterion-compat",
  "ormdantic-core",
