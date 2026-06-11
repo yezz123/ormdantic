@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -18,6 +19,8 @@ from ormdantic._introspect import (
 class IntrospectedFlavor(BaseModel):
     id: UUID
     name: str = Field(max_length=63)
+    code: str = Field(pattern=r"^[A-Z]{2}$")
+    price: Decimal = Field(max_digits=12, decimal_places=2)
 
 
 class IntrospectedCoffee(BaseModel):
@@ -30,9 +33,12 @@ class IntrospectedCoffee(BaseModel):
 def test_model_fields_wrap_pydantic_v2_field_info() -> None:
     fields = model_fields(IntrospectedFlavor)
 
-    assert set(fields) == {"id", "name"}
+    assert set(fields) == {"id", "name", "code", "price"}
     assert fields["id"].annotation is UUID
     assert fields["name"].max_length == 63
+    assert fields["code"].pattern == r"^[A-Z]{2}$"
+    assert fields["price"].max_digits == 12
+    assert fields["price"].decimal_places == 2
     assert fields["name"].required
 
 

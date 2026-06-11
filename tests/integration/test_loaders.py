@@ -16,6 +16,7 @@ from ormdantic import (
     selectin,
     selectinload,
 )
+from tests.integration.relationship_stress import run_relationship_loader_stress
 
 
 async def test_joined_and_selectin_loader_options(tmp_path) -> None:
@@ -287,6 +288,87 @@ async def test_relationship_loader_filtering_and_ordering(tmp_path) -> None:
         await db[FilterParent].find_one(
             parent.id, load=[joinedload("children").filter(missing="value")]
         )
+
+
+async def test_selectinload_batches_collection_relationships(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'selectin_collection_batches.sqlite3'}")
+
+    @db.table(pk="id", back_references={"children": "parent"})
+    class BatchParent(BaseModel):
+        id: str = Field(default_factory=lambda: str(uuid4()))
+        name: str
+        children: list[BatchChild] = Field(default_factory=list)
+
+    @db.table(pk="id")
+    class BatchChild(BaseModel):
+        id: str = Field(default_factory=lambda: str(uuid4()))
+        name: str
+        parent: BatchParent | str
+
+    BatchParent.model_rebuild()
+    BatchChild.model_rebuild()
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+    first = await db[BatchParent].insert(BatchParent(name="first"))
+    second = await db[BatchParent].insert(BatchParent(name="second"))
+    await db[BatchChild].insert(BatchChild(name="first-child", parent=first))
+    await db[BatchChild].insert(BatchChild(name="second-child", parent=second))
+
+    loaded = await db[BatchParent].find_many(
+        order_by=["name"], load=[selectinload("children").batched(1)]
+    )
+
+    assert [parent.name for parent in loaded.data] == ["first", "second"]
+    assert [[child.name for child in parent.children] for parent in loaded.data] == [
+        ["first-child"],
+        ["second-child"],
+    ]
+
+
+async def test_selectinload_batches_scalar_relationships(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'selectin_scalar_batches.sqlite3'}")
+
+    @db.table(pk="id")
+    class BatchFlavor(BaseModel):
+        id: str = Field(default_factory=lambda: str(uuid4()))
+        name: str
+
+    @db.table(pk="id")
+    class BatchCoffee(BaseModel):
+        id: str = Field(default_factory=lambda: str(uuid4()))
+        name: str
+        flavor: BatchFlavor | str
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+    mocha = await db[BatchFlavor].insert(BatchFlavor(name="mocha"))
+    latte = await db[BatchFlavor].insert(BatchFlavor(name="latte"))
+    await db[BatchCoffee].insert(BatchCoffee(name="first", flavor=mocha))
+    await db[BatchCoffee].insert(BatchCoffee(name="second", flavor=latte))
+
+    loaded = await db[BatchCoffee].find_many(
+        order_by=["name"], load=[selectinload("flavor").batched(1)]
+    )
+
+    assert [coffee.name for coffee in loaded.data] == ["first", "second"]
+    assert [coffee.flavor.name for coffee in loaded.data] == ["mocha", "latte"]  # type: ignore[union-attr]
+
+
+async def test_relationship_loader_large_selectin_and_mixed_graph_stress(
+    tmp_path,
+) -> None:
+    await run_relationship_loader_stress(
+        f"sqlite:///{tmp_path / 'relationship_loader_stress.sqlite3'}",
+        suffix="sqlite",
+    )
+
+
+def test_selectinload_rejects_invalid_batch_size() -> None:
+    with pytest.raises(ValueError, match="loader batch size must be greater than zero"):
+        selectinload("children").batched(0)
 
 
 async def test_self_referential_nested_loader_path(tmp_path) -> None:

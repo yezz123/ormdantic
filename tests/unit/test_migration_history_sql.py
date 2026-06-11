@@ -198,6 +198,144 @@ def test_history_entries_parse_metadata_and_dirty_state() -> None:
     assert history._is_dirty(connection, "sqlite")
 
 
+def test_history_entries_reads_oracle_columns_separately() -> None:
+    class OracleRowsConnection:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def execute(self, sql: str, params: Sequence[Any]) -> dict[str, Any]:
+            del params
+            self.statements.append(sql)
+            if sql.startswith('SELECT "revision" FROM'):
+                return {"rows": [["001"]]}
+            values = {
+                "description": "create flavor",
+                "checksum": "abc123",
+                "applied_at": "2026-01-01T00:00:00+00:00",
+                "execution_time_ms": "12",
+                "status": "applied",
+                "dirty": 0,
+                "artifact_version": 2,
+                "ormdantic_version": "1.7.0",
+                "metadata": '{"phase": "completed"}',
+            }
+            for column, value in values.items():
+                if f'"{column}"' in sql:
+                    return {"rows": [["001", value]]}
+            return {"rows": []}
+
+    connection = OracleRowsConnection()
+
+    entries = history._history_entries(connection, "oracle")
+
+    assert len(connection.statements) == 10
+    assert connection.statements[0].startswith('SELECT "revision" FROM')
+    assert any(
+        'SELECT "revision", "metadata"' in statement
+        for statement in connection.statements
+    )
+    assert any(
+        'SELECT "revision", "ormdantic_version"' in statement
+        for statement in connection.statements
+    )
+    assert entries[0].metadata == {"phase": "completed"}
+    assert entries[0].artifact_version == 2
+    assert entries[0].ormdantic_version == "1.7.0"
+
+
+def test_history_entries_paginates_oracle_revisions_before_column_reads() -> None:
+    class OraclePagedRowsConnection:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def execute(self, sql: str, params: Sequence[Any]) -> dict[str, Any]:
+            del params
+            self.statements.append(sql)
+            if sql.startswith('SELECT "revision" FROM'):
+                if "OFFSET 0 ROWS" in sql:
+                    return {"rows": [[f"{index:03d}"] for index in range(50)]}
+                if "OFFSET 50 ROWS" in sql:
+                    return {"rows": [["050"]]}
+                return {"rows": []}
+            if '"checksum"' not in sql:
+                return {"rows": []}
+            rows: list[list[str]] = []
+            if "'000'" in sql:
+                rows.append(["000", "checksum-000"])
+            if "'050'" in sql:
+                rows.append(["050", "checksum-050"])
+            return {"rows": rows}
+
+    connection = OraclePagedRowsConnection()
+
+    entries = history._history_entries(connection, "oracle")
+
+    checksum_statements = [
+        statement for statement in connection.statements if '"checksum"' in statement
+    ]
+    assert len(entries) == 51
+    assert entries[0].checksum == "checksum-000"
+    assert entries[-1].checksum == "checksum-050"
+    assert any("OFFSET 50 ROWS" in statement for statement in connection.statements)
+    assert len(checksum_statements) == 2
+    assert all(" WHERE " in statement for statement in checksum_statements)
+
+
+def test_repair_history_skips_unchanged_entries() -> None:
+    connection = RowsConnection(
+        rows=[
+            [
+                "001",
+                "create flavor",
+                "abc123",
+                "2026-01-01T00:00:00+00:00",
+                "12",
+                "applied",
+                0,
+                2,
+                "1.7.0",
+                '{"phase": "completed"}',
+            ],
+            [
+                "002",
+                "failed flavor",
+                "def456",
+                "2026-01-01T00:00:01+00:00",
+                "8",
+                "failed",
+                1,
+                2,
+                "1.7.0",
+                '{"phase": "failed"}',
+            ],
+        ]
+    )
+
+    repaired = history._repair_history(
+        connection,
+        "sqlite",
+        revision=None,
+        status=None,
+        clear_dirty=True,
+        checksum=None,
+    )
+
+    delete_statements = [
+        statement
+        for statement in connection.statements
+        if statement.startswith("DELETE")
+    ]
+    insert_statements = [
+        statement
+        for statement in connection.statements
+        if statement.startswith("INSERT")
+    ]
+    assert repaired == 1
+    assert len(delete_statements) == 1
+    assert len(insert_statements) == 1
+    assert "002" in delete_statements[0]
+
+
 def test_write_history_entry_serializes_metadata() -> None:
     connection = RowsConnection()
 

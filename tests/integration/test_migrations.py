@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import importlib
 import sys
+from enum import Enum
 
 import pytest
 from pydantic import BaseModel, Field
 
-from ormdantic import Ormdantic
+from ormdantic import Ormdantic, TableColumn
 from ormdantic.cli import main
 from ormdantic.migrations import (
+    EnumTypeSnapshot,
+    ForeignKeyConstraintSnapshot,
     MigrationArtifact,
     MigrationOperation,
     MigrationPlan,
+    NamespaceSnapshot,
     SchemaSnapshot,
+    SequenceSnapshot,
+    ViewSnapshot,
     create_migration_artifact,
     squash_migrations,
 )
@@ -385,6 +391,412 @@ def test_live_autogenerate_from_sqlite(tmp_path) -> None:
     assert any("ADD COLUMN" in operation.sql for operation in artifact.operations)
     assert artifact.description == "autogen"
     assert artifact.checksum
+
+
+def test_autogenerate_applies_table_filters_to_target_snapshot(tmp_path) -> None:
+    url = f"sqlite:///{tmp_path / 'scoped_autogen.sqlite3'}"
+    db = Ormdantic(url)
+
+    @db.table("flavor", pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    @db.table("supplier", pk="id")
+    class Supplier(BaseModel):
+        id: str
+        name: str
+
+    runtime = importlib.import_module("ormdantic._ormdantic")
+    runtime.execute_native(
+        url, "CREATE TABLE flavor (id TEXT PRIMARY KEY, name TEXT NOT NULL)", []
+    )
+
+    artifact = db.migrations.autogenerate(
+        "001_scoped",
+        include_tables=["flavor"],
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert [table.name for table in artifact.from_snapshot.tables] == ["flavor"]
+    assert [table.name for table in artifact.to_snapshot.tables] == ["flavor"]
+    assert artifact.operations == []
+    assert not any(
+        "supplier" in operation.sql.lower() for operation in artifact.operations
+    )
+
+
+def test_autogenerate_filters_target_enum_types_to_included_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ScopedFlavorKind(str, Enum):
+        mocha = "mocha"
+
+    class ScopedSupplierKind(str, Enum):
+        roaster = "roaster"
+
+    db = Ormdantic("postgresql://localhost/db")
+
+    @db.table("flavor", pk="id")
+    class Flavor(BaseModel):
+        id: str
+        kind: ScopedFlavorKind
+
+    @db.table("supplier", pk="id")
+    class Supplier(BaseModel):
+        id: str
+        kind: ScopedSupplierKind
+
+    manager = db.migrations
+    monkeypatch.setattr(
+        manager, "live_snapshot", lambda **kwargs: SchemaSnapshot.empty()
+    )
+
+    artifact = manager.autogenerate(
+        "001_scoped_enum",
+        include_tables=["flavor"],
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert [table.name for table in artifact.to_snapshot.tables] == ["flavor"]
+    assert artifact.to_snapshot.enum_types == [
+        EnumTypeSnapshot("scoped_flavor_kind", ["mocha"])
+    ]
+    assert not any(
+        enum_type.name == "scoped_supplier_kind"
+        for enum_type in artifact.to_snapshot.enum_types
+    )
+
+
+def test_autogenerate_filters_target_sequences_to_included_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("postgresql://localhost/db")
+    db.sequence("flavor_id_seq")
+    db.sequence("supplier_id_seq")
+
+    @db.table(
+        "flavor",
+        pk="id",
+        column_options={"id": TableColumn(server_default="nextval('flavor_id_seq')")},
+    )
+    class Flavor(BaseModel):
+        id: int | None = None
+        name: str
+
+    @db.table(
+        "supplier",
+        pk="id",
+        column_options={"id": TableColumn(server_default="nextval('supplier_id_seq')")},
+    )
+    class Supplier(BaseModel):
+        id: int | None = None
+        name: str
+
+    manager = db.migrations
+    monkeypatch.setattr(
+        manager, "live_snapshot", lambda **kwargs: SchemaSnapshot.empty()
+    )
+
+    artifact = manager.autogenerate(
+        "001_scoped_sequence",
+        include_tables=["flavor"],
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert [table.name for table in artifact.to_snapshot.tables] == ["flavor"]
+    assert artifact.to_snapshot.sequences == [SequenceSnapshot("flavor_id_seq")]
+    assert not any(
+        sequence.name == "supplier_id_seq"
+        for sequence in artifact.to_snapshot.sequences
+    )
+
+
+def test_autogenerate_filters_target_namespaces_to_included_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("postgresql://localhost/db")
+    db.namespace("inventory")
+    db.namespace("warehouse")
+
+    @db.table("flavor", pk="id", schema="inventory")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    @db.table("supplier", pk="id", schema="warehouse")
+    class Supplier(BaseModel):
+        id: str
+        name: str
+
+    manager = db.migrations
+    monkeypatch.setattr(
+        manager, "live_snapshot", lambda **kwargs: SchemaSnapshot.empty()
+    )
+
+    artifact = manager.autogenerate(
+        "001_scoped_namespace",
+        include_tables=["flavor"],
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert [table.name for table in artifact.to_snapshot.tables] == ["flavor"]
+    assert artifact.to_snapshot.namespaces == [NamespaceSnapshot("inventory")]
+    assert not any(
+        namespace.name == "warehouse" for namespace in artifact.to_snapshot.namespaces
+    )
+
+
+def test_autogenerate_preserves_reflected_enum_types_when_target_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("sqlite:///:memory:")
+    manager = db.migrations
+    enum_type = EnumTypeSnapshot("flavor_kind", ["mocha", "latte"], schema="public")
+    live_snapshot = SchemaSnapshot(tables=[], enum_types=[enum_type])
+
+    monkeypatch.setattr(
+        manager,
+        "live_snapshot",
+        lambda **kwargs: live_snapshot,
+    )
+    monkeypatch.setattr(manager, "snapshot", SchemaSnapshot.empty)
+
+    artifact = manager.autogenerate(
+        "001_preserve_enums",
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert artifact.to_snapshot.enum_types == [enum_type]
+    assert not any("DROP TYPE" in operation.sql for operation in artifact.operations)
+
+
+def test_autogenerate_preserves_reflected_namespaces_when_target_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("postgresql://localhost/db")
+    manager = db.migrations
+    namespace = NamespaceSnapshot("inventory")
+    live_snapshot = SchemaSnapshot(tables=[], namespaces=[namespace])
+
+    monkeypatch.setattr(
+        manager,
+        "live_snapshot",
+        lambda **kwargs: live_snapshot,
+    )
+    monkeypatch.setattr(manager, "snapshot", SchemaSnapshot.empty)
+
+    artifact = manager.autogenerate(
+        "001_preserve_namespaces",
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert artifact.to_snapshot.namespaces == [namespace]
+    assert not any("DROP SCHEMA" in operation.sql for operation in artifact.operations)
+
+
+def test_autogenerate_preserves_reflected_sequences_when_target_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("postgresql://localhost/db")
+    manager = db.migrations
+    sequence = SequenceSnapshot("flavor_id_seq", schema="public", cache=20)
+    live_snapshot = SchemaSnapshot(tables=[], sequences=[sequence])
+
+    monkeypatch.setattr(
+        manager,
+        "live_snapshot",
+        lambda **kwargs: live_snapshot,
+    )
+    monkeypatch.setattr(manager, "snapshot", SchemaSnapshot.empty)
+
+    artifact = manager.autogenerate(
+        "001_preserve_sequences",
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert artifact.to_snapshot.sequences == [sequence]
+    assert not any(
+        "DROP SEQUENCE" in operation.sql for operation in artifact.operations
+    )
+
+
+def test_autogenerate_preserves_reflected_views_when_target_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("postgresql://localhost/db")
+    manager = db.migrations
+    view = ViewSnapshot("active_flavors", "SELECT id FROM flavor", schema="public")
+    live_snapshot = SchemaSnapshot(tables=[], views=[view])
+
+    monkeypatch.setattr(
+        manager,
+        "live_snapshot",
+        lambda **kwargs: live_snapshot,
+    )
+    monkeypatch.setattr(manager, "snapshot", SchemaSnapshot.empty)
+
+    artifact = manager.autogenerate(
+        "001_preserve_views",
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert artifact.to_snapshot.views == [view]
+    assert not any("DROP VIEW" in operation.sql for operation in artifact.operations)
+
+
+def test_autogenerate_preserves_reflected_materialized_views_when_target_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Ormdantic("postgresql://localhost/db")
+    manager = db.migrations
+    view = ViewSnapshot(
+        "active_flavor_counts",
+        "SELECT supplier_id, count(*) AS flavor_count FROM flavor GROUP BY supplier_id",
+        schema="public",
+        materialized=True,
+    )
+    live_snapshot = SchemaSnapshot(tables=[], views=[view])
+
+    monkeypatch.setattr(
+        manager,
+        "live_snapshot",
+        lambda **kwargs: live_snapshot,
+    )
+    monkeypatch.setattr(manager, "snapshot", SchemaSnapshot.empty)
+
+    artifact = manager.autogenerate(
+        "001_preserve_materialized_views",
+        dialect="postgresql",
+        skip_noop=False,
+    )
+
+    assert artifact is not None
+    assert artifact.to_snapshot.views == [view]
+    assert not any(
+        "DROP MATERIALIZED VIEW" in operation.sql for operation in artifact.operations
+    )
+
+
+def test_live_snapshot_reflects_sqlite_unique_constraints_and_index_columns(
+    tmp_path,
+) -> None:
+    url = f"sqlite:///{tmp_path / 'sqlite_reflect_unique.sqlite3'}"
+    runtime = importlib.import_module("ormdantic._ormdantic")
+    runtime.execute_native(
+        url,
+        "CREATE TABLE supplier (id TEXT PRIMARY KEY)",
+        [],
+    )
+    runtime.execute_native(
+        url,
+        "CREATE TABLE origin (id TEXT, code TEXT, PRIMARY KEY(id, code))",
+        [],
+    )
+    runtime.execute_native(
+        url,
+        (
+            "CREATE TABLE flavor ("
+            "id TEXT PRIMARY KEY, "
+            "code TEXT UNIQUE, "
+            "name TEXT NOT NULL, "
+            "supplier_id TEXT, "
+            "origin_id TEXT, "
+            "origin_code TEXT, "
+            "CONSTRAINT flavor_name_supplier_unique UNIQUE(name, supplier_id), "
+            "CONSTRAINT flavor_name_check CHECK (LENGTH(name) >= 2), "
+            "CONSTRAINT flavor_origin_fk "
+            "FOREIGN KEY(origin_id, origin_code) REFERENCES origin(id, code) "
+            "ON DELETE CASCADE NOT DEFERRABLE, "
+            "CONSTRAINT flavor_supplier_fk "
+            "FOREIGN KEY(supplier_id) REFERENCES supplier(id) "
+            "ON DELETE SET NULL ON UPDATE CASCADE "
+            "DEFERRABLE INITIALLY DEFERRED)"
+        ),
+        [],
+    )
+    runtime.execute_native(
+        url,
+        "CREATE INDEX flavor_name_idx ON flavor (name)",
+        [],
+    )
+    runtime.execute_native(
+        url,
+        (
+            "CREATE INDEX flavor_name_lower_active_idx "
+            "ON flavor (name, LOWER(name)) WHERE supplier_id IS NOT NULL"
+        ),
+        [],
+    )
+    runtime.execute_native(
+        url,
+        (
+            "CREATE INDEX flavor_lower_active_idx "
+            "ON flavor (LOWER(name)) WHERE supplier_id IS NOT NULL"
+        ),
+        [],
+    )
+
+    db = Ormdantic(url)
+    snapshot = db.migrations.live_snapshot(include_tables=["flavor"])
+    table = snapshot.tables[0]
+
+    assert any(column.name == "code" and column.unique for column in table.columns)
+    assert table.unique_constraints == []
+    assert any(
+        constraint.name == "flavor_name_supplier_unique"
+        and constraint.columns == ["name", "supplier_id"]
+        for constraint in table.named_unique_constraints
+    )
+    supplier_id = next(
+        column for column in table.columns if column.name == "supplier_id"
+    )
+    assert supplier_id.foreign_table == "supplier"
+    assert supplier_id.foreign_column == "id"
+    assert supplier_id.foreign_key_name == "flavor_supplier_fk"
+    assert supplier_id.on_delete == "set_null"
+    assert supplier_id.on_update == "cascade"
+    assert supplier_id.deferrable is True
+    assert supplier_id.initially_deferred is True
+    origin_id = next(column for column in table.columns if column.name == "origin_id")
+    assert origin_id.foreign_table is None
+    assert table.foreign_key_constraints == [
+        ForeignKeyConstraintSnapshot(
+            "flavor_origin_fk",
+            ["origin_id", "origin_code"],
+            "origin",
+            ["id", "code"],
+            on_delete="cascade",
+            deferrable=False,
+        )
+    ]
+    indexes = {index.name: index for index in table.indexes}
+    assert indexes["flavor_name_idx"].columns == ["name"]
+    assert indexes["flavor_name_lower_active_idx"].columns == ["name"]
+    assert indexes["flavor_name_lower_active_idx"].expressions == ["LOWER(name)"]
+    assert indexes["flavor_name_lower_active_idx"].where == "supplier_id IS NOT NULL"
+    assert indexes["flavor_lower_active_idx"].columns == []
+    assert indexes["flavor_lower_active_idx"].expressions == ["LOWER(name)"]
+    assert indexes["flavor_lower_active_idx"].where == "supplier_id IS NOT NULL"
+    assert any(
+        check.name == "flavor_name_check" and check.expression == "LENGTH(name) >= 2"
+        for check in table.check_constraints
+    )
 
 
 def test_migration_cli_autogenerate_command(tmp_path, capsys) -> None:

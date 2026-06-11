@@ -8,19 +8,26 @@ from ormdantic._ormdantic import (
 
 from ormdantic import (
     assignment,
+    association_proxy,
     avg,
     case,
     cast,
     column,
     count,
+    cte,
+    exists,
     group,
+    hybrid_property,
     literal,
     max,
     min,
     not_,
+    not_exists,
+    over,
     projection,
     raw_sql_safe,
     select_query,
+    subquery,
     sum,
     tuple_,
     update_query,
@@ -57,6 +64,8 @@ def test_expression_helpers_preserve_legacy_filter_payloads() -> None:
     assert (column("deleted_at") != None).to_where() == {  # noqa: E711
         "deleted_at__is_not_null": True
     }
+    with pytest.raises(ValueError, match="expression-only predicates"):
+        column("left").eq(column("right")).to_filter_tree()
 
 
 def test_typed_expression_query_serializes_and_compiles_with_stable_params() -> None:
@@ -152,6 +161,39 @@ def test_empty_typed_in_predicates_compile_to_constants() -> None:
     }
 
 
+def test_association_and_hybrid_expressions_compile_through_typed_bridge() -> None:
+    class Customer:
+        account_name = association_proxy("account", "name")
+
+        @account_name.expression
+        def account_name(cls):
+            return column("account_name")
+
+        @hybrid_property
+        def status_label(self) -> str:
+            return "active"
+
+        @status_label.expression
+        def status_label(cls):
+            return column("status")
+
+    query = select_query(
+        "customers",
+        Customer.account_name.as_("account"),
+        where=Customer.account_name.startswith("acme")
+        & (Customer.status_label == "active"),
+    )
+
+    compiled = compile_typed_expression_query("postgresql", query.to_query_payload())
+
+    assert compiled == {
+        "sql": 'SELECT "account_name" AS "account" FROM "customers" WHERE (("account_name" LIKE $1) AND ("status" = $2))',
+        "params": ["expr_param_0", "expr_param_1"],
+        "operation": "select",
+        "values": {"expr_param_0": "acme%", "expr_param_1": "active"},
+    }
+
+
 def test_projection_group_literal_and_min_max_helpers_compile() -> None:
     query = select_query(
         "orders",
@@ -226,18 +268,85 @@ def test_case_cast_tuple_and_null_predicates_compile() -> None:
     }
 
 
-def test_subquery_payloads_remain_unsupported_in_python_facade() -> None:
-    subquery_payload = {
-        "table": "orders",
-        "projections": [{"expr": {"kind": "column", "name": "customer_id"}}],
-        "values": {},
-    }
-    query = {
-        "table": "customers",
-        "projections": [{"expr": {"kind": "column", "name": "id"}}],
-        "where": {"kind": "exists", "subquery": subquery_payload},
-        "values": {},
+def test_subquery_predicates_compile_through_typed_bridge() -> None:
+    order_count = select_query(
+        "orders",
+        count(),
+        where=column("customer_id", table="orders") == column("id", table="customers"),
+    )
+    paid_customer_ids = select_query(
+        "orders",
+        column("customer_id"),
+        where=column("status") == "paid",
+    )
+    banned_customers = select_query(
+        "bans",
+        literal(1),
+        where=column("customer_id", table="bans") == column("id", table="customers"),
+    )
+    query = select_query(
+        "customers",
+        column("id"),
+        subquery(order_count).as_("order_count"),
+        where=exists(paid_customer_ids)
+        & column("id").in_query(paid_customer_ids)
+        & not_exists(banned_customers),
+    )
+
+    compiled = compile_typed_expression_query("postgresql", query.to_query_payload())
+
+    assert compiled == {
+        "sql": 'SELECT "id", (SELECT COUNT(*) FROM "orders" WHERE ("orders"."customer_id" = "customers"."id")) AS "order_count" FROM "customers" WHERE (((EXISTS (SELECT "customer_id" FROM "orders" WHERE ("status" = $1))) AND ("id" IN (SELECT "customer_id" FROM "orders" WHERE ("status" = $2)))) AND (NOT EXISTS (SELECT 1 FROM "bans" WHERE ("bans"."customer_id" = "customers"."id"))))',
+        "params": ["expr_param_0", "expr_param_1"],
+        "operation": "select",
+        "values": {"expr_param_0": "paid", "expr_param_1": "paid"},
     }
 
-    with pytest.raises(ValueError, match="unsupported expression kind 'exists'"):
-        compile_typed_expression_query("postgresql", query)
+
+def test_ctes_and_window_expressions_compile_through_typed_bridge() -> None:
+    paid_orders = select_query(
+        "orders",
+        column("customer_id"),
+        sum(column("total")).as_("paid_total"),
+        where=column("status") == "paid",
+        group_by=[column("customer_id")],
+    )
+    query = select_query(
+        "paid_orders",
+        column("customer_id"),
+        column("paid_total"),
+        over(
+            sum(column("paid_total")),
+            order_by=[column("paid_total").desc()],
+        ).as_("running_total"),
+        with_=[cte("paid_orders", paid_orders)],
+        where=column("paid_total") > 100,
+        order_by=[column("paid_total").desc()],
+    )
+
+    compiled = compile_typed_expression_query("postgresql", query.to_query_payload())
+
+    assert compiled == {
+        "sql": 'WITH "paid_orders" AS (SELECT "customer_id", SUM("total") AS "paid_total" FROM "orders" WHERE ("status" = $1) GROUP BY "customer_id") SELECT "customer_id", "paid_total", SUM("paid_total") OVER (ORDER BY "paid_total" DESC) AS "running_total" FROM "paid_orders" WHERE ("paid_total" > $2) ORDER BY "paid_total" DESC',
+        "params": ["expr_param_0", "expr_param_1"],
+        "operation": "select",
+        "values": {"expr_param_0": "paid", "expr_param_1": 100},
+    }
+
+
+def test_select_query_table_alias_compiles_through_typed_bridge() -> None:
+    query = select_query(
+        "employees",
+        column("name", table="manager"),
+        table_alias="manager",
+        where=column("id", table="manager") == column("manager_id", table="employees"),
+    )
+
+    compiled = compile_typed_expression_query("postgresql", query.to_query_payload())
+
+    assert compiled == {
+        "sql": 'SELECT "manager"."name" FROM "employees" AS "manager" WHERE ("manager"."id" = "employees"."manager_id")',
+        "params": [],
+        "operation": "select",
+        "values": {},
+    }
