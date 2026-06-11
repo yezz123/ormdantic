@@ -94,6 +94,7 @@ manifest-path = "rust/crates/ormdantic-py/Cargo.toml"
 python-source = "."
 module-name = "ormdantic._ormdantic"
 bindings = "pyo3"
+features = ["extension-module"]
 
 [tool.isort]
 profile = "black"
