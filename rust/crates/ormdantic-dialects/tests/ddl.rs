@@ -884,7 +884,7 @@ fn renders_column_comments_by_backend() {
         .unwrap();
     assert_eq!(
         mssql[0],
-        "IF OBJECT_ID(N'flavor', N'U') IS NULL CREATE TABLE [flavor] ([id] INTEGER PRIMARY KEY NOT NULL, [name] TEXT NOT NULL)"
+        "IF OBJECT_ID(N'flavor', N'U') IS NULL CREATE TABLE [flavor] ([id] INTEGER PRIMARY KEY NOT NULL, [name] NVARCHAR(255) NOT NULL)"
     );
     assert!(mssql[1].contains("sys.sp_updateextendedproperty"));
     assert!(mssql[1].contains("sys.sp_addextendedproperty"));

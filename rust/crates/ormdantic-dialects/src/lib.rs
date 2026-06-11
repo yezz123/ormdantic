@@ -100,7 +100,7 @@ pub trait Dialect {
             FieldKind::Float => "REAL".to_string(),
             FieldKind::Boolean => "BOOLEAN".to_string(),
             FieldKind::Uuid if self.supports_native_uuid() => "UUID".to_string(),
-            FieldKind::Uuid => "TEXT".to_string(),
+            FieldKind::Uuid => render_uuid_type(self.kind(), column.is_primary_key()),
             FieldKind::Date => "DATE".to_string(),
             FieldKind::DateTime => "TIMESTAMP".to_string(),
             FieldKind::Json | FieldKind::ModelJson if self.supports_json() => "JSON".to_string(),
@@ -366,7 +366,7 @@ pub trait Dialect {
     }
 }
 
-const DEFAULT_KEYABLE_STRING_LENGTH: u32 = 255;
+const DEFAULT_BOUNDED_STRING_LENGTH: u32 = 255;
 
 fn render_string_type(kind: DialectKind, max_length: Option<u32>, keyable: bool) -> String {
     let max_length = max_length.filter(|length| *length > 0);
@@ -377,19 +377,25 @@ fn render_string_type(kind: DialectKind, max_length: Option<u32>, keyable: bool)
             .unwrap_or_else(|| "TEXT".to_string()),
         DialectKind::MsSql => match max_length {
             Some(length) => format!("NVARCHAR({length})"),
-            None if keyable => format!("NVARCHAR({DEFAULT_KEYABLE_STRING_LENGTH})"),
-            None => "TEXT".to_string(),
+            None => format!("NVARCHAR({DEFAULT_BOUNDED_STRING_LENGTH})"),
         },
         DialectKind::Oracle => match max_length {
             Some(length) => format!("VARCHAR2({length})"),
-            None if keyable => format!("VARCHAR2({DEFAULT_KEYABLE_STRING_LENGTH})"),
-            None => "TEXT".to_string(),
+            None => format!("VARCHAR2({DEFAULT_BOUNDED_STRING_LENGTH})"),
         },
         DialectKind::MySql | DialectKind::MariaDb => match max_length {
             Some(length) => format!("VARCHAR({length})"),
-            None if keyable => format!("VARCHAR({DEFAULT_KEYABLE_STRING_LENGTH})"),
+            None if keyable => format!("VARCHAR({DEFAULT_BOUNDED_STRING_LENGTH})"),
             None => "TEXT".to_string(),
         },
+    }
+}
+
+fn render_uuid_type(kind: DialectKind, keyable: bool) -> String {
+    match kind {
+        DialectKind::Oracle => "VARCHAR2(36)".to_string(),
+        DialectKind::MySql | DialectKind::MariaDb if keyable => "VARCHAR(36)".to_string(),
+        _ => "TEXT".to_string(),
     }
 }
 

@@ -28,6 +28,18 @@ fn column_types_follow_backend_capabilities() {
         "TEXT"
     );
     assert_eq!(
+        MySqlDialect.render_column_type(&ColumnDef::new("id", FieldKind::Uuid).primary_key(true)),
+        "VARCHAR(36)"
+    );
+    assert_eq!(
+        MariaDbDialect.render_column_type(&ColumnDef::new("id", FieldKind::Uuid).primary_key(true)),
+        "VARCHAR(36)"
+    );
+    assert_eq!(
+        OracleDialect.render_column_type(&ColumnDef::new("parent_id", FieldKind::Uuid)),
+        "VARCHAR2(36)"
+    );
+    assert_eq!(
         MySqlDialect.render_column_type(&ColumnDef::new("payload", FieldKind::Json)),
         "JSON"
     );
@@ -53,11 +65,11 @@ fn column_types_follow_backend_capabilities() {
     );
     assert_eq!(
         MsSqlDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
-        "TEXT"
+        "NVARCHAR(255)"
     );
     assert_eq!(
         OracleDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
-        "TEXT"
+        "VARCHAR2(255)"
     );
     assert_eq!(
         MySqlDialect.render_column_type(&ColumnDef::new("id", FieldKind::String).primary_key(true)),
