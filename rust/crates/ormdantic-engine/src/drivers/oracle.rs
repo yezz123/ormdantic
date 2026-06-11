@@ -118,6 +118,11 @@ mod runtime {
             .map(|value| match value {
                 DbValue::Null => Value::Null,
                 DbValue::Integer(value) => Value::Integer(*value),
+                DbValue::UnsignedInteger(value) => match i64::try_from(*value) {
+                    Ok(value) => Value::Integer(value),
+                    Err(_) => Value::String(value.to_string()),
+                },
+                DbValue::Decimal(value) => Value::String(value.clone()),
                 DbValue::Real(value) => Value::Float(*value),
                 DbValue::Text(value) => Value::String(value.clone()),
                 DbValue::Bool(value) => Value::Integer(i64::from(*value)),
@@ -154,11 +159,8 @@ mod runtime {
             Value::Bytes(value) => DbValue::Text(String::from_utf8_lossy(value).to_string()),
             Value::Integer(value) => DbValue::Integer(*value),
             Value::Float(value) => DbValue::Real(*value),
-            Value::Number(value) => value
-                .to_i64()
-                .map(DbValue::Integer)
-                .or_else(|_| value.to_f64().map(DbValue::Real))
-                .unwrap_or_else(|_| DbValue::Text(format!("{value:?}"))),
+            Value::Number(value) => parse_oracle_number(value.as_str())
+                .unwrap_or_else(|| DbValue::Decimal(value.as_str().to_string())),
             Value::Boolean(value) => DbValue::Bool(*value),
             Value::Json(value) => DbValue::Text(value.to_string()),
             other => DbValue::Text(format!("{other:?}")),
@@ -177,10 +179,15 @@ mod runtime {
     }
 
     fn parse_oracle_number(value: &str) -> Option<DbValue> {
+        if value.contains('.') {
+            return Some(DbValue::Decimal(value.to_string()));
+        }
         if let Ok(integer) = value.parse::<i64>() {
             Some(DbValue::Integer(integer))
+        } else if let Ok(integer) = value.parse::<u64>() {
+            Some(DbValue::UnsignedInteger(integer))
         } else {
-            value.parse::<f64>().ok().map(DbValue::Real)
+            Some(DbValue::Decimal(value.to_string()))
         }
     }
 }

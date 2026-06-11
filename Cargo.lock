@@ -1949,6 +1949,7 @@ dependencies = [
  "ormdantic-dialects",
  "ormdantic-schema",
  "postgres",
+ "regex",
  "rusqlite",
  "tiberius",
  "tokio",

@@ -38,8 +38,8 @@ fn oracle_number_edges_round_trip() {
                 DbValue::Integer(-32768),
                 DbValue::Integer(2_147_483_647),
                 DbValue::Integer(9_223_372_036_854_775_807),
-                DbValue::Real(3.5),
-                DbValue::Real(123.45),
+                DbValue::Decimal("3.5".to_string()),
+                DbValue::Decimal("123.45".to_string()),
             ],
         },
     );

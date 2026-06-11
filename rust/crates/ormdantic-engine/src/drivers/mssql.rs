@@ -50,6 +50,9 @@ mod runtime {
                     .into_first_result();
                 let rows = self.runtime.block_on(rows).map_err(sql_error)?;
                 Ok(rows_to_result(&rows))
+            } else if refs.is_empty() {
+                self.simple_execute(sql)?;
+                Ok(QueryResult::empty())
             } else {
                 self.runtime
                     .block_on(self.client.execute(sql, &refs))
@@ -150,6 +153,11 @@ mod runtime {
             .map(|value| match value {
                 DbValue::Null => Box::new(NullParam) as Box<dyn ToSql>,
                 DbValue::Integer(value) => Box::new(*value),
+                DbValue::UnsignedInteger(value) => match i64::try_from(*value) {
+                    Ok(value) => Box::new(value) as Box<dyn ToSql>,
+                    Err(_) => Box::new(value.to_string()) as Box<dyn ToSql>,
+                },
+                DbValue::Decimal(value) => Box::new(value.clone()),
                 DbValue::Real(value) => Box::new(*value),
                 DbValue::Text(value) => Box::new(value.clone()),
                 DbValue::Bool(value) => Box::new(*value),
@@ -191,7 +199,7 @@ mod runtime {
         } else if let Some(value) = row.try_get::<f32, _>(idx).ok().flatten() {
             DbValue::Real(value.into())
         } else if let Some(value) = row.try_get::<Numeric, _>(idx).ok().flatten() {
-            DbValue::Real(value.into())
+            DbValue::Decimal(value.to_string())
         } else if let Some(value) = row.try_get::<&str, _>(idx).ok().flatten() {
             DbValue::Text(value.to_string())
         } else {

@@ -8,7 +8,7 @@ Native database execution for Ormdantic.
 
 | Item               | Purpose                                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------------------- |
-| `DbValue`          | Database bind/result value enum (`Null`, `Integer`, `Real`, `Text`, `Bool`).                             |
+| `DbValue`          | Database bind/result value enum (`Null`, `Integer`, `UnsignedInteger`, `Decimal`, `Real`, `Text`, `Bool`). |
 | `QueryResult`      | Column names and rows returned by statements that produce rows.                                          |
 | `execute_url`      | One-shot execution by database URL.                                                                      |
 | `NativeConnection` | Persistent connection with `open`, `execute`, `begin`, `commit`, `rollback`, `savepoint`, and `dialect`. |

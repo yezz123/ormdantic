@@ -1,6 +1,6 @@
 mod support;
 
-use ormdantic_core::{RevisionId, TransactionOptions};
+use ormdantic_core::{ExecutionErrorKind, OrmdanticError, RevisionId, TransactionOptions};
 use ormdantic_dialects::ReflectionScope;
 use ormdantic_engine::{
     execute_url, returns_rows, runtime_capabilities, Connection, DbValue, MigrationStore,
@@ -79,6 +79,134 @@ fn sqlite_execute_url_runs_basic_statements() {
     .expect("select should work");
 
     support::assert_rows(&result, &[vec![DbValue::Text("vanilla".to_string())]]);
+}
+
+#[test]
+fn sqlite_declared_numeric_columns_decode_as_decimal() {
+    let url = support::sqlite_url(&support::unique_name("engine_sqlite_decimal"));
+
+    execute_url(
+        &url,
+        "CREATE TABLE prices (id INTEGER PRIMARY KEY, amount DECIMAL_TEXT(30, 9), label TEXT)",
+        &[],
+    )
+    .expect("create table should work");
+    execute_url(
+        &url,
+        "INSERT INTO prices (id, amount, label) VALUES (?1, ?2, ?3)",
+        &[
+            DbValue::Integer(1),
+            DbValue::Decimal("12345678901234567890.123456789".to_string()),
+            DbValue::Text("12345678901234567890.123456789".to_string()),
+        ],
+    )
+    .expect("insert should work");
+
+    let result = execute_url(
+        &url,
+        "SELECT amount, label, typeof(amount) FROM prices WHERE id = ?1",
+        &[DbValue::Integer(1)],
+    )
+    .expect("select should work");
+
+    support::assert_rows(
+        &result,
+        &[vec![
+            DbValue::Decimal("12345678901234567890.123456789".to_string()),
+            DbValue::Text("12345678901234567890.123456789".to_string()),
+            DbValue::Text("text".to_string()),
+        ]],
+    );
+}
+
+#[test]
+fn sqlite_declared_integer_columns_decode_large_unsigned_blob_storage() {
+    let url = support::sqlite_url(&support::unique_name("engine_sqlite_unsigned"));
+
+    execute_url(
+        &url,
+        "CREATE TABLE counters (id INTEGER PRIMARY KEY, value INTEGER)",
+        &[],
+    )
+    .expect("create table should work");
+    execute_url(
+        &url,
+        "INSERT INTO counters (id, value) VALUES (?1, ?2)",
+        &[DbValue::Integer(1), DbValue::UnsignedInteger(u64::MAX)],
+    )
+    .expect("insert should work");
+
+    let result = execute_url(
+        &url,
+        "SELECT value, typeof(value) FROM counters WHERE id = ?1",
+        &[DbValue::Integer(1)],
+    )
+    .expect("select should work");
+
+    support::assert_rows(
+        &result,
+        &[vec![
+            DbValue::UnsignedInteger(u64::MAX),
+            DbValue::Text("blob".to_string()),
+        ]],
+    );
+}
+
+#[test]
+fn sqlite_execution_errors_are_classified() {
+    let url = support::sqlite_url(&support::unique_name("engine_sqlite_errors"));
+    let mut connection = NativeConnection::open(&url).expect("sqlite connection should open");
+
+    connection
+        .execute("PRAGMA foreign_keys = ON", &[])
+        .expect("foreign keys should enable");
+    connection
+        .execute(
+            "CREATE TABLE parents (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)",
+            &[],
+        )
+        .expect("create parent table should work");
+    connection
+        .execute(
+            "CREATE TABLE children (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER NOT NULL,
+                rating INTEGER CHECK (rating > 0),
+                FOREIGN KEY(parent_id) REFERENCES parents(id)
+            )",
+            &[],
+        )
+        .expect("create child table should work");
+    connection
+        .execute("INSERT INTO parents (id, name) VALUES (1, 'vanilla')", &[])
+        .expect("first parent insert should work");
+
+    assert_execution_error_kind(
+        connection.execute("INSERT INTO parents (id, name) VALUES (2, 'vanilla')", &[]),
+        ExecutionErrorKind::UniqueViolation,
+    );
+    assert_execution_error_kind(
+        connection.execute("INSERT INTO parents (id, name) VALUES (3, NULL)", &[]),
+        ExecutionErrorKind::NotNullViolation,
+    );
+    assert_execution_error_kind(
+        connection.execute(
+            "INSERT INTO children (id, parent_id, rating) VALUES (1, 999, 1)",
+            &[],
+        ),
+        ExecutionErrorKind::ForeignKeyViolation,
+    );
+    assert_execution_error_kind(
+        connection.execute(
+            "INSERT INTO children (id, parent_id, rating) VALUES (2, 1, -1)",
+            &[],
+        ),
+        ExecutionErrorKind::CheckViolation,
+    );
+    assert_execution_error_kind(
+        connection.execute("SELECT * FROM", &[]),
+        ExecutionErrorKind::Syntax,
+    );
 }
 
 #[test]
@@ -168,4 +296,14 @@ fn reflector_exposes_dialect_queries_and_empty_schema() {
 
     assert!(!queries.is_empty());
     assert!(reflector.empty_schema().tables().is_empty());
+}
+
+fn assert_execution_error_kind<T: std::fmt::Debug>(
+    result: Result<T, OrmdanticError>,
+    expected: ExecutionErrorKind,
+) {
+    match result.expect_err("operation should fail") {
+        OrmdanticError::ExecutionError { kind, .. } => assert_eq!(kind, expected),
+        other => panic!("expected execution error {expected:?}, got {other:?}"),
+    }
 }

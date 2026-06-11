@@ -52,3 +52,51 @@ fn mssql_connection_supports_transactions_when_url_is_available() {
 
     execute_url(&url, &format!("DROP TABLE {table}"), &[]).expect("mssql cleanup should work");
 }
+
+#[test]
+fn mssql_executes_plain_create_view_when_url_is_available() {
+    let Some(url) = mssql_url() else {
+        eprintln!("skipping mssql view test: ORMDANTIC_MSSQL_URL is not set");
+        return;
+    };
+
+    let run_id = std::process::id();
+    let table = format!("ormdantic_mssql_runtime_view_t_{run_id}");
+    let view = format!("ormdantic_mssql_runtime_view_v_{run_id}");
+    let _ = execute_url(
+        &url,
+        &format!("IF OBJECT_ID(N'{view}', N'V') IS NOT NULL DROP VIEW {view}"),
+        &[],
+    );
+    let _ = execute_url(
+        &url,
+        &format!("IF OBJECT_ID(N'{table}', N'U') IS NOT NULL DROP TABLE {table}"),
+        &[],
+    );
+
+    execute_url(
+        &url,
+        &format!("CREATE TABLE {table} (id INT PRIMARY KEY, name NVARCHAR(50) NOT NULL)"),
+        &[],
+    )
+    .expect("mssql should create table for view test");
+    execute_url(
+        &url,
+        &format!("CREATE VIEW {view} AS SELECT id, name FROM {table}"),
+        &[],
+    )
+    .expect("mssql should execute CREATE VIEW through the batch path");
+
+    let result = execute_url(
+        &url,
+        &format!(
+            "SELECT VIEW_DEFINITION FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME = '{view}'"
+        ),
+        &[],
+    )
+    .expect("mssql should reflect created view");
+    assert_eq!(result.rows().len(), 1);
+
+    execute_url(&url, &format!("DROP VIEW {view}"), &[]).expect("mssql view cleanup");
+    execute_url(&url, &format!("DROP TABLE {table}"), &[]).expect("mssql table cleanup");
+}
