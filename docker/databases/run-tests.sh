@@ -25,6 +25,7 @@ cd "${REPO_ROOT}"
 
 uv run --group dev maturin develop
 uv run --group testing pytest tests/integration/test_migrations_external.py -q
+uv run --group testing pytest tests/integration/test_relationship_loading_external.py -q
 (
   unset ORMDANTIC_MSSQL_URL
   unset ORMDANTIC_ORACLE_URL

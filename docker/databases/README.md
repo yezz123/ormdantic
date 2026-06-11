@@ -25,6 +25,7 @@ docker/databases/run-tests.sh
 The runner exports both Python migration smoke-test URLs (`ORMDANTIC_TEST_*_URL`) and Rust engine URLs (`ORMDANTIC_*_URL`), then runs:
 
 - `tests/integration/test_migrations_external.py`
+- `tests/integration/test_relationship_loading_external.py`
 - `cargo test -p ormdantic-engine`
 - `cargo test -p ormdantic-engine --features mssql,oracle --test mssql_exec --test oracle_exec`
 
