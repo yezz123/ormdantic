@@ -45,18 +45,63 @@ fn column_types_follow_backend_capabilities() {
     );
     assert_eq!(
         MySqlDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
-        "VARCHAR(255)"
+        "TEXT"
     );
     assert_eq!(
         MariaDbDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
-        "VARCHAR(255)"
+        "TEXT"
     );
     assert_eq!(
         MsSqlDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
-        "NVARCHAR(255)"
+        "TEXT"
     );
     assert_eq!(
         OracleDialect.render_column_type(&ColumnDef::new("name", FieldKind::String)),
+        "TEXT"
+    );
+    assert_eq!(
+        MySqlDialect.render_column_type(&ColumnDef::new("id", FieldKind::String).primary_key(true)),
+        "VARCHAR(255)"
+    );
+    assert_eq!(
+        MariaDbDialect
+            .render_column_type(&ColumnDef::new("id", FieldKind::String).primary_key(true)),
+        "VARCHAR(255)"
+    );
+    assert_eq!(
+        MsSqlDialect.render_column_type(&ColumnDef::new("id", FieldKind::String).primary_key(true)),
+        "NVARCHAR(255)"
+    );
+    assert_eq!(
+        OracleDialect
+            .render_column_type(&ColumnDef::new("id", FieldKind::String).primary_key(true)),
+        "VARCHAR2(255)"
+    );
+    assert_eq!(
+        MySqlDialect.render_column_type(&ColumnDef::new(
+            "parent_id",
+            FieldKind::ForeignKey {
+                target_table: "parent".to_string()
+            }
+        )),
+        "VARCHAR(255)"
+    );
+    assert_eq!(
+        MsSqlDialect.render_column_type(&ColumnDef::new(
+            "parent_id",
+            FieldKind::ForeignKey {
+                target_table: "parent".to_string()
+            }
+        )),
+        "NVARCHAR(255)"
+    );
+    assert_eq!(
+        OracleDialect.render_column_type(&ColumnDef::new(
+            "parent_id",
+            FieldKind::ForeignKey {
+                target_table: "parent".to_string()
+            }
+        )),
         "VARCHAR2(255)"
     );
     assert_eq!(

@@ -84,7 +84,9 @@ pub trait Dialect {
 
     fn render_column_type(&self, column: &ColumnDef) -> String {
         match column.kind() {
-            FieldKind::String => render_string_type(self.kind(), column.max_length()),
+            FieldKind::String => {
+                render_string_type(self.kind(), column.max_length(), column.is_primary_key())
+            }
             FieldKind::Enum { name, schema } => match (self.kind(), name) {
                 (DialectKind::Postgres, Some(name)) => match schema {
                     Some(schema) => {
@@ -116,7 +118,9 @@ pub trait Dialect {
                 _ => "NUMERIC".to_string(),
             },
             FieldKind::Binary => "BLOB".to_string(),
-            FieldKind::ForeignKey { .. } => render_string_type(self.kind(), column.max_length()),
+            FieldKind::ForeignKey { .. } => {
+                render_string_type(self.kind(), column.max_length(), true)
+            }
             FieldKind::Unknown => "TEXT".to_string(),
         }
     }
@@ -364,27 +368,28 @@ pub trait Dialect {
 
 const DEFAULT_KEYABLE_STRING_LENGTH: u32 = 255;
 
-fn render_string_type(kind: DialectKind, max_length: Option<u32>) -> String {
+fn render_string_type(kind: DialectKind, max_length: Option<u32>, keyable: bool) -> String {
     let max_length = max_length.filter(|length| *length > 0);
     match kind {
         DialectKind::Sqlite => "TEXT".to_string(),
         DialectKind::Postgres => max_length
             .map(|length| format!("VARCHAR({length})"))
             .unwrap_or_else(|| "TEXT".to_string()),
-        DialectKind::MsSql => format!(
-            "NVARCHAR({})",
-            max_length.unwrap_or(DEFAULT_KEYABLE_STRING_LENGTH)
-        ),
-        DialectKind::Oracle => format!(
-            "VARCHAR2({})",
-            max_length.unwrap_or(DEFAULT_KEYABLE_STRING_LENGTH)
-        ),
-        DialectKind::MySql | DialectKind::MariaDb => {
-            format!(
-                "VARCHAR({})",
-                max_length.unwrap_or(DEFAULT_KEYABLE_STRING_LENGTH)
-            )
-        }
+        DialectKind::MsSql => match max_length {
+            Some(length) => format!("NVARCHAR({length})"),
+            None if keyable => format!("NVARCHAR({DEFAULT_KEYABLE_STRING_LENGTH})"),
+            None => "TEXT".to_string(),
+        },
+        DialectKind::Oracle => match max_length {
+            Some(length) => format!("VARCHAR2({length})"),
+            None if keyable => format!("VARCHAR2({DEFAULT_KEYABLE_STRING_LENGTH})"),
+            None => "TEXT".to_string(),
+        },
+        DialectKind::MySql | DialectKind::MariaDb => match max_length {
+            Some(length) => format!("VARCHAR({length})"),
+            None if keyable => format!("VARCHAR({DEFAULT_KEYABLE_STRING_LENGTH})"),
+            None => "TEXT".to_string(),
+        },
     }
 }
 
