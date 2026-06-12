@@ -41,6 +41,10 @@
 - ⬆ Bump the python-packages group with 3 updates. PR [#237](https://github.com/yezz123/ormdantic/pull/237) by [@dependabot[bot]](https://github.com/apps/dependabot).
 - ⬆ [pre-commit.ci] pre-commit autoupdate. PR [#238](https://github.com/yezz123/ormdantic/pull/238) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 
+### Docs
+
+* ✨  Enhance Oracle error handling and revise documentation. PR [#257](https://github.com/yezz123/ormdantic/pull/257) by [@yezz123](https://github.com/yezz123).
+
 ## 1.7.0
 
 ### Features
