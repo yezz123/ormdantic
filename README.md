@@ -1,7 +1,7 @@
-![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/.github/logo.png)
+![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/docs/logo.svg)
 
 <p align="center">
-    <em>Asynchronous ORM that uses pydantic models to represent database tables ✨</em>
+  <em>A Rust-backed async ORM for Python applications that use Pydantic models.</em>
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
     <img src="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml/badge.svg" alt="Test">
 </a>
 <a href="https://codecov.io/gh/yezz123/ormdantic">
-    <img src="https://codecov.io/gh/yezz123/ormdantic/branch/main/graph/badge.svg"/>
+    <img src="https://codecov.io/gh/yezz123/ormdantic/branch/main/graph/badge.svg" alt="Coverage">
 </a>
 <a href="https://pypi.org/project/ormdantic" target="_blank">
     <img src="https://img.shields.io/pypi/v/ormdantic?color=%2334D058&label=pypi%20package" alt="Package version">
@@ -17,260 +17,92 @@
 <a href="https://pypi.org/project/ormdantic" target="_blank">
     <img src="https://img.shields.io/pypi/pyversions/ormdantic.svg?color=%2334D058" alt="Supported Python versions">
 </a>
+<a href="https://app.codspeed.io//yezz123/ormdantic?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://app.codspeed.io//badge.json" alt="CodSpeed Badge"/></a>
 </p>
 
-Ormdantic is a library for interacting with Asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, easy to use, compatible, and robust.
+Ormdantic lets you declare database tables with Pydantic v2 models and run async CRUD, relationship loading, migrations, reflection, and native SQL execution through a Rust-backed runtime.
 
-**Ormdantic** is powered by Rust SQL compilation and native Rust database execution, uses <a href="https://docs.pydantic.dev/" class="external-link" target="_blank">Pydantic</a> models, and is highly inspired by <a href="https://github.com/tiangolo/Sqlmodel" class="external-link" target="_blank">Sqlmodel</a>, Created by [@tiangolo](https://github.com/tiangolo).
+The project is designed for applications that want Python model ergonomics without giving up SQL database features. Python owns the model and API surface; Rust owns SQL compilation, type conversion, and driver execution.
 
-The key features are:
+## What You Get
 
-- **Easy to use**: It has sensible defaults and does a lot of work underneath to simplify the code you write.
-- **Compatible**: It combines Pydantic models and Rust query compilation/execution to simplify the code you write as much as possible, allowing you to reduce the code duplication to a minimum, but while getting the best developer experience possible.
-- **Extensible**: You have Ormdantic's Rust internals underneath.
-- **Short Queries**: You can write queries in a single line of code, and it will be converted to the appropriate syntax for the database you are using.
+| Area | What Ormdantic Provides |
+| --- | --- |
+| Models | Pydantic models decorated as database tables. |
+| CRUD | Async insert, update, upsert, delete, find, count, and bulk update helpers. |
+| Queries | Dictionary filters for simple cases and expression objects for advanced SQL. |
+| Relationships | Explicit joined and select-in loaders, plus explicit relationship loading. |
+| Transactions | Async transaction and session contexts. |
+| Migrations | Snapshots, diffs, plans, migration artifacts, history, rollback, repair, and squash helpers. |
+| Reflection | Live database inspection for tables, columns, indexes, constraints, schemas, views, sequences, and dialect metadata. |
+| Drivers | SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle through the native runtime. |
 
-## Requirements
+## Install
 
-A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
-
-As **Ormdantic** is based on **Pydantic** and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
-
-## Installation
-
-You can add Ormdantic in a few easy steps. First of all, install the dependency:
-
-```shell
-$ pip install ormdantic
-
----> 100%
-
-Successfully installed Ormdantic
+```bash
+uv add ormdantic
 ```
 
-Database drivers are provided by Ormdantic's Rust extension.
-
-## Example
-
-To understand SQL, Sebastian the Creator of FastAPI and SQLModel created an amazing documentation that could help you understand the basics of SQL, ex. `CREATE TABLE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, etc.
-
-Check out the [documentation](https://sqlmodel.tiangolo.com/).
-
-But let's see how to use Ormdantic.
-
-### Create a database
-
-Ormdantic uses a native Rust runtime. Python registers Pydantic models and Rust owns table handles for DDL, CRUD, filtering, counting, relationship-depth planning, and execution.
+## First Example
 
 ```python
-from ormdantic import Ormdantic
-
-connection = "sqlite:///db.sqlite3"
-
-database = Ormdantic(connection)
-```
-
-PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle URLs are also supported by the Rust runtime compiled into the Python extension.
-
-### Create a table
-
-To create tables decorate a pydantic model with the `database.table` decorator, passing the database information ex. `Primary key`, `foreign keys`, `Indexes`, `back_references`, `unique_constraints` etc. to the decorator call.
-
-#### Table Restrictions
-
-- Tables must have a single column primary key.
-- The primary key column must be the first column.
-- Relationships must `union-type` the foreign model and that models primary key.
-
-```python
-from uuid import uuid4
 from pydantic import BaseModel, Field
 
-@database.table(pk="id", indexed=["name"])
+from ormdantic import Ormdantic
+
+db = Ormdantic("sqlite:///app.sqlite3")
+
+
+@db.table(pk="id", indexed=["name"])
 class Flavor(BaseModel):
-     """A coffee flavor."""
+    id: str
+    name: str = Field(min_length=2, max_length=63)
+    rating: int = 0
 
-     id: UUID = Field(default_factory=uuid4)
-     name: str = Field(max_length=63)
+
+async def main() -> None:
+    await db.init()
+
+    await db[Flavor].insert(Flavor(id="vanilla", name="Vanilla", rating=5))
+
+    result = await db[Flavor].find_many(
+        {"rating": {"gte": 4}},
+        order_by=["name"],
+    )
+
+    for flavor in result.data:
+        print(flavor.name)
 ```
 
-### Queries
+## Learn The Project
 
-Now after we create the table, we can initialize the database with the table and then run different queries.
+Start with the documentation when you are new:
 
-#### Init()
+- `docs/quickstart.md` shows the smallest useful workflow.
+- `docs/concepts/` explains tables, fields, relationships, querying, loading, sessions, migrations, events, and the native engine.
+- `docs/drivers/` explains SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle behavior.
+- `docs/examples/` contains runnable beginner and advanced guides.
+- `docs/api/` documents the Python API with generated references and usage notes.
 
-- Register models as ORM models and initialize the database.
+## Development
 
-We use `database.init` will Populate relations information and create the tables.
-
-```python
-async def demo() -> None:
-    async def _init() -> None:
-        await db.init()
-        await db.drop_all()
-        await db.create_all()
-    await _init()
-```
-
-#### Insert
-
-Now let's imagine we have another table called `Coffee` that has a foreign key to `Flavor`.
-
-```python
-@database.table(pk="id")
-class Coffee(BaseModel):
-     """Drink it in the morning."""
-
-     id: UUID = Field(default_factory=uuid4)
-     sweetener: str | None = Field(max_length=63)
-     sweetener_count: int | None = None
-     flavor: Flavor | UUID
-```
-
-After we create the table, we can insert data into the table, using the `database.insert` method, is away we insert a Model Instance.
-
-```python
-# Create a Flavor called "Vanilla"
-vanilla = Flavor(name="Vanilla")
-
-# Insert the Flavor into the database
-await database[Flavor].insert(vanilla)
-
-# Create a Coffee with the Vanilla Flavor
-coffee = Coffee(sweetener="Sugar", sweetener_count=1, flavor=vanilla)
-
-# Insert the Coffee into the database
-await database[Coffee].insert(coffee)
-```
-
-#### Searching Queries
-
-As we know, in SQL, we can search for data using different methods, ex. `WHERE`, `LIKE`, `IN`, `BETWEEN`, etc.
-
-In Ormdantic, we can search for data using the `database.find_one` or `database.find_many` methods.
-
-- `Find_one` used to find a Model instance by Primary Key, its could also find with `depth` parameter.
-
-```python
-     # Find one
-     vanilla = await database[Flavor].find_one(flavor.id)
-     print(vanilla.name)
-
-     # Find one with depth.
-     find_coffee = await database[Coffee].find_one(coffee.id, depth=1)
-     print(find_coffee.flavor.name)
-```
-
-- `Find_many` used to find Model instances by some condition ex. `where`, `order_by`, `order`, `limit`, `offset`, `depth`.
-
-```python
-     # Find many
-     await database[Flavor].find_many()
-
-     # Get paginated results.
-     await database[Flavor].find_many(
-          where={"name": "vanilla"}, order_by=["id", "name"], limit=2, offset=2
-     )
-```
-
-#### Update / Upsert Queries
-
-##### Update
-
-The modification of data that is already in the database is referred to as updating. You can update individual rows, all the rows in a table, or a subset of all rows. Each column can be updated separately; the other columns are not affected.
-
-```python
-     # Update a Flavor
-     flavor.name = "caramel"
-     await database[Flavor].update(flavor)
-```
-
-##### Upsert
-
-The `Upsert` method is similar to the Synchronize method with one exception; the `Upsert` method does not delete any records. The `Upsert` method will result in insert or update operations. If the record exists, it will be updated. If the record does not exist, it will be inserted.
-
-```python
-     # Upsert a Flavor
-     flavor.name = "mocha"
-     await database[Flavor].upsert(flavor)
-```
-
-### Delete
-
-The `DELETE` statement is used to delete existing records in a table.
-
-```python
-     # Delete a Flavor
-     await database[Flavor].delete(flavor.id)
-```
-
-### Count
-
-To count the number of rows of a table or in a result set you can use the `count` function.
-
-```python
-     # Count
-     count = await database[Flavor].count()
-     print(count)
-```
-
-- It's support also `Where` and `Depth`
-
-```python
-     count_advanced = await database[Coffee].count(
-          where={"sweetener": 2}, depth=1
-     )
-     print(count_advanced)
-```
-
-## Development 🚧
-
-### Setup environment 📦
-
-You should create a virtual environment and activate it:
-
-```bash
-python -m venv venv/
-```
-
-```bash
-source venv/bin/activate
-```
-
-And then install the development dependencies:
-
-```bash
-# Install dependencies
-uv sync --all-groups
-```
-
-### Rust workspace
-
-Ormdantic's Rust crates live under `rust/crates/` and are managed by the repository-root `Cargo.toml`. See [`rust/README.md`](rust/README.md) for the crate layout, feature flags, and Rust build/test commands.
-
-### Run tests 🌝
-
-You can run all the tests with:
-
-```bash
-bash scripts/test.sh
-```
-
-### Format the code 🍂
-
-Execute the following command to apply `pre-commit` formatting:
-
-```bash
-bash scripts/format.sh
-```
-
-Execute the following command to apply `mypy` type checking:
+Common commands:
 
 ```bash
 bash scripts/lint.sh
+bash scripts/test.sh
+bash scripts/docs_build.sh
 ```
 
-## License
+The docs use Zensical:
 
-This project is licensed under the terms of the MIT license.
+```bash
+uv run --group docs zensical build
+uv run --group docs zensical serve
+```
+
+Rust crates live under `rust/crates/` and are managed from the repository root `Cargo.toml`.
+
+## Status
+
+Ormdantic is evolving quickly. Prefer explicit migrations, review generated SQL before applying it in production, and check the driver-specific pages for dialect behavior.
