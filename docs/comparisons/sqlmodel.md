@@ -1,13 +1,18 @@
 # Ormdantic vs SQLModel
 
-SQLModel combines Pydantic models with SQLAlchemy. Ormdantic keeps Pydantic as the public model layer and moves SQL planning, execution, and hydration into Rust.
+SQLModel combines Pydantic-style models with SQLAlchemy. Ormdantic keeps Pydantic as the public model layer and moves planning, execution, and hydration into Rust.
 
-| Area              | SQLModel                       | Ormdantic                                                               |
-| ----------------- | ------------------------------ | ----------------------------------------------------------------------- |
-| Public models     | Pydantic + SQLAlchemy metadata | Pydantic v2 models with `database.table`                                |
-| Runtime           | SQLAlchemy                     | Native Rust crates through PyO3                                         |
-| Dialects          | SQLAlchemy dialect ecosystem   | Rust runtime for SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, Oracle |
-| Loading           | SQLAlchemy relationship APIs   | Explicit async-safe loading                                             |
-| Performance focus | Python ORM ergonomics          | Rust table handles, SQL compilation, hydration                          |
+| Area | SQLModel | Ormdantic |
+| --- | --- | --- |
+| Public model | Pydantic model with SQLAlchemy metadata. | Plain Pydantic v2 model registered by `@db.table`. |
+| Runtime | SQLAlchemy. | Native Rust crates through PyO3. |
+| Drivers | SQLAlchemy dialect and DBAPI ecosystem. | Rust runtime for SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle. |
+| Query style | SQLAlchemy/SQLModel expressions and sessions. | Table handles, dict filters, and serializable expression helpers. |
+| Loading | SQLAlchemy relationship APIs. | Explicit async-safe loaders. |
+| Migrations | Usually Alembic. | Built-in snapshot and migration manager. |
 
-Ormdantic is inspired by Pydantic-first ergonomics, but it is not a SQLAlchemy wrapper.
+## The Practical Difference
+
+SQLModel is the right choice if you want SQLAlchemy compatibility with a Pydantic-friendly declaration style.
+
+Ormdantic is the right choice if you want Pydantic models to remain the application object layer while a Rust runtime owns the database hot path.

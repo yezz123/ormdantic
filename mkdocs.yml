@@ -79,7 +79,7 @@ plugins:
           show_symbol_type_toc: true
 
 markdown_extensions:
-  # Material for MkDocs Extensions
+  # Zensical/MkDocs extensions
   material.extensions.preview:
     targets:
       include:
@@ -132,50 +132,62 @@ extra_css:
   - css/custom.css
 
 nav:
-  - About: index.md
-  - Why Ormdantic: why-ormdantic.md
-  - Installation: installation.md
-  - Examples:
+  - Home: index.md
+  - Start:
+      - Why Ormdantic: why-ormdantic.md
+      - Philosophy: philosophy.md
+      - Learning Path: learning-path.md
+      - Installation: installation.md
+      - Quickstart: quickstart.md
+  - Concepts:
+      - Overview: concepts/index.md
+      - Database And Tables: concepts/database-and-tables.md
+      - Field Types And Metadata: concepts/field-types-and-metadata.md
+      - Relationships: concepts/relationships.md
+      - Querying: concepts/querying.md
+      - Loading Strategies: concepts/loading-strategies.md
+      - Transactions And Sessions: concepts/transactions-and-sessions.md
+      - Migrations And Reflection: concepts/migrations-and-reflection.md
+      - Events: concepts/events.md
+      - Native Engine: concepts/native-engine.md
+  - Drivers:
+      - Overview: drivers/index.md
+      - SQLite: drivers/sqlite.md
+      - PostgreSQL: drivers/postgresql.md
+      - MySQL: drivers/mysql.md
+      - MariaDB: drivers/mariadb.md
+      - SQL Server: drivers/mssql.md
+      - Oracle: drivers/oracle.md
+  - Guides:
       - Basic CRUD: examples/basic-crud.md
       - Relationships: examples/relationships.md
       - Transactions And Sessions: examples/transactions-sessions.md
       - Query Expressions: examples/query-expressions.md
       - Migrations And Reflection: examples/migrations-reflection.md
       - Enterprise Dialects: examples/enterprise-dialects.md
-  - Usage:
-      - Getting Started: usage/usage.md
-      - Connections And Dialects: usage/connections.md
-      - Query Expressions: usage/query-expressions.md
-      - Transactions And Sessions: usage/transactions-sessions.md
-      - Relationship Loading: usage/relationship-loading.md
-      - Migrations: usage/migrations.md
-      - Events: usage/events.md
-  - Architecture:
-      - Rust Core: architecture/rust-core.md
-      - Dialect Support: architecture/dialect-support.md
-      - SQLAlchemy Parity: architecture/sqlalchemy-parity.md
-      - Refactor And Test Roadmap: architecture/refactor-test-roadmap.md
-      - vNext Migration: architecture/vnext-migration.md
-      - Migration History: architecture/migration-history.md
-  - Performance: performance.md
-  - Comparisons:
-      - SQLAlchemy: comparisons/sqlalchemy.md
-      - SQLModel: comparisons/sqlmodel.md
-  - Reference - API:
+      - Performance: performance.md
+      - SQLAlchemy Comparison: comparisons/sqlalchemy.md
+      - SQLModel Comparison: comparisons/sqlmodel.md
+  - Python API:
       - Overview: api/reference.md
       - Ormdantic: api/ormdantic.md
-      - Native Engine: api/engine.md
-      - Session: api/session.md
+      - Table: api/table.md
+      - Metadata Models: api/metadata.md
+      - Query Expressions: api/expressions.md
+      - Relationship Loaders: api/loaders.md
+      - Sessions: api/session.md
+      - Migrations: api/migrations.md
+      - Reflection: api/reflection.md
       - Events: api/events.md
-      - Loaders: api/loaders.md
-      - Errors:
-          - api/errors.md
-      - ORM Internals:
-          - api/table.md
-          - api/serializer.md
-          - api/internals.md
+      - Native Engine: api/engine.md
+      - Associations: api/associations.md
+      - Errors: api/errors.md
+      - Serializer And Hydration: api/serializer.md
+      - Internals: api/internals.md
   - Development:
       - Contributing: development/contributing.md
+      - Rust Core: architecture/rust-core.md
+      - Dialect Support: architecture/dialect-support.md
   - FAQ:
       - Frequently Asked Questions: faq/faq.md
       - Code of Conduct: faq/code_of_conduct.md
