@@ -17,8 +17,8 @@ fn oracle_parameterized_selects_cover_core_values() {
     common::run_value_round_trip_flow(
         &url,
         common::ValueRoundTripSql {
-            sql: "SELECT :1 AS int_value, CAST(:2 AS NUMBER(10,2)) AS real_value, :3 AS text_value, CAST(:4 AS NUMBER(1)) AS bool_value, CAST(:5 AS VARCHAR2(100)) AS null_value FROM dual",
-            expected_real: DbValue::Decimal("3.25".to_string()),
+            sql: "SELECT :1 AS int_value, :2 AS real_value, :3 AS text_value, CAST(:4 AS NUMBER(1)) AS bool_value, CAST(:5 AS VARCHAR2(100)) AS null_value FROM dual",
+            expected_real: DbValue::Real(3.25),
             expected_bool: DbValue::Integer(1),
         },
     );
