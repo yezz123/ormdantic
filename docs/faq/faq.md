@@ -1,34 +1,41 @@
 # Frequently Asked Questions
 
-![Logo](https://raw.githubusercontent.com/yezz123/ormdantic/main/.github/logo.png)
+## What Is Ormdantic?
 
-## What is the purpose of this project?
+Ormdantic is an async ORM that uses Pydantic v2 models as database table models. The Python API handles declarations, decorators, sessions, events, and final Pydantic object construction. The Rust core handles schema validation, SQL compilation, row hydration, migrations, reflection, and native database execution.
 
-**Ormdantic** is an async ORM that uses Pydantic v2 models as database table models. The Python API handles model declarations, decorators, sessions, events, and final Pydantic object construction, while the Rust core handles schema validation, SQL compilation, row hydration, and native database execution.
+## Does Ormdantic Depend On SQLAlchemy?
 
-## What are the key differences between Ormdantic and SQLModel?
+No. Ormdantic accepts SQLAlchemy-style database URLs because they are familiar, but runtime execution is handled by the Rust extension.
 
-| Area                 | SQLModel                                             | Ormdantic                                                                                          |
-| -------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Model style          | Uses Pydantic models with SQLAlchemy table metadata. | Uses regular Pydantic v2 models decorated with `database.table`.                                   |
-| Runtime              | Builds on SQLAlchemy.                                | Uses Rust SQL compilation and native Rust execution.                                               |
-| Async API            | Uses SQLAlchemy-style sessions and engines.          | Creates an async database abstraction from a connection URL and exposes table-scoped CRUD helpers. |
-| Query path           | SQLAlchemy expression/session model.                 | Rust-compiled CRUD, filters, counts, joins, and DDL behind a Python API.                           |
-| Relationship loading | SQLAlchemy relationship machinery.                   | Explicit `depth` and loader options; no hidden synchronous lazy loading.                           |
+## Does Ormdantic Replace SQLAlchemy?
 
-Ormdantic is inspired by SQLModel's Pydantic-first ergonomics, but its internals are intentionally different after the Rust-core migration.
+Not for every use case. Ormdantic is intentionally narrower. Use SQLAlchemy when you need its full SQL toolkit, mapper ecosystem, or Alembic workflows. Use Ormdantic when you want Pydantic-first models, explicit async loading, and a Rust-backed runtime.
 
-## Does Ormdantic still depend on SQLAlchemy?
+## Does Ormdantic Use Pydantic Models Directly?
 
-No. The vNext runtime removed SQLAlchemy and PyPika from runtime dependencies. Dialect parsing still accepts SQLAlchemy-style database URLs for compatibility with familiar connection strings.
+Yes. You decorate ordinary Pydantic models with `@db.table(...)`. The model remains usable anywhere a Pydantic model is expected.
 
-## How to Support Project?
+## Are Relationship Loads Lazy?
 
-You can financially support the author (me) through
-[![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/yezz123) Paypal
-sponsors</a>.
+Not implicitly. Ormdantic avoids hidden I/O on attribute access. Use `depth`, `joinedload`, `selectinload`, or `db.load(model, "path")` to load relationships explicitly.
 
-There you could buy me a [coffee ☕️](https://www.buymeacoffee.com/tahiri) to
-say thanks. 😄
+## Which Databases Are Supported?
 
-And you can also become a Silver or Gold sponsor for Ormdantic. 🏅🎉
+SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle are supported by the Rust runtime, depending on the compiled driver features in your installed wheel or local build.
+
+## How Do I Check Driver Support?
+
+```python
+from ormdantic import runtime_capabilities
+
+print(runtime_capabilities())
+```
+
+## How Do Migrations Work?
+
+Ormdantic compares schema snapshots. A registered Python model snapshot can be compared with a live reflected database snapshot to generate diffs, SQL plans, migration artifacts, rollback operations, and history entries.
+
+## How Can I Support The Project?
+
+You can support the maintainer through GitHub Sponsors or the support links in the repository profile.

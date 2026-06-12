@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "ormdantic"
-description = "asynchronous ORM that uses pydantic models to represent database tables"
+description = "Rust-backed async ORM for Python applications that already use Pydantic models as their data boundary."
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "Yasser Tahiri", email = "hello@yezz.me" }]
@@ -64,6 +64,8 @@ testing = [
   "pytest-cov==7.1.0",
   "python-decouple",
   "pytest-pretty",
+  "pytest-benchmark>=5.2.0",
+  "pytest-codspeed>=5.0.3",
 ]
 linting = ["pre-commit==4.6.0", "mypy==2.1.0", "ruff", "black"]
 docs = [
@@ -81,9 +83,7 @@ dev = [
   { include-group = "testing" },
   { include-group = "linting" },
   { include-group = "docs" },
-  "pytest-benchmark",
   "maturin>=1,<2",
-  "pytest-codspeed>=5.0.3",
 ]
 
 [tool.hatch.version]

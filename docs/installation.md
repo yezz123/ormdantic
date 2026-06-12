@@ -1,21 +1,76 @@
-## Requirements
+# Installation
 
-A recent and currently supported version of Python (right now, <a href="https://www.python.org/downloads/" class="external-link" target="_blank">Python supports versions 3.10 and above</a>).
-
-As **Ormdantic** is based on **Pydantic** and Rust internals, it requires them. Python dependencies will be automatically installed when you install Ormdantic.
-
-## Installation
-
-You can add Ormdantic in a few easy steps. First of all, install the dependency:
-
-<div class="termy">
+Install Ormdantic from PyPI:
 
 ```console
-$ pip install ormdantic
-
----> 100%
+pip install ormdantic
 ```
 
-</div>
+Ormdantic ships a Python package plus a Rust extension named `ormdantic._ormdantic`. The extension contains the SQL compiler, hydration planner, migration bridge, and native database drivers.
 
-Database drivers are provided by Ormdantic's Rust extension.
+## Requirements
+
+- Python 3.10 or newer
+- Pydantic v2
+- A wheel compatible with your platform, or a local Rust toolchain to build from source
+
+## Driver Availability
+
+Runtime driver support is compiled into the Rust extension. Check what your installed package contains:
+
+```python
+from ormdantic import runtime_capabilities
+
+print(runtime_capabilities())
+```
+
+The result is a dictionary:
+
+```python
+{
+    "sqlite": True,
+    "postgresql": True,
+    "mysql": True,
+    "mariadb": True,
+    "mssql": True,
+    "oracle": True,
+}
+```
+
+The exact values depend on how the wheel or local build was produced.
+
+## Local Development Install
+
+For repository development, install the dev dependencies and build the extension with maturin:
+
+```console
+uv sync --group dev
+uv run --group dev maturin develop
+```
+
+Run the Python tests with:
+
+```console
+uv run pytest
+```
+
+Run the docs with:
+
+```console
+uv run --group docs mkdocs serve
+```
+
+## Database URLs
+
+Ormdantic accepts SQLAlchemy-style URLs, but execution uses Ormdantic's Rust drivers.
+
+```python
+Ormdantic("sqlite:///app.sqlite3")
+Ormdantic("postgresql://postgres:postgres@localhost:5432/postgres")
+Ormdantic("mysql://root:password@localhost:3306/app")
+Ormdantic("mariadb://root:password@localhost:3306/app")
+Ormdantic("mssql://sa:Password123@localhost:1433/master?trust_cert=true")
+Ormdantic("oracle://system:oracle@localhost:1521/FREEPDB1")
+```
+
+See [Drivers](drivers/index.md) for backend-specific URL notes.

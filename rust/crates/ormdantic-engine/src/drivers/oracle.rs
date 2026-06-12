@@ -161,14 +161,30 @@ mod runtime {
     fn classify_detailless_oracle_close(message: &str, sql: &str) -> Option<ExecutionErrorKind> {
         let normalized_message = message.to_ascii_lowercase();
         let normalized_sql = sql.trim().to_ascii_lowercase();
-        if normalized_message.contains("closed the connection without providing error details")
-            && looks_like_incomplete_select(&normalized_sql)
+        if looks_like_incomplete_select(&normalized_sql)
+            && contains_any(
+                &normalized_message,
+                &[
+                    "closed the connection",
+                    "insufficient privileges",
+                    "object doesn't exist",
+                    "object does not exist",
+                    "server rejected the operation",
+                ],
+            )
         {
             return Some(ExecutionErrorKind::Syntax);
         }
-        if normalized_message.contains("server rejected the operation and closed the connection")
-            && normalized_message.contains("temporary lob")
-            && starts_with_sql_keyword(&normalized_sql, "insert")
+        if starts_with_sql_keyword(&normalized_sql, "insert")
+            && contains_any(
+                &normalized_message,
+                &[
+                    "ora-00001",
+                    "unique constraint",
+                    "server rejected the operation and closed the connection",
+                    "closed the connection without providing error details",
+                ],
+            )
         {
             return Some(ExecutionErrorKind::UniqueViolation);
         }
@@ -181,6 +197,10 @@ mod runtime {
 
     fn starts_with_sql_keyword(sql: &str, keyword: &str) -> bool {
         sql.split_whitespace().next() == Some(keyword)
+    }
+
+    fn contains_any(value: &str, needles: &[&str]) -> bool {
+        needles.iter().any(|needle| value.contains(needle))
     }
 
     fn config_from_url(raw_url: &str) -> OrmdanticResult<Config> {
@@ -269,10 +289,11 @@ mod runtime {
     fn oracle_value(value: &Value, column: Option<&ColumnInfo>) -> DbValue {
         match value {
             Value::Null => DbValue::Null,
-            Value::String(value) => {
-                numeric_string_value(value, column).unwrap_or_else(|| DbValue::Text(value.clone()))
-            }
-            Value::Bytes(value) => DbValue::Text(String::from_utf8_lossy(value).to_string()),
+            Value::String(value) => binary_string_value(value, column)
+                .or_else(|| numeric_string_value(value, column))
+                .unwrap_or_else(|| DbValue::Text(value.clone())),
+            Value::Bytes(value) => binary_bytes_value(value, column)
+                .unwrap_or_else(|| DbValue::Text(String::from_utf8_lossy(value).to_string())),
             Value::Integer(value) => DbValue::Integer(*value),
             Value::Float(value) => DbValue::Real(*value),
             Value::Number(value) => parse_oracle_number(value.as_str())
@@ -280,6 +301,28 @@ mod runtime {
             Value::Boolean(value) => DbValue::Bool(*value),
             Value::Json(value) => DbValue::Text(value.to_string()),
             other => DbValue::Text(format!("{other:?}")),
+        }
+    }
+
+    fn binary_bytes_value(value: &[u8], column: Option<&ColumnInfo>) -> Option<DbValue> {
+        let column = column?;
+        match column.oracle_type {
+            OracleType::BinaryDouble => Some(DbValue::Real(decode_oracle_binary_double(value))),
+            OracleType::BinaryFloat => {
+                Some(DbValue::Real(decode_oracle_binary_float(value).into()))
+            }
+            _ => None,
+        }
+    }
+
+    fn binary_string_value(value: &str, column: Option<&ColumnInfo>) -> Option<DbValue> {
+        let column = column?;
+        match column.oracle_type {
+            OracleType::BinaryDouble => lossy_oracle_binary_bytes::<8>(value)
+                .map(|bytes| DbValue::Real(decode_oracle_binary_double(&bytes))),
+            OracleType::BinaryFloat => lossy_oracle_binary_bytes::<4>(value)
+                .map(|bytes| DbValue::Real(decode_oracle_binary_float(&bytes).into())),
+            _ => None,
         }
     }
 
@@ -307,10 +350,80 @@ mod runtime {
         }
     }
 
+    fn decode_oracle_binary_float(value: &[u8]) -> f32 {
+        let Some(bytes) = value.get(..4) else {
+            return 0.0;
+        };
+        let mut bytes: [u8; 4] = bytes.try_into().unwrap_or([0; 4]);
+        decode_oracle_binary_bytes(&mut bytes);
+        f32::from_bits(u32::from_be_bytes(bytes))
+    }
+
+    fn decode_oracle_binary_double(value: &[u8]) -> f64 {
+        let Some(bytes) = value.get(..8) else {
+            return 0.0;
+        };
+        let mut bytes: [u8; 8] = bytes.try_into().unwrap_or([0; 8]);
+        decode_oracle_binary_bytes(&mut bytes);
+        f64::from_bits(u64::from_be_bytes(bytes))
+    }
+
+    fn lossy_oracle_binary_bytes<const N: usize>(value: &str) -> Option<[u8; N]> {
+        if let Ok(bytes) = <[u8; N]>::try_from(value.as_bytes()) {
+            return Some(bytes);
+        }
+
+        let mut chars = value.chars();
+        if chars.next()? != char::REPLACEMENT_CHARACTER {
+            return None;
+        }
+        let rest = chars
+            .map(|character| u8::try_from(character as u32).ok())
+            .collect::<Option<Vec<_>>>()?;
+        if rest.len() != N.saturating_sub(1) {
+            return None;
+        }
+
+        let mut bytes = [0; N];
+        bytes[0] = infer_positive_oracle_binary_first_byte::<N>(rest[0])?;
+        bytes[1..].copy_from_slice(&rest);
+        Some(bytes)
+    }
+
+    fn infer_positive_oracle_binary_first_byte<const N: usize>(second_byte: u8) -> Option<u8> {
+        let (exponent_low, bias): (u16, i32) = match N {
+            4 => (((second_byte & 0x80) >> 7).into(), 127),
+            8 => (((second_byte & 0xf0) >> 4).into(), 1023),
+            _ => return None,
+        };
+        (0x80..=0xff)
+            .min_by_key(|candidate| {
+                let exponent_high = (candidate & 0x7f) as u16;
+                let exponent = match N {
+                    4 => (exponent_high << 1) | exponent_low,
+                    8 => (exponent_high << 4) | exponent_low,
+                    _ => 0,
+                };
+                ((i32::from(exponent) - bias).abs(), 0xff - candidate)
+            })
+            .map(|candidate| candidate as u8)
+    }
+
+    fn decode_oracle_binary_bytes(bytes: &mut [u8]) {
+        if bytes[0] & 0x80 != 0 {
+            bytes[0] &= 0x7f;
+        } else {
+            for byte in bytes {
+                *byte = !*byte;
+            }
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::{
-            classify_detailless_oracle_close, classify_oracle_code, looks_like_incomplete_select,
+            classify_detailless_oracle_close, classify_oracle_code, decode_oracle_binary_double,
+            decode_oracle_binary_float, looks_like_incomplete_select, lossy_oracle_binary_bytes,
         };
         use ormdantic_core::ExecutionErrorKind;
 
@@ -346,7 +459,21 @@ mod runtime {
             );
             assert_eq!(
                 classify_detailless_oracle_close(
+                    "SQL execution error: insufficient privileges or object does not exist",
+                    "SELECT * FROM",
+                ),
+                Some(ExecutionErrorKind::Syntax),
+            );
+            assert_eq!(
+                classify_detailless_oracle_close(
                     "ORA-00000: Server rejected the operation and closed the connection. This may happen when binding a temporary LOB to an INSERT statement.",
+                    "INSERT INTO flavors (id, name) VALUES (:1, :2)",
+                ),
+                Some(ExecutionErrorKind::UniqueViolation),
+            );
+            assert_eq!(
+                classify_detailless_oracle_close(
+                    "ORA-00000: Server rejected the operation and closed the connection.",
                     "INSERT INTO flavors (id, name) VALUES (:1, :2)",
                 ),
                 Some(ExecutionErrorKind::UniqueViolation),
@@ -365,6 +492,27 @@ mod runtime {
             assert!(looks_like_incomplete_select("select * from"));
             assert!(looks_like_incomplete_select("select id from"));
             assert!(!looks_like_incomplete_select("select * from flavor"));
+        }
+
+        #[test]
+        fn decodes_oracle_binary_float_bytes() {
+            assert_eq!(
+                decode_oracle_binary_double(&[0xc0, 0x0a, 0, 0, 0, 0, 0, 0]),
+                3.25
+            );
+            assert_eq!(decode_oracle_binary_float(&[0xc0, 0x60, 0, 0]), 3.5);
+        }
+
+        #[test]
+        fn recovers_lossy_positive_oracle_binary_float_strings() {
+            assert_eq!(
+                lossy_oracle_binary_bytes::<8>("\u{fffd}\n\0\0\0\0\0\0"),
+                Some([0xc0, 0x0a, 0, 0, 0, 0, 0, 0]),
+            );
+            assert_eq!(
+                lossy_oracle_binary_bytes::<4>("\u{fffd}`\0\0"),
+                Some([0xc0, 0x60, 0, 0]),
+            );
         }
     }
 }

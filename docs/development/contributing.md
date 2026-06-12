@@ -3,204 +3,264 @@ hide:
   - navigation
 ---
 
-# Development
+# Contributing
 
-If you already cloned the repository and you know that you need to deep dive
-into the code, here is a guideline to set up your environment:
+This guide takes you from a fresh clone to a pull request that is ready to
+review. Most commands run from the repository root.
 
-## Developing
+Ormdantic has two main parts:
 
-If you already cloned the repository and you know that you need to deep dive
-into the code, here is a guideline to set up your environment:
+- A Python package in `ormdantic/`.
+- A Rust extension in `rust/crates/` that is exposed to Python as
+  `ormdantic._ormdantic`.
 
-### Virtual environment with `uv`
+If your change touches behavior that crosses that boundary, rebuild the Rust
+extension before running Python tests.
 
-You can create a virtual environment in a directory using Python's [`uv`](https://github.com/astral-sh/uv)
-module:
+## Choose Your Path
 
-<div class="termy">
+Start by opening the section that matches your change.
 
-```console
-pip install uv
+<details markdown="1">
+<summary><strong>I am changing documentation</strong></summary>
 
-uv venv
+Use this path for edits under `docs/`, examples, API pages, and navigation.
+
+```bash
+uv sync --group docs
+uv run --group docs zensical serve
 ```
 
-</div>
+Before you open the PR, build the docs:
 
-That will create a directory `.venv` with the python binaries and then you will
-be able to install packages for that isolated environment.
-
-### Activate the environment
-
-Activate the new environment with:
-
-=== "Linux, macOS"
-
-    <div class="termy">
-
-    ```console
-    $ source ./.venv/bin/activate
-    ```
-
-    </div>
-
-=== "Windows PowerShell"
-
-    <div class="termy">
-
-    ```console
-    $ .\.venv\Scripts\Activate.ps1
-    ```
-
-    </div>
-
-=== "Windows Bash"
-
-    Or if you use Bash for Windows (e.g. <a href="https://gitforwindows.org/" class="external-link" target="_blank">Git Bash</a>):
-
-    <div class="termy">
-
-    ```console
-    $ source ./.venv/Scripts/activate
-    ```
-
-    </div>
-
-To check it worked, use:
-
-=== "Linux, macOS, Windows Bash"
-
-    <div class="termy">
-
-    ```console
-    $ which pip
-    ```
-
-    </div>
-
-=== "Windows PowerShell"
-
-    <div class="termy">
-
-    ```console
-    $ Get-Command pip
-    ```
-
-    </div>
-
-If it shows the `pip` binary at `venv/bin/pip` then it worked. 🎉
-
-!!! tip
-
-    Every time you install a new package with `pip` under that environment,
-    activate the environment again.
-
-    This makes sure that if you use a terminal program installed by that package (like `pre-commit`), you use the one from your local environment and not any other that could be installed globally.
-
-### pip
-
-After activating the environment as described above, Now lets install all the package that you need to develop ormdantic:
-
-<div class="termy">
-
-```console
-$ uv sync --all-groups
-
----> 100%
+```bash
+bash scripts/docs_build.sh
 ```
 
-</div>
+If you add or move a page, update `mkdocs.yml` so it appears in the site
+navigation.
 
-It will install all the dependencies in your local environment.
+</details>
 
-#### Including
+<details markdown="1">
+<summary><strong>I am changing Python behavior</strong></summary>
 
-The dependency groups in `pyproject.toml` contain all the dependencies that you need to develop
-Ormdantic, including:
+Use this path for changes in `ormdantic/`, the CLI, migrations, query helpers,
+sessions, loading, serializers, or Python-side errors.
 
-- The Base Dependencies - the ones that are needed to run ormdantic.
-  [See Installation](../installation.md).
-
-### Format
-
-For Providing a good and consistent experience, we recommend using
-[pre-commit](https://pre-commit.com/) - a tool that runs a set of checks before
-you commit your code.
-
-#### Git Hooks
-
-First you need to install the [pre-commit](https://pre-commit.com/) tool, which
-is installed before with the Dev Dependencies.
-
-Now, install the pre-commit hooks in your `.git/hooks/` directory:
-
-<div class="termy">
-
-```console
-$ pre-commit install
+```bash
+uv sync --group dev
+uv run --group dev maturin develop
+uv run --group testing pytest tests/unit -q
 ```
 
-</div>
+Then run the smallest integration test that covers the changed behavior. For a
+full Python check, run:
 
-This one will provide a linting check before you commit your code.
-
-#### Including
-
-The `.pre-commit-config.yaml` contains the following configuration with the
-linting packages.
-
-- `pre-commit-hooks` - Some out-of-the-box hooks for pre-commit.
-- `ruff-pre-commit` - A tool to check Python code for errors.
-
-## Documentation
-
-First, make sure you set up your environment as described above, that will
-install all the requirements.
-
-The documentation uses
-<a href="https://zensical.org/" class="external-link" target="_blank">Zensical</a>.
-
-All the documentation is in Markdown format in the directory `./docs`.
-
-### Including
-
-To Build ormdantic Documentation we need the following packages, which are:
-
-- `zensical` - The tool and theme that builds the documentation.
-- `mkdocstrings` - The plugin that renders API reference pages.
-- `mdx-include` and `markdown-include-variants` - Extensions for reusable
-  documentation snippets.
-
-Build the documentation with:
-
-```console
-$ uv run --group docs zensical build --strict
+```bash
+bash scripts/test.sh
 ```
 
-## Testing
+</details>
 
-all the dependencies that you need to test ormdantic, which are:
+<details markdown="1">
+<summary><strong>I am changing the Rust engine</strong></summary>
 
-### Including
+Use this path for changes under `rust/crates/`, SQL generation, native drivers,
+hydration, or the Python extension boundary.
 
-- `pytest` - The tool that runs the tests.
-- `pytest-asyncio` - The plugin that runs the tests in the background.
-
-and other dependencies that are needed to run the tests.
-
-### Generate a Test Report
-
-As we know, the tests are very important to make sure that ormdantic works as
-expected, that why i provide a multi test for and functions to provide a good
-test.
-
-If you want to generate the test report:
-
-<div class="termy">
-
-```console
-$ bash scripts/test.sh
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --exclude ormdantic-py
+uv run --group dev maturin develop
+bash scripts/test.sh
 ```
 
-</div>
+Re-run `maturin develop` after Rust changes so Python imports the extension you
+just built.
+
+</details>
+
+<details markdown="1">
+<summary><strong>I am changing database dialect behavior</strong></summary>
+
+Use this path for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, or
+dialect-specific migration behavior.
+
+SQLite is covered by the normal test suite. Server databases are covered by the
+Docker matrix:
+
+```bash
+bash docker/databases/run-tests.sh
+```
+
+The matrix starts the database services, exports the `ORMDANTIC_TEST_*_URL` and
+`ORMDANTIC_*_URL` environment variables, and runs the external Python and Rust
+checks. See `docker/databases/README.md` for the exact URLs.
+
+</details>
+
+<details markdown="1">
+<summary><strong>I am changing performance-sensitive code</strong></summary>
+
+Use this path for serializer, hydration, query planning, and driver changes
+that may affect throughput or allocations.
+
+```bash
+uv run --group dev maturin develop
+uv run pytest tests/benchmarks
+```
+
+If the change is intended to improve performance, include the benchmark command
+and result summary in the PR description.
+
+</details>
+
+## Setup Once
+
+Install the tools you need:
+
+- Python 3.10 or newer.
+- A stable Rust toolchain with `cargo`.
+- `uv`.
+- Docker, only when you need the server database matrix.
+
+Clone the repository and install the development environment:
+
+```bash
+git clone https://github.com/yezz123/ormdantic.git
+cd ormdantic
+uv sync --group dev
+uv run --group dev maturin develop
+```
+
+`uv sync --group dev` installs the testing, linting, documentation, and native
+build dependencies declared in `pyproject.toml`.
+
+You can run commands through `uv run` without activating the virtual
+environment. If you prefer an activated shell, use:
+
+```bash
+source .venv/bin/activate
+```
+
+On Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install Git hooks after the first sync:
+
+```bash
+uv run --group linting pre-commit install
+```
+
+The hooks run the configured `pre-commit-hooks` and Ruff checks before commits.
+
+## Command Reference
+
+| Goal | Command |
+| --- | --- |
+| Install all development dependencies | `uv sync --group dev` |
+| Rebuild the Python extension | `uv run --group dev maturin develop` |
+| Run Python tests with coverage | `bash scripts/test.sh` |
+| Run one Python test file | `uv run --group testing pytest tests/unit/test_expression_api.py -q` |
+| Type-check Python | `bash scripts/lint.sh` |
+| Run pre-commit on every file | `bash scripts/format.sh` |
+| Check Rust formatting | `cargo fmt --check` |
+| Run Rust clippy | `cargo clippy --workspace --all-targets -- -D warnings` |
+| Run Rust tests | `cargo test --workspace --exclude ormdantic-py` |
+| Serve the docs locally | `uv run --group docs zensical serve` |
+| Build the docs | `bash scripts/docs_build.sh` |
+| Run the server database matrix | `bash docker/databases/run-tests.sh` |
+
+## Development Loop
+
+1. Create a focused branch:
+
+    ```bash
+    git checkout -b fix/short-description
+    ```
+
+2. Make the smallest change that solves the issue.
+
+3. Add or update tests close to the behavior you changed.
+
+4. Rebuild the extension if Rust changed:
+
+    ```bash
+    uv run --group dev maturin develop
+    ```
+
+5. Run the narrowest useful test first, then run the broader check that matches
+   your change path.
+
+6. Update documentation when behavior, configuration, commands, or public API
+   changes.
+
+## Pull Request Checklist
+
+Use this as a final pass before opening a PR:
+
+- The change is focused on one problem or feature.
+- User-facing behavior has tests or a clear reason tests are not practical.
+- Documentation is updated for new commands, APIs, options, or behavior.
+- Rust changes were rebuilt with `uv run --group dev maturin develop`.
+- Relevant Python, Rust, docs, or database checks pass locally.
+- The PR description explains what changed, why it changed, and how it was
+  tested.
+- The contribution follows the [Code of Conduct](../faq/code_of_conduct.md).
+
+## Troubleshooting
+
+<details markdown="1">
+<summary><strong>Python cannot import <code>ormdantic._ormdantic</code></strong></summary>
+
+The native extension is missing or stale. Rebuild it from the repository root:
+
+```bash
+uv run --group dev maturin develop
+```
+
+</details>
+
+<details markdown="1">
+<summary><strong>A command is missing from the virtual environment</strong></summary>
+
+Sync the dependency group that owns the command:
+
+```bash
+uv sync --group dev
+uv sync --group docs
+uv sync --group linting
+uv sync --group testing
+```
+
+Prefer `uv run ...` so the command comes from the local environment.
+
+</details>
+
+<details markdown="1">
+<summary><strong>Database tests cannot connect</strong></summary>
+
+For PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle tests, run the database
+matrix script:
+
+```bash
+bash docker/databases/run-tests.sh
+```
+
+If you use your own database services, set the matching `ORMDANTIC_TEST_*_URL`
+environment variables before running the external tests.
+
+</details>
+
+<details markdown="1">
+<summary><strong>Docs build locally but the page is missing from navigation</strong></summary>
+
+Add the page to the `nav` section in `mkdocs.yml`. The docs builder can render a
+Markdown file even when the site navigation does not link to it.
+
+</details>

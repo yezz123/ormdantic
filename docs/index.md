@@ -1,56 +1,65 @@
----
-hide:
-  - navigation
----
-
-<section class="brand-hero">
-  <p class="brand-eyebrow">Rust-backed ORM for Pydantic applications</p>
-  <h1>Ormdantic</h1>
-  <p>Define tables with Pydantic v2 models. Let Rust handle SQL compilation, native execution, relationship planning, and hydration.</p>
-  <p>
-    <a class="brand-button" href="installation/">Install Ormdantic</a>
-    <a class="brand-button brand-button-secondary" href="examples/basic-crud/">View Examples</a>
-  </p>
-</section>
+# Ormdantic
 
 <p align="center">
-<a href="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml" target="_blank">
-    <img src="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml/badge.svg" alt="Test">
-</a>
-<a href="https://codecov.io/gh/yezz123/ormdantic">
-    <img src="https://codecov.io/gh/yezz123/ormdantic/branch/main/graph/badge.svg"/>
-</a>
-<a href="https://pypi.org/project/ormdantic" target="_blank">
-    <img src="https://img.shields.io/pypi/v/ormdantic?color=%2334D058&label=pypi%20package" alt="Package version">
-</a>
-<a href="https://github.com/sponsors/yezz123" target="_blank">
-    <img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86" alt="Sponsor">
-</a>
+  <img src="logo.svg" alt="Ormdantic logo" width="540">
 </p>
 
-Ormdantic is a library for interacting with asynchronous <abbr title='Also called "Relational databases"'>SQL databases</abbr> from Python code, with Python objects. It is designed to be intuitive, explicit, and robust.
+Ormdantic is a Rust-backed asynchronous ORM for Python applications that already use Pydantic models as their data boundary.
 
-**Ormdantic** is powered by Rust SQL compilation and native Rust database execution, uses <a href="https://docs.pydantic.dev/" class="external-link" target="_blank">Pydantic</a> models, and is built for applications that want a small Python facade over a native runtime.
+It keeps the public API Pythonic:
 
-<div class="brand-grid">
-  <div class="brand-card">
-    <h3>Pydantic-first tables</h3>
-    <p>Use Pydantic models for validation, serialization, and ORM table declarations.</p>
-  </div>
-  <div class="brand-card">
-    <h3>Native Rust runtime</h3>
-    <p>Rust owns SQL compilation, bind ordering, native execution, and row hydration.</p>
-  </div>
-  <div class="brand-card">
-    <h3>Async-safe loading</h3>
-    <p>Relationship loading is explicit, predictable, and designed for async applications.</p>
-  </div>
-</div>
+- declare tables with Pydantic v2 models;
+- register them with `Ormdantic`;
+- query, insert, update, delete, migrate, and reflect schemas from Python;
+- let the Rust runtime handle SQL compilation, hydration, and database execution.
 
-## Supported Runtimes
+The result is an ORM that is intentionally smaller than SQLAlchemy, more database-aware than a generic repository layer, and explicit about async behavior.
 
-SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle are compiled into the default Python extension.
+## What Ormdantic Gives You
 
-## License
+| Need | Ormdantic answer |
+| --- | --- |
+| One model shape for API and persistence | Pydantic models are the table models. |
+| Fast SQL compilation and row hydration | Rust owns query compilation, result-shape planning, and native execution. |
+| Async-safe relationship loading | Relationship paths are loaded explicitly with `joinedload`, `selectinload`, `lazyload`, or `noload`. |
+| Cross-driver schema metadata | Table, column, index, constraint, sequence, namespace, and view options are modeled in Python. |
+| Native migrations | Snapshots, diffs, plans, migration files, history, repair, rollback, and live reflection are built in. |
+| Backend-specific control | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite each have their own documented behavior. |
 
-This project is licensed under the terms of the MIT license.
+## First Example
+
+```python
+from pydantic import BaseModel, Field
+
+from ormdantic import Ormdantic
+
+db = Ormdantic("sqlite:///app.sqlite3")
+
+
+@db.table(pk="id", indexed=["name"])
+class Flavor(BaseModel):
+    id: str
+    name: str = Field(min_length=2, max_length=80)
+    rating: int = 0
+
+
+async def main() -> None:
+    await db.init()
+    await db[Flavor].insert(Flavor(id="vanilla", name="Vanilla", rating=5))
+
+    result = await db[Flavor].find_many(
+        {"rating": {"gte": 4}},
+        order_by=["name"],
+    )
+    assert [flavor.name for flavor in result.data] == ["Vanilla"]
+```
+
+## Where To Go Next
+
+- Read [Why Ormdantic](why-ormdantic.md) for the problem it solves.
+- Read [Philosophy](philosophy.md) for the design boundaries.
+- Use [Learning Path](learning-path.md) to choose the beginner, intermediate, or advanced reading order.
+- Follow [Quickstart](quickstart.md) to build a small app.
+- Use [Concepts](concepts/index.md) when you need to understand how a feature fits.
+- Use [Drivers](drivers/index.md) when choosing or tuning a database backend.
+- Use [Python API](api/reference.md) for generated reference pages.
