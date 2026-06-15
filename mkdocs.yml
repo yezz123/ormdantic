@@ -186,6 +186,7 @@ nav:
       - Internals: api/internals.md
   - Development:
       - Contributing: development/contributing.md
+      - Releasing: development/releasing.md
       - Rust Core: architecture/rust-core.md
       - Dialect Support: architecture/dialect-support.md
   - FAQ:
