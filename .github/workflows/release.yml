@@ -1,27 +1,290 @@
-name: Release Artifacts
+name: Release
 
 on:
-  release:
-    types:
-      - created
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to crates.io, PyPI, and GitHub Releases
+        required: true
+        default: false
+        type: boolean
+
+env:
+  COLUMNS: 150
+  FORCE_COLOR: 1
+  UV_FROZEN: true
+  CRATE_PUBLISH_ORDER: >-
+    ormdantic-core
+    ormdantic-schema
+    ormdantic-dialects
+    ormdantic-hydrate
+    ormdantic-sql
+    ormdantic-engine
+    ormdantic-py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: build artifacts on ${{ matrix.os }}
+  metadata:
+    name: Validate release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      publish: ${{ steps.metadata.outputs.publish }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Validate versions and tag
+        id: metadata
+        run: |
+          python <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+          from pathlib import Path
+
+          init_py = Path("ormdantic/__init__.py").read_text()
+          match = re.search(r'__version__\s*=\s*"([^"]+)"', init_py)
+          if match is None:
+              raise SystemExit("Could not find ormdantic.__version__")
+
+          py_version = match.group(1)
+          cargo_workspace = tomllib.loads(Path("Cargo.toml").read_text())["workspace"]
+          cargo_version = cargo_workspace["package"]["version"]
+          if py_version != cargo_version:
+              raise SystemExit(f"Python version {py_version} does not match Rust workspace version {cargo_version}")
+
+          for name, dependency in cargo_workspace["dependencies"].items():
+              if name.startswith("ormdantic-") and dependency["version"] != cargo_version:
+                  raise SystemExit(
+                      f"{name} dependency version {dependency['version']} does not match {cargo_version}"
+                  )
+
+          print(f"version={py_version}")
+          print(f"tag=v{py_version}")
+          PY
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.publish }}" != "true" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require release tag for publishing
+        if: steps.metadata.outputs.publish == 'true'
+        run: |
+          expected_tag="${{ steps.metadata.outputs.tag }}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+            echo "::error::Publishing requires the ${expected_tag} tag; got ${GITHUB_REF_TYPE} ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+
+  verify:
+    name: Verify release build
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - run: cargo fmt --check
+
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - run: cargo test --workspace --exclude ormdantic-py
+
+      - run: uv sync --group dev
+
+      - run: uv run --group dev maturin develop
+
+      - run: bash scripts/test.sh
+        env:
+          DATABASE_URL: sqlite:///db.sqlite3
+
+  publish-crates:
+    name: Publish Rust crates
+    needs: [metadata, verify]
+    if: needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+
+      - name: Publish crates in dependency order
+        run: |
+          wait_for_crate() {
+            local crate="$1"
+            for attempt in {1..30}; do
+              if cargo info "${crate}@${VERSION}" >/dev/null 2>&1; then
+                return 0
+              fi
+              echo "Waiting for ${crate}@${VERSION} to appear in the crates.io index (${attempt}/30)..."
+              sleep 10
+            done
+
+            echo "::error::${crate}@${VERSION} did not appear in the crates.io index."
+            exit 1
+          }
+
+          for crate in ${CRATE_PUBLISH_ORDER}; do
+            if cargo info "${crate}@${VERSION}" >/dev/null 2>&1; then
+              echo "${crate}@${VERSION} is already published; skipping."
+            else
+              cargo publish -p "$crate" --locked --dry-run
+              cargo publish -p "$crate" --locked
+            fi
+
+            wait_for_crate "$crate"
+          done
+
+  build-sdist:
+    name: Build source distribution
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          args: --out dist
+
+      - run: uvx twine check --strict dist/*
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ormdantic-sdist
+          path: dist/*
+
+  build-wheels:
+    name: Build wheel on ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    needs: metadata
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: PyO3/maturin-action@v1
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
-          args: --release --sdist --out dist
-      - uses: actions/upload-artifact@v7
+          args: --release --out dist
+
+      - run: uvx twine check --strict dist/*
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-artifacts-${{ matrix.os }}
+          name: ormdantic-wheels-${{ matrix.os }}-py${{ matrix.python-version }}
           path: dist/*
+
+  publish-pypi:
+    name: Publish Python package
+    needs: [metadata, publish-crates, build-sdist, build-wheels]
+    if: needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ormdantic-*
+          merge-multiple: true
+          path: dist
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - run: ls -lh dist/
+
+      - run: uv publish --trusted-publishing always dist/*
+
+  github-release:
+    name: Publish GitHub release
+    needs: [metadata, publish-pypi, build-sdist, build-wheels]
+    if: needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ormdantic-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create or update GitHub release
+        run: |
+          tag="${{ needs.metadata.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* \
+              --title "Ormdantic ${{ needs.metadata.outputs.version }}" \
+              --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
