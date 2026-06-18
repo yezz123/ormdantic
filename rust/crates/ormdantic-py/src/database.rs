@@ -312,7 +312,7 @@ impl PyDatabase {
             let column = PyDict::new(py);
             column.set_item("name", row.first().and_then(db_value_to_string))?;
             column.set_item("type", row.get(1).and_then(db_value_to_string))?;
-            column.set_item("nullable", row.get(2).map_or(true, db_value_to_bool))?;
+            column.set_item("nullable", row.get(2).is_none_or(db_value_to_bool))?;
             column.set_item("default", row.get(3).and_then(db_value_to_string))?;
             column.set_item("primary_key", row.get(4).is_some_and(db_value_to_bool))?;
             columns.append(column)?;

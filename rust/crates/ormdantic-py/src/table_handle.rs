@@ -336,7 +336,7 @@ impl PyTableHandle {
     }
 
     fn select_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let query = query.downcast::<PyDict>()?;
+        let query = query.cast::<PyDict>()?;
         let dialect = self.dialect()?;
         let mut ast = select_ast_from_payload(py, query)?;
         if dialect.kind() == DialectKind::Sqlite {
@@ -350,7 +350,7 @@ impl PyTableHandle {
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let empty_values = PyDict::new(py);
         let values = match query.get_item("values")? {
-            Some(values) => values.downcast::<PyDict>()?.clone(),
+            Some(values) => values.cast::<PyDict>()?.clone(),
             None => empty_values,
         };
         let params = bind_values(py, compiled.params(), &values)?;
@@ -358,7 +358,7 @@ impl PyTableHandle {
     }
 
     fn update_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let query = query.downcast::<PyDict>()?;
+        let query = query.cast::<PyDict>()?;
         let dialect = self.dialect()?;
         let mut ast = update_ast_from_payload(py, query)?;
         if dialect.kind() == DialectKind::Sqlite {
@@ -372,7 +372,7 @@ impl PyTableHandle {
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let empty_values = PyDict::new(py);
         let values = match query.get_item("values")? {
-            Some(values) => values.downcast::<PyDict>()?.clone(),
+            Some(values) => values.cast::<PyDict>()?.clone(),
             None => empty_values,
         };
         let params = bind_values(py, compiled.params(), &values)?;

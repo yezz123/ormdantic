@@ -91,7 +91,7 @@ pub(crate) fn hydrate_joined(
                 let branch_node = node
                     .get_item(branch)?
                     .expect("branch exists")
-                    .downcast_into::<PyDict>()?;
+                    .cast_into::<PyDict>()?;
                 if array_paths.contains(&current_path) {
                     if !branch_node.contains(pk_value.bind(py))? {
                         branch_node.set_item(pk_value.bind(py), PyDict::new(py))?;
@@ -99,7 +99,7 @@ pub(crate) fn hydrate_joined(
                     node = branch_node
                         .get_item(pk_value.bind(py))?
                         .expect("array item exists")
-                        .downcast_into::<PyDict>()?;
+                        .cast_into::<PyDict>()?;
                 } else {
                     node = branch_node;
                 }

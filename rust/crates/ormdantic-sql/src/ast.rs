@@ -784,7 +784,7 @@ fn is_sqlite_decimal_column(
     match expr {
         Expr::Column { table, name } if decimal_columns.contains(name) => table
             .as_ref()
-            .map_or(true, |table| table_names.iter().any(|known| known == table)),
+            .is_none_or(|table| table_names.iter().any(|known| known == table)),
         _ => false,
     }
 }

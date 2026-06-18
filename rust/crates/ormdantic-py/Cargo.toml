@@ -30,7 +30,7 @@ ormdantic-sql.workspace = true
 pyo3.workspace = true
 
 [build-dependencies]
-pyo3-build-config = { version = "0.26", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.29.0", features = ["resolve-config"] }
 version_check = "0.9"
 
 [dev-dependencies]

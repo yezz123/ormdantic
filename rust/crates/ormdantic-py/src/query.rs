@@ -72,7 +72,7 @@ fn normalize_filter_input_for_python(
     if filters.extract::<Vec<FilterSpec>>().is_ok() {
         return Ok(filters.clone().unbind());
     }
-    let dict = filters.downcast::<PyDict>()?;
+    let dict = filters.cast::<PyDict>()?;
     if dict.contains("connector")? {
         return normalize_filter_tree_for_python(py, dict, values, prefix.unwrap_or("expr"));
     }
@@ -270,7 +270,7 @@ pub(crate) fn parse_filter_input(filters: &Bound<'_, PyAny>) -> PyResult<Vec<Fil
         return filter_specs(specs);
     }
 
-    let dict = filters.downcast::<PyDict>()?;
+    let dict = filters.cast::<PyDict>()?;
     let connector: String = dict
         .get_item("connector")?
         .ok_or_else(|| PyValueError::new_err("filter tree missing connector"))?
@@ -616,7 +616,7 @@ pub(crate) fn compile_typed_expression_query(
     dialect: &str,
     query: &Bound<'_, PyAny>,
 ) -> PyResult<Py<PyAny>> {
-    let query = query.downcast::<PyDict>()?;
+    let query = query.cast::<PyDict>()?;
     let dialect =
         AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
     let compiled = select_ast_from_payload(py, query)?
@@ -638,7 +638,7 @@ pub(crate) fn compile_typed_update_query(
     dialect: &str,
     query: &Bound<'_, PyAny>,
 ) -> PyResult<Py<PyAny>> {
-    let query = query.downcast::<PyDict>()?;
+    let query = query.cast::<PyDict>()?;
     let dialect =
         AnyDialect::parse(dialect).map_err(|error| PyValueError::new_err(error.to_string()))?;
     let compiled = update_ast_from_payload(py, query)?
@@ -704,7 +704,7 @@ pub(crate) fn update_ast_from_payload(
         .extract::<Vec<Py<PyAny>>>()?
         .into_iter()
         .map(|assignment| {
-            let assignment = assignment.bind(py).downcast::<PyDict>()?;
+            let assignment = assignment.bind(py).cast::<PyDict>()?;
             Ok((
                 required_item(assignment, "column")?.extract::<String>()?,
                 parse_expression(required_item(assignment, "expr")?)?,
@@ -724,7 +724,7 @@ fn parse_projections(py: Python<'_>, projections: Vec<Py<PyAny>>) -> PyResult<Ve
     projections
         .into_iter()
         .map(|projection| {
-            let projection = projection.bind(py).downcast::<PyDict>()?;
+            let projection = projection.bind(py).cast::<PyDict>()?;
             let expr = parse_expression(required_item(projection, "expr")?)?;
             match projection.get_item("alias")? {
                 Some(alias) => Ok(Projection::aliased(expr, alias.extract::<String>()?)),
@@ -747,7 +747,7 @@ fn parse_order_expressions(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<
         .extract::<Vec<Py<PyAny>>>()?
         .into_iter()
         .map(|order| {
-            let order_payload = order.bind(py).downcast::<PyDict>()?;
+            let order_payload = order.bind(py).cast::<PyDict>()?;
             let expr = parse_expression(required_item(order_payload, "expr")?)?;
             let direction: String = required_item(order_payload, "direction")?.extract()?;
             let mut order_expr = OrderExpr::new(expr, parse_sort_direction(&direction)?);
@@ -764,9 +764,9 @@ fn parse_ctes(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Vec<CommonTab
         .extract::<Vec<Py<PyAny>>>()?
         .into_iter()
         .map(|cte| {
-            let cte_payload = cte.bind(py).downcast::<PyDict>()?;
+            let cte_payload = cte.bind(py).cast::<PyDict>()?;
             let query = required_item(cte_payload, "query")?;
-            let query = query.downcast::<PyDict>()?;
+            let query = query.cast::<PyDict>()?;
             let mut cte = CommonTableExpr::new(
                 required_item(cte_payload, "name")?.extract::<String>()?,
                 select_ast_from_payload(py, query)?,
@@ -783,7 +783,7 @@ fn parse_ctes(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Vec<CommonTab
 }
 
 fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
-    let expr = expr.downcast::<PyDict>()?;
+    let expr = expr.cast::<PyDict>()?;
     let kind: String = required_item(expr, "kind")?.extract()?;
     match kind.as_str() {
         "column" => {
@@ -863,7 +863,7 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
                 .extract::<Vec<Py<PyAny>>>()?
                 .into_iter()
                 .map(|when| {
-                    let when = when.bind(expr.py()).downcast::<PyDict>()?;
+                    let when = when.bind(expr.py()).cast::<PyDict>()?;
                     Ok((
                         parse_expression(required_item(when, "when")?)?,
                         parse_expression(required_item(when, "then")?)?,
@@ -921,7 +921,7 @@ fn parse_expression(expr: Bound<'_, PyAny>) -> PyResult<Expr> {
 
 fn parse_select_subquery(expr: &Bound<'_, PyDict>) -> PyResult<SelectAst> {
     let query = required_item(expr, "query")?;
-    let query = query.downcast::<PyDict>()?;
+    let query = query.cast::<PyDict>()?;
     select_ast_from_payload(expr.py(), query)
 }
 

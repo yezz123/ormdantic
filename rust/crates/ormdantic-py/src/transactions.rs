@@ -2,7 +2,7 @@ use ormdantic_core::{DeferrableMode, IsolationLevel, TransactionAccessMode, Tran
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Default)]
 pub(crate) struct PyTransactionOptions {
     isolation_level: Option<String>,

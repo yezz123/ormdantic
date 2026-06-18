@@ -864,7 +864,7 @@ pub(crate) fn runtime_table_specs_from_py(
 }
 
 fn runtime_table_spec_from_py(table: &Bound<'_, PyAny>) -> PyResult<RuntimeTableSpec> {
-    let tuple = table.downcast::<PyTuple>()?;
+    let tuple = table.cast::<PyTuple>()?;
     match tuple.len() {
         12 => {
             let model_key = tuple.get_item(0)?.extract::<String>()?;
@@ -885,7 +885,7 @@ fn runtime_table_spec_from_py(table: &Bound<'_, PyAny>) -> PyResult<RuntimeTable
                 .extract::<Vec<RuntimeExclusionConstraint>>()?;
             let table_options = tuple.get_item(10)?;
             let relationships = tuple.get_item(11)?.extract::<Vec<RuntimeRelationship>>()?;
-            if let Ok(table_options) = table_options.downcast::<PyTuple>() {
+            if let Ok(table_options) = table_options.cast::<PyTuple>() {
                 Ok((
                     model_key,
                     tablename,
