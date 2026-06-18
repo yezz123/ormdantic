@@ -45,6 +45,10 @@
 
 * ✨  Enhance Oracle error handling and revise documentation. PR [#257](https://github.com/yezz123/ormdantic/pull/257) by [@yezz123](https://github.com/yezz123).
 
+### Internal
+
+* :wrench: add version bumping script & revamp release workflow. PR [#258](https://github.com/yezz123/ormdantic/pull/258) by [@yezz123](https://github.com/yezz123).
+
 ## 1.7.0
 
 ### Features
