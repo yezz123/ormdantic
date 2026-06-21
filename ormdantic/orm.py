@@ -1,6 +1,7 @@
 """Module providing a way to create ORM models and schemas"""
 
 import importlib
+from time import perf_counter
 from types import UnionType
 from typing import Any, Callable, ForwardRef, Literal, Type, Union, get_args, get_origin
 
@@ -14,7 +15,10 @@ from ormdantic._introspect import (
 from ormdantic.errors import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
+    SchemaError,
+    TransactionError,
     UndefinedBackReferenceError,
+    classify_native_error,
 )
 from ormdantic.events import EventHandler, EventRegistry
 from ormdantic.expressions import RelationExpression
@@ -134,7 +138,14 @@ class Ormdantic:
     Ormdantic provides a way to create ORM models and schemas.
     """
 
-    def __init__(self, connection: str) -> None:
+    def __init__(
+        self,
+        connection: str,
+        *,
+        debug: bool = False,
+        log_queries: bool = False,
+        query_logger: EventHandler | None = None,
+    ) -> None:
         """Register models as ORM models and create schemas"""
         self._tables: dict[Type, Table] = {}  # type: ignore
         self._connection = connection
@@ -144,6 +155,10 @@ class Ormdantic:
         self._sequences: list[DatabaseSequence] = []
         self._views: list[DatabaseView] = []
         self._runtime: Any | None = None
+        self._debug = debug
+        self._log_queries = log_queries
+        if query_logger is not None:
+            self._events.on("after_execute", query_logger)
 
     def __getitem__(self, item: Type[ModelType]) -> Table[ModelType]:
         """Get a `Table` for the given pydantic model."""
@@ -577,49 +592,70 @@ class Ormdantic:
                 rust_handle=self._runtime.table(table_data.model.__name__),
                 events=self._events,
                 runtime=self._runtime,
+                connection=self._connection,
+                debug=self._debug,
+                log_queries=self._log_queries,
             )
         await self.create_all()
 
     async def create_all(self) -> None:
         """Create all registered tables."""
-        if self._runtime is None:
-            self._runtime = self._build_runtime_database()
-        self._create_registered_namespaces()
-        self._create_registered_sequences()
-        self._runtime.create_all()
-        self._create_registered_postgres_unique_options()
-        self._create_registered_constraint_comments()
-        self._create_registered_postgres_index_options()
-        self._create_registered_mssql_index_options()
-        self._create_registered_oracle_index_options()
-        self._create_registered_mysql_index_options()
-        self._create_registered_index_tablespaces()
-        self._create_registered_index_comments()
-        self._create_registered_enum_type_comments()
-        self._create_registered_views()
+        try:
+            if self._runtime is None:
+                self._runtime = self._build_runtime_database()
+            self._create_registered_namespaces()
+            self._create_registered_sequences()
+            self._runtime.create_all()
+            self._create_registered_postgres_unique_options()
+            self._create_registered_constraint_comments()
+            self._create_registered_postgres_index_options()
+            self._create_registered_mssql_index_options()
+            self._create_registered_oracle_index_options()
+            self._create_registered_mysql_index_options()
+            self._create_registered_index_tablespaces()
+            self._create_registered_index_comments()
+            self._create_registered_enum_type_comments()
+            self._create_registered_views()
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=SchemaError,
+                message="schema creation failed",
+                context=self._context("create_all"),
+            )
+            raise error from exc
 
     async def drop_all(self) -> None:
         """Drop all registered tables."""
-        if self._runtime is not None:
+        try:
+            if self._runtime is not None:
+                self._drop_registered_views()
+                self._runtime.drop_all()
+                self._drop_registered_sequences()
+                self._drop_registered_namespaces()
+                return
             self._drop_registered_views()
-            self._runtime.drop_all()
+            for table_data in reversed(list(self._table_map.name_to_data.values())):
+                sql = _ormdantic.compile_drop_table_sql(
+                    self._connection, table_data.tablename
+                )
+                _ormdantic.execute_native(self._connection, sql, [])
+            for enum_type in reversed(self._runtime_enum_type_specs()):
+                _ormdantic.execute_native(
+                    self._connection,
+                    _drop_runtime_enum_type_sql(enum_type),
+                    [],
+                )
             self._drop_registered_sequences()
             self._drop_registered_namespaces()
-            return
-        self._drop_registered_views()
-        for table_data in reversed(list(self._table_map.name_to_data.values())):
-            sql = _ormdantic.compile_drop_table_sql(
-                self._connection, table_data.tablename
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=SchemaError,
+                message="schema drop failed",
+                context=self._context("drop_all"),
             )
-            _ormdantic.execute_native(self._connection, sql, [])
-        for enum_type in reversed(self._runtime_enum_type_specs()):
-            _ormdantic.execute_native(
-                self._connection,
-                _drop_runtime_enum_type_sql(enum_type),
-                [],
-            )
-        self._drop_registered_sequences()
-        self._drop_registered_namespaces()
+            raise error from exc
 
     def transaction(
         self,
@@ -692,6 +728,10 @@ class Ormdantic:
         """Register an event handler."""
         return self._events.on(event, handler)
 
+    def on_query(self, handler: EventHandler) -> EventHandler:
+        """Register a handler for completed query diagnostics."""
+        return self._events.on("after_execute", handler)
+
     def off(self, event: str, handler: EventHandler) -> None:
         """Remove a registered event handler."""
         self._events.off(event, handler)
@@ -699,6 +739,17 @@ class Ormdantic:
     def clear_events(self, event: str | None = None) -> None:
         """Clear event handlers for one event or all events."""
         self._events.clear(event)
+
+    def runtime_diagnostics(self) -> dict[str, Any]:
+        """Return non-secret runtime metadata for this database instance."""
+        return {
+            "backend": self._backend(),
+            "debug": self._debug,
+            "log_queries": self._log_queries,
+            "runtime_initialized": self._runtime is not None,
+            "registered_tables": sorted(self._table_map.name_to_data),
+            "capabilities": _ormdantic.runtime_capabilities(),
+        }
 
     async def load(self, model: ModelType, path: LoaderPathLike) -> Any:
         """Explicitly load a relationship path for a model instance."""
@@ -908,19 +959,44 @@ class Ormdantic:
             self._runtime = self._build_runtime_database()
         return self._runtime
 
+    def _backend(self) -> str:
+        scheme = self._connection.split("://", 1)[0].split("+", 1)[0].lower()
+        if scheme == "postgres":
+            return "postgresql"
+        return scheme
+
+    def _context(self, operation: str, **extra: Any) -> dict[str, Any]:
+        return {
+            "operation": operation,
+            "backend": self._backend(),
+            **{key: value for key, value in extra.items() if value is not None},
+        }
+
     def _build_runtime_database(self) -> Any:
-        enum_types = self._runtime_enum_type_specs()
-        native_enum_types = bool(enum_types)
-        tables = self._runtime_table_specs(
-            native_enum_types=native_enum_types,
-            for_rust=True,
-        )
-        if enum_types:
-            runtime_enum_types = [
-                (name, values, schema) for name, values, schema, _comment in enum_types
-            ]
-            return _ormdantic.PyDatabase(self._connection, tables, runtime_enum_types)
-        return _ormdantic.PyDatabase(self._connection, tables)
+        try:
+            enum_types = self._runtime_enum_type_specs()
+            native_enum_types = bool(enum_types)
+            tables = self._runtime_table_specs(
+                native_enum_types=native_enum_types,
+                for_rust=True,
+            )
+            if enum_types:
+                runtime_enum_types = [
+                    (name, values, schema)
+                    for name, values, schema, _comment in enum_types
+                ]
+                return _ormdantic.PyDatabase(
+                    self._connection, tables, runtime_enum_types
+                )
+            return _ormdantic.PyDatabase(self._connection, tables)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=SchemaError,
+                message="database runtime initialization failed",
+                context=self._context("runtime_init"),
+            )
+            raise error from exc
 
     def _runtime_enum_type_specs(
         self,
@@ -1498,28 +1574,121 @@ class Ormdantic:
         )
 
     async def _begin(self, options: Any | None = None) -> None:
-        await self._events.dispatch("before_begin", database=self)
-        self._ensure_runtime().begin(options)
-        await self._events.dispatch("after_begin", database=self)
+        payload = {"database": self, **self._context("begin")}
+        await self._events.dispatch("before_begin", **payload)
+        started = perf_counter()
+        try:
+            self._ensure_runtime().begin(options)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message="transaction begin failed",
+                context=self._context("begin"),
+            )
+            await self._events.dispatch(
+                "after_begin",
+                **payload,
+                duration_ms=(perf_counter() - started) * 1000,
+                error=error,
+            )
+            raise error from exc
+        await self._events.dispatch(
+            "after_begin",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            error=None,
+        )
 
     async def _commit(self) -> None:
-        await self._events.dispatch("before_commit", database=self)
-        self._ensure_runtime().commit()
-        await self._events.dispatch("after_commit", database=self)
+        payload = {"database": self, **self._context("commit")}
+        await self._events.dispatch("before_commit", **payload)
+        started = perf_counter()
+        try:
+            self._ensure_runtime().commit()
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message="transaction commit failed",
+                context=self._context("commit"),
+            )
+            await self._events.dispatch(
+                "after_commit",
+                **payload,
+                duration_ms=(perf_counter() - started) * 1000,
+                error=error,
+            )
+            raise error from exc
+        await self._events.dispatch(
+            "after_commit",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            error=None,
+        )
 
     async def _rollback(self) -> None:
-        await self._events.dispatch("before_rollback", database=self)
-        self._ensure_runtime().rollback()
-        await self._events.dispatch("after_rollback", database=self)
+        payload = {"database": self, **self._context("rollback")}
+        await self._events.dispatch("before_rollback", **payload)
+        started = perf_counter()
+        try:
+            self._ensure_runtime().rollback()
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message="transaction rollback failed",
+                context=self._context("rollback"),
+            )
+            await self._events.dispatch(
+                "after_rollback",
+                **payload,
+                duration_ms=(perf_counter() - started) * 1000,
+                error=error,
+            )
+            raise error from exc
+        await self._events.dispatch(
+            "after_rollback",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            error=None,
+        )
 
     async def _savepoint(self, name: str) -> None:
-        self._ensure_runtime().savepoint(name)
+        try:
+            self._ensure_runtime().savepoint(name)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message=f"savepoint '{name}' failed",
+                context=self._context("savepoint", savepoint=name),
+            )
+            raise error from exc
 
     async def _rollback_to_savepoint(self, name: str) -> None:
-        self._ensure_runtime().rollback_to_savepoint(name)
+        try:
+            self._ensure_runtime().rollback_to_savepoint(name)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message=f"rollback to savepoint '{name}' failed",
+                context=self._context("rollback_to_savepoint", savepoint=name),
+            )
+            raise error from exc
 
     async def _release_savepoint(self, name: str) -> None:
-        self._ensure_runtime().release_savepoint(name)
+        try:
+            self._ensure_runtime().release_savepoint(name)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message=f"release savepoint '{name}' failed",
+                context=self._context("release_savepoint", savepoint=name),
+            )
+            raise error from exc
 
 
 class _OrmdanticTransaction:

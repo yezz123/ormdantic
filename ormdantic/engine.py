@@ -7,6 +7,13 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+from ormdantic.errors import (
+    DatabaseConnectionError,
+    QueryExecutionError,
+    TransactionError,
+    classify_native_error,
+)
+
 try:
     _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
 except ImportError:  # pragma: no cover - exercised when extension is not built
@@ -64,7 +71,16 @@ class NativeEngine:
                 "Install the package with maturin or reinstall the wheel."
             )
         self.url = url
-        self._connection = _ormdantic.PyNativeConnection(url)
+        try:
+            self._connection = _ormdantic.PyNativeConnection(url)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=DatabaseConnectionError,
+                message="native database connection failed",
+                context={"operation": "connect", "backend": _backend(url)},
+            )
+            raise error from exc
 
     async def execute(self, sql: str, values: tuple[Any, ...]) -> NativeResult:
         """Execute SQL with ordered bind values on the native connection."""
@@ -78,7 +94,20 @@ class NativeEngine:
     def _execute_sync(self, sql: str, values: list[Any]) -> dict[str, Any]:
         """Run the blocking Rust execution call in a worker thread."""
         assert _ormdantic is not None
-        return self._connection.execute(sql, values)
+        try:
+            return self._connection.execute(sql, values)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=QueryExecutionError,
+                message="native SQL execution failed",
+                context={
+                    "operation": "execute",
+                    "backend": _backend(self.url),
+                    "sql": sql,
+                },
+            )
+            raise error from exc
 
     def transaction(self) -> NativeTransaction:
         """Create an async transaction context manager."""
@@ -87,17 +116,44 @@ class NativeEngine:
     async def begin(self) -> None:
         """Begin a transaction on the native connection."""
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._connection.begin)
+        try:
+            await loop.run_in_executor(None, self._connection.begin)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message="native transaction begin failed",
+                context={"operation": "begin", "backend": _backend(self.url)},
+            )
+            raise error from exc
 
     async def commit(self) -> None:
         """Commit the active transaction."""
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._connection.commit)
+        try:
+            await loop.run_in_executor(None, self._connection.commit)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message="native transaction commit failed",
+                context={"operation": "commit", "backend": _backend(self.url)},
+            )
+            raise error from exc
 
     async def rollback(self) -> None:
         """Roll back the active transaction."""
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._connection.rollback)
+        try:
+            await loop.run_in_executor(None, self._connection.rollback)
+        except Exception as exc:
+            error = classify_native_error(
+                exc,
+                default=TransactionError,
+                message="native transaction rollback failed",
+                context={"operation": "rollback", "backend": _backend(self.url)},
+            )
+            raise error from exc
 
 
 class NativeTransaction:
@@ -118,3 +174,10 @@ class NativeTransaction:
             await self._engine.commit()
         else:
             await self._engine.rollback()
+
+
+def _backend(url: str) -> str:
+    scheme = url.split("://", 1)[0].split("+", 1)[0].lower()
+    if scheme == "postgres":
+        return "postgresql"
+    return scheme

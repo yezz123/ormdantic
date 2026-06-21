@@ -7,6 +7,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from os import PathLike
+from time import perf_counter
 from typing import Any
 
 from ormdantic._migrations.artifacts import (
@@ -409,6 +410,7 @@ from ormdantic._migrations.sql import (
 from ormdantic._migrations.sql import (
     table_matches_filters as _table_matches_filters,
 )
+from ormdantic.errors import MigrationError, classify_native_error
 
 try:
     _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
@@ -581,6 +583,26 @@ class MigrationManager:
     def _native_connection(self) -> Any:
         rust = _require_migration_symbol("PyNativeConnection")
         return rust.PyNativeConnection(self._connection_url)
+
+    def _migration_context(
+        self, direction: str, revision: str, plan: MigrationPlan
+    ) -> dict[str, Any]:
+        return {
+            "operation": "migration",
+            "migration_direction": direction,
+            "revision": revision,
+            "backend": self._dialect(),
+            "operation_count": len(plan.operations),
+            "destructive": plan.has_destructive_operations,
+        }
+
+    def _migration_payload(
+        self, direction: str, revision: str, plan: MigrationPlan
+    ) -> dict[str, Any]:
+        return {
+            "database": self._database,
+            **self._migration_context(direction, revision, plan),
+        }
 
     def snapshot(self) -> SchemaSnapshot:
         """Return a serializable snapshot for the currently registered models."""
@@ -914,44 +936,73 @@ class MigrationManager:
 
         Returns ``False`` when the revision is already recorded.
         """
-        connection = self._native_connection()
-        dialect = self._dialect()
-        _ensure_migration_history_table(connection, dialect)
-        if _is_dirty(connection, dialect):
-            raise ValueError(
-                "database is marked dirty from a failed migration; run repair before applying"
-            )
-        existing = _history_entry(connection, dialect, revision)
-        expected_checksum = checksum or _plan_checksum(revision, plan)
-        if (
-            existing is not None
-            and existing.status == MIGRATION_STATUS_APPLIED
-            and not existing.dirty
-        ):
-            if existing.checksum and existing.checksum != expected_checksum:
+        payload = self._migration_payload("apply", revision, plan)
+        await self._database._events.dispatch("before_migration", **payload)
+        started = perf_counter()
+        try:
+            connection = self._native_connection()
+            dialect = self._dialect()
+            _ensure_migration_history_table(connection, dialect)
+            if _is_dirty(connection, dialect):
                 raise ValueError(
-                    f"revision {revision} already applied with checksum "
-                    f"{existing.checksum}, requested {expected_checksum}"
+                    "database is marked dirty from a failed migration; "
+                    "run repair before applying"
                 )
-            return False
-        if plan.has_destructive_operations and not allow_destructive:
-            raise ValueError(
-                "migration contains destructive operations; pass "
-                "allow_destructive=True to apply it"
+            existing = _history_entry(connection, dialect, revision)
+            expected_checksum = checksum or _plan_checksum(revision, plan)
+            if (
+                existing is not None
+                and existing.status == MIGRATION_STATUS_APPLIED
+                and not existing.dirty
+            ):
+                if existing.checksum and existing.checksum != expected_checksum:
+                    raise ValueError(
+                        f"revision {revision} already applied with checksum "
+                        f"{existing.checksum}, requested {expected_checksum}"
+                    )
+                applied = False
+            else:
+                if plan.has_destructive_operations and not allow_destructive:
+                    raise ValueError(
+                        "migration contains destructive operations; pass "
+                        "allow_destructive=True to apply it"
+                    )
+                _raise_if_unsupported_sqlite_plan(dialect, plan.operations)
+                _run_migration_operations(
+                    connection=connection,
+                    dialect=dialect,
+                    revision=revision,
+                    operations=plan.operations,
+                    status=MIGRATION_STATUS_APPLIED,
+                    description=description,
+                    checksum=expected_checksum,
+                    artifact_version=artifact_version,
+                    metadata=dict(metadata or {}),
+                )
+                applied = True
+        except Exception as exc:
+            duration_ms = (perf_counter() - started) * 1000
+            error = classify_native_error(
+                exc,
+                default=MigrationError,
+                message=f"migration apply failed for revision '{revision}'",
+                context=self._migration_context("apply", revision, plan),
             )
-        _raise_if_unsupported_sqlite_plan(dialect, plan.operations)
-        _run_migration_operations(
-            connection=connection,
-            dialect=dialect,
-            revision=revision,
-            operations=plan.operations,
-            status=MIGRATION_STATUS_APPLIED,
-            description=description,
-            checksum=expected_checksum,
-            artifact_version=artifact_version,
-            metadata=dict(metadata or {}),
+            await self._database._events.dispatch(
+                "after_migration",
+                **payload,
+                duration_ms=duration_ms,
+                error=error,
+            )
+            raise error from exc
+        await self._database._events.dispatch(
+            "after_migration",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            applied=applied,
+            error=None,
         )
-        return True
+        return applied
 
     async def rollback(
         self,
@@ -965,43 +1016,71 @@ class MigrationManager:
         metadata: Mapping[str, Any] | None = None,
     ) -> bool:
         """Run rollback SQL and remove a migration revision."""
-        connection = self._native_connection()
-        dialect = self._dialect()
-        _ensure_migration_history_table(connection, dialect)
-        existing = _history_entry(connection, dialect, revision)
-        if existing is None or existing.status != MIGRATION_STATUS_APPLIED:
-            return False
-        if not plan.rollback_available:
-            raise ValueError(
-                "rollback SQL is unavailable for this migration; "
-                "provide explicit down SQL or generated rollback operations"
+        payload = self._migration_payload("rollback", revision, plan)
+        await self._database._events.dispatch("before_migration", **payload)
+        started = perf_counter()
+        try:
+            connection = self._native_connection()
+            dialect = self._dialect()
+            _ensure_migration_history_table(connection, dialect)
+            existing = _history_entry(connection, dialect, revision)
+            if existing is None or existing.status != MIGRATION_STATUS_APPLIED:
+                rolled_back = False
+            else:
+                if not plan.rollback_available:
+                    raise ValueError(
+                        "rollback SQL is unavailable for this migration; "
+                        "provide explicit down SQL or generated rollback operations"
+                    )
+                rollback_plan = MigrationPlan(
+                    operations=list(plan.rollback_operations),
+                    diff=plan.diff,
+                    warnings=plan.warnings,
+                    safety=plan.safety,
+                )
+                if rollback_plan.has_destructive_operations and not allow_destructive:
+                    raise ValueError(
+                        "rollback contains destructive operations; pass "
+                        "allow_destructive=True to apply it"
+                    )
+                _raise_if_unsupported_sqlite_plan(dialect, rollback_plan.operations)
+                _run_migration_operations(
+                    connection=connection,
+                    dialect=dialect,
+                    revision=revision,
+                    operations=rollback_plan.operations,
+                    status=MIGRATION_STATUS_ROLLED_BACK,
+                    description=description or existing.description,
+                    checksum=checksum
+                    or existing.checksum
+                    or _plan_checksum(revision, rollback_plan),
+                    artifact_version=artifact_version,
+                    metadata=dict(metadata or {}),
+                )
+                rolled_back = True
+        except Exception as exc:
+            duration_ms = (perf_counter() - started) * 1000
+            error = classify_native_error(
+                exc,
+                default=MigrationError,
+                message=f"migration rollback failed for revision '{revision}'",
+                context=self._migration_context("rollback", revision, plan),
             )
-        rollback_plan = MigrationPlan(
-            operations=list(plan.rollback_operations),
-            diff=plan.diff,
-            warnings=plan.warnings,
-            safety=plan.safety,
-        )
-        if rollback_plan.has_destructive_operations and not allow_destructive:
-            raise ValueError(
-                "rollback contains destructive operations; pass "
-                "allow_destructive=True to apply it"
+            await self._database._events.dispatch(
+                "after_migration",
+                **payload,
+                duration_ms=duration_ms,
+                error=error,
             )
-        _raise_if_unsupported_sqlite_plan(dialect, rollback_plan.operations)
-        _run_migration_operations(
-            connection=connection,
-            dialect=dialect,
-            revision=revision,
-            operations=rollback_plan.operations,
-            status=MIGRATION_STATUS_ROLLED_BACK,
-            description=description or existing.description,
-            checksum=checksum
-            or existing.checksum
-            or _plan_checksum(revision, rollback_plan),
-            artifact_version=artifact_version,
-            metadata=dict(metadata or {}),
+            raise error from exc
+        await self._database._events.dispatch(
+            "after_migration",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            rolled_back=rolled_back,
+            error=None,
         )
-        return True
+        return rolled_back
 
     async def rollback_artifact(
         self,
