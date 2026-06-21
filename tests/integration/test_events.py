@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from ormdantic import Ormdantic
+from ormdantic.migrations import MigrationOperation, MigrationPlan
 
 
 async def test_crud_events_fire(tmp_path) -> None:
@@ -106,3 +107,124 @@ async def test_transaction_lifecycle_events_fire(tmp_path) -> None:
         "before_rollback",
         "after_rollback",
     ]
+
+
+async def test_query_diagnostics_include_timing_sql_and_redacted_params(
+    tmp_path,
+) -> None:
+    logged: list[dict[str, object]] = []
+    db = Ormdantic(
+        f"sqlite:///{tmp_path / 'query_diagnostics.sqlite3'}",
+        debug=True,
+        query_logger=lambda **payload: logged.append(payload),
+    )
+    execute_events: list[tuple[str, dict[str, object]]] = []
+    hydration_events: list[tuple[str, dict[str, object]]] = []
+    lifecycle: list[str] = []
+
+    @db.table(pk="id")
+    class SecretFlavor(BaseModel):
+        id: str
+        password: str
+        name: str
+
+    db.on(
+        "before_execute",
+        lambda **payload: execute_events.append(("before", dict(payload))),
+    )
+    db.on(
+        "after_execute",
+        lambda **payload: execute_events.append(("after", dict(payload))),
+    )
+    db.on(
+        "after_hydration",
+        lambda **payload: hydration_events.append(("after", dict(payload))),
+    )
+    db.on("before_create", lambda **_: lifecycle.append("before_create"))
+    db.on("after_create", lambda **_: lifecycle.append("after_create"))
+
+    await db.init()
+    await db[SecretFlavor].insert(
+        SecretFlavor(id="1", password="do-not-log", name="mocha")
+    )
+    await db[SecretFlavor].find_many(where={"name": "mocha"})
+    diagnostics = db.runtime_diagnostics()
+
+    insert_before = next(
+        payload
+        for phase, payload in execute_events
+        if phase == "before" and payload["operation"] == "insert"
+    )
+    insert_after = next(
+        payload
+        for phase, payload in execute_events
+        if phase == "after" and payload["operation"] == "insert"
+    )
+
+    assert insert_before["table_name"] == "secret_flavor"
+    assert insert_before["backend"] == "sqlite"
+    assert insert_before["bind_names"] == ["id", "password", "name"]
+    assert insert_before["parameters"] == {
+        "id": "1",
+        "password": "<redacted>",
+        "name": "mocha",
+    }
+    assert 'INSERT INTO "secret_flavor"' in str(insert_before["sql"])
+    assert insert_after["duration_ms"] >= 0
+    assert insert_after["error"] is None
+    assert lifecycle == ["before_create", "after_create"]
+    assert diagnostics["backend"] == "sqlite"
+    assert diagnostics["debug"] is True
+    assert "secret_flavor" in diagnostics["registered_tables"]
+    assert logged
+    assert any(
+        payload["operation"] == "select_many" for _phase, payload in execute_events
+    )
+    assert any(payload["row_count"] == 1 for _phase, payload in hydration_events)
+
+
+async def test_reflection_and_migration_events_include_timing(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'operation_events.sqlite3'}")
+    reflection_events: list[tuple[str, dict[str, object]]] = []
+    migration_events: list[tuple[str, dict[str, object]]] = []
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    db.on(
+        "before_reflection",
+        lambda **payload: reflection_events.append(("before", dict(payload))),
+    )
+    db.on(
+        "after_reflection",
+        lambda **payload: reflection_events.append(("after", dict(payload))),
+    )
+    db.on(
+        "before_migration",
+        lambda **payload: migration_events.append(("before", dict(payload))),
+    )
+    db.on(
+        "after_migration",
+        lambda **payload: migration_events.append(("after", dict(payload))),
+    )
+
+    await db.init()
+    assert "flavor" in await db.inspect().table_names()
+
+    plan = MigrationPlan(
+        operations=[
+            MigrationOperation(
+                'CREATE TABLE "migration_event_extra" ("id" TEXT PRIMARY KEY)'
+            )
+        ],
+        rollback_operations=[MigrationOperation('DROP TABLE "migration_event_extra"')],
+    )
+    assert await db.migrations.apply("001_event_extra", plan) is True
+
+    assert reflection_events[0][0] == "before"
+    assert reflection_events[-1][1]["duration_ms"] >= 0
+    assert migration_events[0][1]["revision"] == "001_event_extra"
+    assert migration_events[-1][1]["duration_ms"] >= 0
+    assert migration_events[-1][1]["applied"] is True

@@ -13,6 +13,7 @@ from ormdantic import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
     Ormdantic,
+    QueryExecutionError,
     TypeConversionError,
     UndefinedBackReferenceError,
 )
@@ -154,3 +155,27 @@ class ormdanticErrorTesting(unittest.IsolatedAsyncioTestCase):
             e.value.args[0]
             == "Type typing.Callable[[], int] is not supported by Ormdantic."
         )
+
+
+async def test_query_execution_errors_are_typed_and_contextual(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'typed_errors.sqlite3'}", debug=True)
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    await db.init()
+    await db[Flavor].insert(Flavor(id="1", name="mocha"))
+
+    with pytest.raises(QueryExecutionError) as exc:
+        await db[Flavor].insert(Flavor(id="1", name="latte"))
+
+    error = exc.value
+    assert error.context["operation"] == "insert"
+    assert error.context["table"] == "flavor"
+    assert error.context["model"] == "Flavor"
+    assert error.context["backend"] == "sqlite"
+    assert 'INSERT INTO "flavor"' in str(error.context["sql"])
+    assert error.context["bind_names"] == ["id", "name"]
+    assert "UNIQUE" in str(error.native_message).upper()
