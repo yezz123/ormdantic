@@ -165,6 +165,7 @@ nav:
       - Query Expressions: examples/query-expressions.md
       - Migrations And Reflection: examples/migrations-reflection.md
       - Enterprise Dialects: examples/enterprise-dialects.md
+      - Troubleshooting: troubleshooting.md
       - Performance: performance.md
       - SQLAlchemy Comparison: comparisons/sqlalchemy.md
       - SQLModel Comparison: comparisons/sqlmodel.md
