@@ -33,6 +33,10 @@ class EventRegistry:
         else:
             self._handlers.pop(event, None)
 
+    def has_handlers(self, event: str) -> bool:
+        """Return whether handlers are registered for an event."""
+        return bool(self._handlers.get(event))
+
     async def dispatch(self, event: str, **payload: Any) -> None:
         """Dispatch an event payload to all registered handlers."""
         for handler in self._handlers.get(event, []):
