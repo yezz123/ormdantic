@@ -22,6 +22,7 @@
 
 ### Upgrades
 
+* ⬆ Bump `ruff-pre-commit` from v0.15.17 to v0.15.18. PR [#261](https://github.com/yezz123/ormdantic/pull/261) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump `ruff-pre-commit` from v0.15.16 to v0.15.17. PR [#259](https://github.com/yezz123/ormdantic/pull/259) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 * ⬆ Bump `ruff-pre-commit` from v0.15.15 to v0.15.16. PR [#253](https://github.com/yezz123/ormdantic/pull/253) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ Bump the python-packages group with 4 updates. PR [#208](https://github.com/yezz123/ormdantic/pull/208) by [@dependabot[bot]](https://github.com/apps/dependabot).
