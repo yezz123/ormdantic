@@ -220,16 +220,25 @@ pub fn run_reflection_smoke_flow(url: &str, table: &str, create_sql: String, dro
         .execute(&create_sql, &[])
         .unwrap_or_else(|error| panic!("create reflection table for {table} should work: {error}"));
     let mut inspector = Inspector::new(&mut connection);
+    let scope = ReflectionScope::new().tables(vec![table.to_string()]);
     let queries = inspector
-        .reflection_queries(&ReflectionScope::new())
+        .reflection_queries(&scope)
         .unwrap_or_else(|error| panic!("reflection queries for {table} should compile: {error}"));
     assert!(
         !queries.is_empty(),
         "driver reflection should expose catalog queries for {table}"
     );
-    inspector
-        .inspect(&ReflectionScope::new())
+    let schema = inspector
+        .inspect(&scope)
         .unwrap_or_else(|error| panic!("reflection smoke for {table} should execute: {error}"));
+    let schema = schema.into_schema_def();
+    assert!(
+        schema
+            .tables()
+            .iter()
+            .any(|reflected| reflected.name() == table),
+        "scoped reflection should include created table {table}"
+    );
 
     ormdantic_engine::execute_url(url, &drop_sql, &[])
         .unwrap_or_else(|error| panic!("cleanup for {table} should work: {error}"));

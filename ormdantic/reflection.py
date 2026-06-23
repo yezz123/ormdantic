@@ -576,8 +576,8 @@ def _constraint_metadata(table: TableSnapshot) -> list[dict[str, Any]]:
         payload = constraint.to_dict()
         payload["type"] = "unique"
         constraints.append(payload)
-    for check in table.check_constraints:
-        payload = check.to_dict()
+    for table_check in table.check_constraints:
+        payload = table_check.to_dict()
         payload["type"] = "check"
         constraints.append(payload)
     for foreign_key in _foreign_key_metadata(table):
