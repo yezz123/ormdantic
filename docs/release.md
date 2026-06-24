@@ -8,6 +8,7 @@
 
 ### Features
 
+* ✨ Enhance schema reflection and testing for multiple SQL dialects. PR [#262](https://github.com/yezz123/ormdantic/pull/262) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance error handling and diagnostics in Ormdantic. PR [#260](https://github.com/yezz123/ormdantic/pull/260) by [@yezz123](https://github.com/yezz123).
 * ✨  Enhance Ormdantic migration functionality and CLI support. PR [#254](https://github.com/yezz123/ormdantic/pull/254) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance query capabilities and relationship loading in ORM. PR [#251](https://github.com/yezz123/ormdantic/pull/251) by [@yezz123](https://github.com/yezz123).
