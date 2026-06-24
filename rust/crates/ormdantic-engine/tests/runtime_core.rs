@@ -3,8 +3,8 @@ mod support;
 use ormdantic_core::{ExecutionErrorKind, OrmdanticError, RevisionId, TransactionOptions};
 use ormdantic_dialects::ReflectionScope;
 use ormdantic_engine::{
-    execute_url, returns_rows, runtime_capabilities, Connection, DbValue, MigrationStore,
-    NativeConnection, QueryResult, Reflector, StatementResult,
+    execute_url, returns_rows, runtime_capabilities, Connection, DbValue, Inspector,
+    MigrationStore, NativeConnection, QueryResult, Reflector, StatementResult,
 };
 
 #[test]
@@ -296,6 +296,32 @@ fn reflector_exposes_dialect_queries_and_empty_schema() {
 
     assert!(!queries.is_empty());
     assert!(reflector.empty_schema().tables().is_empty());
+}
+
+#[test]
+fn inspector_reflects_sqlite_tables_and_columns() {
+    let url = support::sqlite_url(&support::unique_name("engine_reflection"));
+    let mut connection = NativeConnection::open(&url).expect("sqlite connection should open");
+    connection
+        .execute(
+            "CREATE TABLE flavors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, rating REAL)",
+            &[],
+        )
+        .expect("table should be created");
+
+    let mut inspector = Inspector::new(&mut connection);
+    let schema = inspector
+        .inspect(&ReflectionScope::new().tables(vec!["flavors".to_string()]))
+        .expect("schema should reflect")
+        .into_schema_def();
+    let table = schema.table("flavors").expect("table should be reflected");
+
+    assert_eq!(table.primary_key(), "id");
+    assert_eq!(table.columns().len(), 3);
+    assert!(table.columns()[0].is_primary_key());
+    assert!(!table.columns()[1].is_nullable());
+    assert_eq!(table.columns()[1].name(), "name");
+    assert_eq!(table.columns()[2].name(), "rating");
 }
 
 fn assert_execution_error_kind<T: std::fmt::Debug>(

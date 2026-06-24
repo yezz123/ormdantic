@@ -180,6 +180,12 @@ AUTO_INCREMENT_COUNTER_DATABASES = [
     database for database in SMOKE_DATABASES if database.dialect in {"mysql", "mariadb"}
 ]
 
+PUBLIC_INSPECTOR_DATABASES = [
+    database
+    for database in SMOKE_DATABASES
+    if database.dialect in {"postgresql", "mysql", "mariadb"}
+]
+
 VIEW_DEFINITION_DATABASES = [
     database
     for database in SMOKE_DATABASES
@@ -428,6 +434,66 @@ def test_external_live_snapshot_reflects_core_metadata(
         )
         assert child_parent_id.foreign_table == parent
         assert child_parent_id.foreign_column == "id"
+    finally:
+        for statement in database.reflect_cleanup_sql:
+            try:
+                runtime.execute_native(url, statement.format(**values), [])
+            except Exception:
+                pass
+
+
+@pytest.mark.parametrize(
+    "database",
+    PUBLIC_INSPECTOR_DATABASES,
+    ids=[database.dialect for database in PUBLIC_INSPECTOR_DATABASES],
+)
+@pytest.mark.asyncio
+async def test_external_public_inspector_reflects_core_metadata(
+    database: MigrationSmokeDatabase,
+) -> None:
+    url = database.url
+    if not url:
+        pytest.skip(f"{database.env_var} not configured")
+
+    runtime = pytest.importorskip("ormdantic._ormdantic")
+    run_id = os.getpid()
+    parent = f"orm_insp_parent_{database.dialect}_{run_id}"
+    child = f"orm_insp_child_{database.dialect}_{run_id}"
+    index = f"orm_insp_idx_{database.dialect}_{run_id}"
+    db = Ormdantic(url)
+    inspector = db.inspect()
+    values = {"parent": parent, "child": child, "index": index}
+
+    try:
+        for statement in database.reflect_cleanup_sql:
+            try:
+                runtime.execute_native(url, statement.format(**values), [])
+            except Exception:
+                pass
+        for statement in database.reflect_create_sql:
+            runtime.execute_native(url, statement.format(**values), [])
+
+        assert await inspector.table_names(include_tables=[parent]) == [parent]
+        columns = await inspector.columns(parent)
+        assert {column["name"] for column in columns} >= {"id", "code", "name"}
+        indexes = await inspector.indexes(parent)
+        assert any(item["name"] == index for item in indexes)
+        constraints = await inspector.constraints(parent)
+        assert any(
+            item["type"] == "primary_key" and item["columns"] == ["id"]
+            for item in constraints
+        )
+        assert any(
+            item["type"] == "unique" and item["columns"] == ["code"]
+            for item in constraints
+        )
+        foreign_keys = await inspector.foreign_keys(child)
+        assert any(
+            item["foreign_table"] == parent and item["foreign_columns"] == ["id"]
+            for item in foreign_keys
+        )
+        source = await inspector.scaffold_models(include_tables=[parent])
+        assert f"@db.table({parent!r}, pk='id')" in source
     finally:
         for statement in database.reflect_cleanup_sql:
             try:

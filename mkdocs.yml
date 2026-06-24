@@ -159,6 +159,7 @@ nav:
       - SQL Server: drivers/mssql.md
       - Oracle: drivers/oracle.md
   - Guides:
+      - Existing Databases: examples/existing-databases.md
       - Basic CRUD: examples/basic-crud.md
       - Relationships: examples/relationships.md
       - Transactions And Sessions: examples/transactions-sessions.md

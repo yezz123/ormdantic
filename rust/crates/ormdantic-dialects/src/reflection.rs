@@ -61,8 +61,24 @@ impl ReflectionQuery {
 }
 
 pub(crate) fn scope_predicate(scope: &ReflectionScope) -> String {
-    match scope.schema_name() {
-        Some(schema) => format!(" WHERE table_schema = '{}'", schema.replace('\'', "''")),
-        None => String::new(),
+    let mut predicates = Vec::new();
+    if let Some(schema) = scope.schema_name() {
+        predicates.push(format!("table_schema = '{}'", schema.replace('\'', "''")));
+    }
+    if !scope.table_names().is_empty() {
+        predicates.push(format!(
+            "table_name IN ({})",
+            scope
+                .table_names()
+                .iter()
+                .map(|table| format!("'{}'", table.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if predicates.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", predicates.join(" AND "))
     }
 }

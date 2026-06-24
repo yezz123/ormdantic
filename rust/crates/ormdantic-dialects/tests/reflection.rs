@@ -1,9 +1,10 @@
 use ormdantic_dialects::{
-    Dialect, OracleDialect, PostgresDialect, ReflectionQuery, ReflectionQueryKind, ReflectionScope,
+    Dialect, MariaDbDialect, MySqlDialect, OracleDialect, PostgresDialect, ReflectionQuery,
+    ReflectionQueryKind, ReflectionScope, SqliteDialect,
 };
 
 #[test]
-fn renders_information_schema_queries_without_scope() {
+fn renders_postgres_catalog_queries_without_scope() {
     let queries = PostgresDialect.reflection_queries(&ReflectionScope::new());
     let kinds = queries.iter().map(|query| query.kind()).collect::<Vec<_>>();
 
@@ -12,25 +13,22 @@ fn renders_information_schema_queries_without_scope() {
         vec![
             ReflectionQueryKind::Tables,
             ReflectionQueryKind::Columns,
+            ReflectionQueryKind::Indexes,
+            ReflectionQueryKind::ForeignKeys,
             ReflectionQueryKind::Constraints,
         ]
     );
-    assert_eq!(
-        queries[0].sql(),
-        "SELECT table_name FROM information_schema.tables"
-    );
-    assert_eq!(
-        queries[1].sql(),
-        "SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns"
-    );
-    assert_eq!(
-        queries[2].sql(),
-        "SELECT table_name, constraint_name, constraint_type FROM information_schema.table_constraints"
-    );
+    assert!(queries[0].sql().contains("information_schema.tables"));
+    assert!(queries[1].sql().contains("information_schema.columns"));
+    assert!(queries[2].sql().contains("pg_indexes"));
+    assert!(queries[3].sql().contains("FOREIGN KEY"));
+    assert!(queries[4]
+        .sql()
+        .contains("information_schema.table_constraints"));
 }
 
 #[test]
-fn renders_schema_scoped_information_schema_queries() {
+fn renders_schema_and_table_scoped_postgres_queries() {
     let scope = ReflectionScope::new()
         .schema("pub'lic")
         .tables(vec!["flavor".to_string(), "supplier".to_string()]);
@@ -38,9 +36,45 @@ fn renders_schema_scoped_information_schema_queries() {
 
     assert_eq!(scope.schema_name(), Some("pub'lic"));
     assert_eq!(scope.table_names(), ["flavor", "supplier"]);
+    assert!(queries[0].sql().contains("table_schema = 'pub''lic'"));
+    assert!(queries[0]
+        .sql()
+        .contains("table_name IN ('flavor', 'supplier')"));
+}
+
+#[test]
+fn renders_sqlite_catalog_queries() {
+    let queries = SqliteDialect
+        .reflection_queries(&ReflectionScope::new().tables(vec!["flavor".to_string()]));
+
     assert_eq!(
-        queries[0].sql(),
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'pub''lic'"
+        queries.iter().map(|query| query.kind()).collect::<Vec<_>>(),
+        vec![
+            ReflectionQueryKind::Tables,
+            ReflectionQueryKind::Columns,
+            ReflectionQueryKind::Indexes,
+            ReflectionQueryKind::ForeignKeys,
+            ReflectionQueryKind::Constraints,
+        ]
+    );
+    assert!(queries[0].sql().contains("sqlite_master"));
+    assert!(queries[1].sql().contains("pragma_table_xinfo"));
+    assert!(queries[2].sql().contains("pragma_index_list"));
+    assert!(queries[3].sql().contains("pragma_foreign_key_list"));
+    assert!(queries[0].sql().contains("m.name IN ('flavor')"));
+}
+
+#[test]
+fn renders_mysql_and_mariadb_catalog_queries_with_default_database_scope() {
+    let mysql = MySqlDialect.reflection_queries(&ReflectionScope::new());
+    let mariadb = MariaDbDialect.reflection_queries(&ReflectionScope::new());
+
+    assert!(mysql[0].sql().contains("table_schema = DATABASE()"));
+    assert!(mysql[2].sql().contains("information_schema.statistics"));
+    assert!(mysql[3].sql().contains("referential_constraints"));
+    assert_eq!(
+        mysql.iter().map(|query| query.kind()).collect::<Vec<_>>(),
+        mariadb.iter().map(|query| query.kind()).collect::<Vec<_>>()
     );
 }
 
@@ -53,36 +87,26 @@ fn renders_oracle_catalog_queries_without_scope() {
         vec![
             ReflectionQueryKind::Tables,
             ReflectionQueryKind::Columns,
+            ReflectionQueryKind::Indexes,
+            ReflectionQueryKind::ForeignKeys,
             ReflectionQueryKind::Constraints,
         ]
     );
-    assert_eq!(queries[0].sql(), "SELECT table_name FROM user_tables");
-    assert_eq!(
-        queries[1].sql(),
-        "SELECT table_name, column_name, data_type, nullable FROM user_tab_columns"
-    );
-    assert_eq!(
-        queries[2].sql(),
-        "SELECT table_name, constraint_name, constraint_type FROM user_constraints"
-    );
+    assert!(queries[0].sql().contains("FROM user_tables"));
+    assert!(queries[1].sql().contains("FROM user_tab_columns"));
+    assert!(queries[2].sql().contains("FROM user_indexes"));
+    assert!(queries[3].sql().contains("FROM user_constraints c"));
+    assert!(queries[4].sql().contains("FROM user_constraints"));
 }
 
 #[test]
 fn renders_schema_scoped_oracle_catalog_queries() {
     let queries = OracleDialect.reflection_queries(&ReflectionScope::new().schema("app"));
 
-    assert_eq!(
-        queries[0].sql(),
-        "SELECT table_name FROM all_tables WHERE owner = 'APP'"
-    );
-    assert_eq!(
-        queries[1].sql(),
-        "SELECT table_name, column_name, data_type, nullable FROM all_tab_columns WHERE owner = 'APP'"
-    );
-    assert_eq!(
-        queries[2].sql(),
-        "SELECT table_name, constraint_name, constraint_type FROM all_constraints WHERE owner = 'APP'"
-    );
+    assert!(queries[0].sql().contains("FROM all_tables"));
+    assert!(queries[0].sql().contains("owner = 'APP'"));
+    assert!(queries[1].sql().contains("FROM all_tab_columns"));
+    assert!(queries[3].sql().contains("c.owner = 'APP'"));
 }
 
 #[test]

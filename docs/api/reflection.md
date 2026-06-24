@@ -1,7 +1,12 @@
 # Reflection
 
-Reflection reads live database metadata through the native runtime and exposes a small async inspector API.
+Reflection reads live database metadata through the native runtime and exposes an
+async inspector API for table names, columns, indexes, foreign keys,
+constraints, namespaces, reflected snapshots, model comparison, and model
+scaffolding.
 
 ::: ormdantic.reflection.Inspector
 
-For migration-grade reflection, use `db.migrations.live_snapshot()`.
+For an onboarding walkthrough, see [Existing Databases](../examples/existing-databases.md).
+For direct migration workflows, use `db.migrations.live_snapshot()` and
+`db.migrations.autogenerate()`.
