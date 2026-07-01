@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, TypeGuard
 
 from pydantic import BaseModel
+
+
+@dataclass(frozen=True)
+class _UnitOfWorkSnapshot:
+    new: list[BaseModel]
+    dirty: list[BaseModel]
+    deleted: list[BaseModel]
+    identity_map: dict[tuple[type[BaseModel], Any], BaseModel]
+    snapshots: dict[tuple[type[BaseModel], Any], dict[str, Any]]
+    failed_flush_error: Exception | None
 
 
 class Session:
@@ -22,6 +33,8 @@ class Session:
         self._deleted: list[BaseModel] = []
         self._identity_map: dict[tuple[type[BaseModel], Any], BaseModel] = {}
         self._snapshots: dict[tuple[type[BaseModel], Any], dict[str, Any]] = {}
+        self._failed_flush_error: Exception | None = None
+        self._savepoint_sequence = 0
         self._closed = False
 
     async def __aenter__(self) -> Session:
@@ -35,29 +48,34 @@ class Session:
         if self._closed:
             return
         if exc_type is None:
-            await self.commit()
+            try:
+                await self.commit()
+            except Exception:
+                if not self._closed:
+                    await self.rollback()
+                raise
         else:
             await self.rollback()
 
     def add(self, model: BaseModel) -> None:
         """Stage a new model for insertion on flush."""
-        self._ensure_open()
+        self._ensure_usable()
         self._cascade_add(model, set())
 
     def mark_dirty(self, model: BaseModel) -> None:
         """Stage an existing model for update on flush."""
-        self._ensure_open()
-        if model not in self._dirty:
+        self._ensure_usable()
+        if model not in self._new and model not in self._dirty:
             self._dirty.append(model)
 
     def delete(self, model: BaseModel) -> None:
         """Stage an existing model for deletion on flush."""
-        self._ensure_open()
+        self._ensure_usable()
         self._cascade_delete(model, set())
 
     def merge(self, model: BaseModel) -> BaseModel:
         """Merge a detached model into the identity map and stage it as dirty."""
-        self._ensure_open()
+        self._ensure_usable()
         table = self._database._table_map.model_to_data[type(model)]
         key = (type(model), getattr(model, table.pk))
         if cached := self._identity_map.get(key):
@@ -65,41 +83,61 @@ class Session:
                 setattr(cached, field, value)
             self.mark_dirty(cached)
             return cached
+        if staged := self._staged_model_for_key(key):
+            for field, value in model.__dict__.items():
+                setattr(staged, field, value)
+            if staged not in self._new:
+                self.mark_dirty(staged)
+            return staged
         self._remember(model)
         self.mark_dirty(model)
         return model
 
     def expire(self, model: BaseModel) -> None:
         """Remove a model from the identity map."""
-        self._ensure_open()
+        self._ensure_usable()
         key = self._identity_key(model)
         self._identity_map.pop(key, None)
         self._snapshots.pop(key, None)
 
     async def flush(self) -> None:
         """Write staged inserts and updates without ending the transaction."""
-        self._ensure_open()
-        await self._database._events.dispatch("before_flush", session=self)
-        for model in self._dependency_ordered(self._new):
-            stored = await self._database[type(model)].insert(model)
-            self._remember(stored)
-        self._new.clear()
+        self._ensure_usable()
+        state = self._capture_state()
+        try:
+            await self._database._events.dispatch("before_flush", session=self)
+            self._detect_relationship_changes()
 
-        for model in self._detect_dirty_models():
-            self.mark_dirty(model)
+            for model in self._detect_dirty_models():
+                self.mark_dirty(model)
 
-        for model in list(self._dirty):
-            stored = await self._database[type(model)].update(model)
-            self._remember(stored)
-        self._dirty.clear()
+            inserted = self._dependency_ordered(list(self._new))
+            for batch in self._model_batches(inserted):
+                for model in batch:
+                    stored = await self._database[type(model)].insert(model)
+                    self._remember(stored)
+            self._new.clear()
 
-        for model in reversed(self._dependency_ordered(self._deleted)):
-            key = self._identity_key(model)
-            pk = key[1]
-            await self._database[type(model)].delete(pk)
-            self._identity_map.pop(key, None)
-            self._snapshots.pop(key, None)
-        self._deleted.clear()
+            updated = list(self._dirty)
+            for batch in self._model_batches(updated):
+                for model in batch:
+                    stored = await self._database[type(model)].update(model)
+                    self._remember(stored)
+            self._dirty.clear()
+
+            deleted = list(reversed(self._dependency_ordered(list(self._deleted))))
+            for batch in self._model_batches(deleted):
+                for model in batch:
+                    key = self._identity_key(model)
+                    pk = key[1]
+                    await self._database[type(model)].delete(pk)
+                    self._identity_map.pop(key, None)
+                    self._snapshots.pop(key, None)
+            self._deleted.clear()
+        except Exception as exc:
+            self._restore_state(state)
+            self._failed_flush_error = exc
+            raise
         await self._database._events.dispatch("after_flush", session=self)
 
     async def commit(self) -> None:
@@ -114,16 +152,28 @@ class Session:
         """Discard staged changes and roll back the active transaction."""
         if self._closed:
             return
-        self._new.clear()
-        self._dirty.clear()
-        self._deleted.clear()
-        self._snapshots.clear()
-        await self._database._rollback()
-        self._closed = True
+        try:
+            await self._database._rollback()
+        finally:
+            self._new.clear()
+            self._dirty.clear()
+            self._deleted.clear()
+            self._identity_map.clear()
+            self._snapshots.clear()
+            self._failed_flush_error = None
+            self._closed = True
+
+    def savepoint(self, name: str | None = None) -> Any:
+        """Open a nested session savepoint that restores unit-of-work state."""
+        self._ensure_usable()
+        if name is None:
+            self._savepoint_sequence += 1
+            name = f"session_sp_{self._savepoint_sequence}"
+        return _SessionSavepoint(self, name)
 
     async def refresh(self, model: BaseModel, *, depth: int = 0) -> BaseModel | None:
         """Reload a model by primary key and remember the refreshed instance."""
-        self._ensure_open()
+        self._ensure_usable()
         table = self._database._table_map.model_to_data[type(model)]
         refreshed = await self._database[type(model)].find_one(
             getattr(model, table.pk), depth=depth
@@ -140,7 +190,7 @@ class Session:
         self, model_type: type[BaseModel], pk: Any, *, depth: int = 0
     ) -> BaseModel | None:
         """Return a cached model or load it by primary key."""
-        self._ensure_open()
+        self._ensure_usable()
         if cached := self.get_cached(model_type, pk):
             return cached
         loaded = await self._database[model_type].find_one(pk, depth=depth)
@@ -151,6 +201,33 @@ class Session:
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("session is closed")
+
+    def _ensure_usable(self) -> None:
+        self._ensure_open()
+        if self._failed_flush_error is not None:
+            raise RuntimeError("session flush failed; rollback required") from (
+                self._failed_flush_error
+            )
+
+    def _capture_state(self) -> _UnitOfWorkSnapshot:
+        return _UnitOfWorkSnapshot(
+            new=list(self._new),
+            dirty=list(self._dirty),
+            deleted=list(self._deleted),
+            identity_map=dict(self._identity_map),
+            snapshots={key: deepcopy(value) for key, value in self._snapshots.items()},
+            failed_flush_error=self._failed_flush_error,
+        )
+
+    def _restore_state(self, state: _UnitOfWorkSnapshot) -> None:
+        self._new = list(state.new)
+        self._dirty = list(state.dirty)
+        self._deleted = list(state.deleted)
+        self._identity_map = dict(state.identity_map)
+        self._snapshots = {
+            key: deepcopy(value) for key, value in state.snapshots.items()
+        }
+        self._failed_flush_error = state.failed_flush_error
 
     def _remember(self, model: BaseModel) -> None:
         """Store a model and loaded related models in the identity map."""
@@ -177,6 +254,8 @@ class Session:
             return
         seen.add(id(model))
 
+        self._raise_for_identity_conflict(model)
+
         for related in self._scalar_related_models(model):
             self._cascade_add(related, seen)
 
@@ -197,6 +276,9 @@ class Session:
         for child, _back_reference in self._collection_related_models(model):
             self._cascade_delete(child, seen)
 
+        if model in self._new:
+            self._new.remove(model)
+            return
         if model not in self._deleted:
             self._deleted.append(model)
 
@@ -234,6 +316,30 @@ class Session:
             if self._snapshots.get(key) != self._snapshot(model):
                 changed.append(model)
         return changed
+
+    def _detect_relationship_changes(self) -> None:
+        """Stage reachable relationship objects added to managed models."""
+        for model in list(self._identity_map.values()):
+            self._cascade_relationship_changes(model, set())
+
+    def _cascade_relationship_changes(self, model: BaseModel, seen: set[int]) -> None:
+        if id(model) in seen:
+            return
+        seen.add(id(model))
+
+        for related in self._scalar_related_models(model):
+            if not self._is_pending_or_remembered(related):
+                self._cascade_add(related, seen)
+            else:
+                self._cascade_relationship_changes(related, seen)
+
+        for child, back_reference in self._collection_related_models(model):
+            if getattr(child, back_reference, None) is None:
+                setattr(child, back_reference, model)
+            if not self._is_pending_or_remembered(child):
+                self._cascade_add(child, seen)
+            else:
+                self._cascade_relationship_changes(child, seen)
 
     def _scalar_related_models(self, model: BaseModel) -> list[BaseModel]:
         """Return registered model values referenced by scalar relationships."""
@@ -290,6 +396,16 @@ class Session:
             visit(model)
         return ordered
 
+    def _model_batches(self, models: list[BaseModel]) -> list[list[BaseModel]]:
+        """Group adjacent models by table while preserving dependency order."""
+        batches: list[list[BaseModel]] = []
+        for model in models:
+            if batches and type(batches[-1][0]) is type(model):
+                batches[-1].append(model)
+            else:
+                batches.append([model])
+        return batches
+
     def _dependencies_for(
         self,
         model: BaseModel,
@@ -318,3 +434,64 @@ class Session:
             isinstance(value, BaseModel)
             and type(value) in self._database._table_map.model_to_data
         )
+
+    def _is_pending_or_remembered(self, model: BaseModel) -> bool:
+        return (
+            model in self._new
+            or model in self._dirty
+            or model in self._deleted
+            or self._is_remembered(model)
+        )
+
+    def _staged_model_for_key(
+        self, key: tuple[type[BaseModel], Any]
+    ) -> BaseModel | None:
+        if key[1] is None:
+            return None
+        for staged in (*self._new, *self._dirty, *self._deleted):
+            if self._identity_key(staged) == key:
+                return staged
+        return None
+
+    def _raise_for_identity_conflict(self, model: BaseModel) -> None:
+        key = self._identity_key(model)
+        if key[1] is None:
+            return
+
+        cached = self._identity_map.get(key)
+        if cached is not None and cached is not model:
+            raise ValueError(
+                f"{type(model).__name__} primary key {key[1]!r} is already "
+                "present in this session; use merge() for detached state"
+            )
+
+        staged = self._staged_model_for_key(key)
+        if staged is not None and staged is not model:
+            raise ValueError(
+                f"{type(model).__name__} primary key {key[1]!r} is already "
+                "staged in this session"
+            )
+
+
+class _SessionSavepoint:
+    def __init__(self, session: Session, name: str) -> None:
+        self._session = session
+        self._name = name
+        self._state: _UnitOfWorkSnapshot | None = None
+
+    async def __aenter__(self) -> "_SessionSavepoint":
+        self._session._ensure_usable()
+        self._state = self._session._capture_state()
+        await self._session._database._savepoint(self._name)
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if self._state is None:
+            return
+        if exc_type is not None:
+            try:
+                await self._session._database._rollback_to_savepoint(self._name)
+            finally:
+                self._session._restore_state(self._state)
+        else:
+            await self._session._database._release_savepoint(self._name)
