@@ -1655,6 +1655,9 @@ class Ormdantic:
         )
 
     async def _savepoint(self, name: str) -> None:
+        payload = {"database": self, **self._context("savepoint", savepoint=name)}
+        await self._events.dispatch("before_savepoint", **payload)
+        started = perf_counter()
         try:
             self._ensure_runtime().savepoint(name)
         except Exception as exc:
@@ -1664,9 +1667,27 @@ class Ormdantic:
                 message=f"savepoint '{name}' failed",
                 context=self._context("savepoint", savepoint=name),
             )
+            await self._events.dispatch(
+                "after_savepoint",
+                **payload,
+                duration_ms=(perf_counter() - started) * 1000,
+                error=error,
+            )
             raise error from exc
+        await self._events.dispatch(
+            "after_savepoint",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            error=None,
+        )
 
     async def _rollback_to_savepoint(self, name: str) -> None:
+        payload = {
+            "database": self,
+            **self._context("rollback_to_savepoint", savepoint=name),
+        }
+        await self._events.dispatch("before_rollback_to_savepoint", **payload)
+        started = perf_counter()
         try:
             self._ensure_runtime().rollback_to_savepoint(name)
         except Exception as exc:
@@ -1676,9 +1697,27 @@ class Ormdantic:
                 message=f"rollback to savepoint '{name}' failed",
                 context=self._context("rollback_to_savepoint", savepoint=name),
             )
+            await self._events.dispatch(
+                "after_rollback_to_savepoint",
+                **payload,
+                duration_ms=(perf_counter() - started) * 1000,
+                error=error,
+            )
             raise error from exc
+        await self._events.dispatch(
+            "after_rollback_to_savepoint",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            error=None,
+        )
 
     async def _release_savepoint(self, name: str) -> None:
+        payload = {
+            "database": self,
+            **self._context("release_savepoint", savepoint=name),
+        }
+        await self._events.dispatch("before_release_savepoint", **payload)
+        started = perf_counter()
         try:
             self._ensure_runtime().release_savepoint(name)
         except Exception as exc:
@@ -1688,7 +1727,19 @@ class Ormdantic:
                 message=f"release savepoint '{name}' failed",
                 context=self._context("release_savepoint", savepoint=name),
             )
+            await self._events.dispatch(
+                "after_release_savepoint",
+                **payload,
+                duration_ms=(perf_counter() - started) * 1000,
+                error=error,
+            )
             raise error from exc
+        await self._events.dispatch(
+            "after_release_savepoint",
+            **payload,
+            duration_ms=(perf_counter() - started) * 1000,
+            error=None,
+        )
 
 
 class _OrmdanticTransaction:
