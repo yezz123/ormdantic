@@ -7,7 +7,7 @@ This guide shows direct transactions, savepoints, and the session unit-of-work h
 - `async with db.transaction()`;
 - `async with db.savepoint("name")`;
 - `async with db.session()`;
-- staged inserts and updates;
+- staged inserts and session savepoints;
 - commit-on-success and rollback-on-error behavior.
 
 ```python
