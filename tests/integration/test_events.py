@@ -64,6 +64,42 @@ async def test_session_flush_events_fire(tmp_path) -> None:
     assert seen == ["before_flush", "after_flush"]
 
 
+async def test_session_context_events_fire_in_order(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'session_event_order.sqlite3'}")
+    seen: list[str] = []
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    for event in (
+        "before_begin",
+        "after_begin",
+        "before_flush",
+        "after_flush",
+        "before_commit",
+        "after_commit",
+    ):
+        db.on(event, lambda event=event, **_: seen.append(event))
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    async with db.session() as session:
+        session.add(Flavor(id="1", name="mocha"))
+
+    assert seen == [
+        "before_begin",
+        "after_begin",
+        "before_flush",
+        "after_flush",
+        "before_commit",
+        "after_commit",
+    ]
+
+
 async def test_transaction_lifecycle_events_fire(tmp_path) -> None:
     db = Ormdantic(f"sqlite:///{tmp_path / 'transaction_events.sqlite3'}")
     seen: list[str] = []
@@ -106,6 +142,44 @@ async def test_transaction_lifecycle_events_fire(tmp_path) -> None:
         "after_begin",
         "before_rollback",
         "after_rollback",
+    ]
+
+
+async def test_savepoint_lifecycle_events_fire(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'savepoint_events.sqlite3'}")
+    seen: list[str] = []
+
+    for event in (
+        "before_savepoint",
+        "after_savepoint",
+        "before_release_savepoint",
+        "after_release_savepoint",
+        "before_rollback_to_savepoint",
+        "after_rollback_to_savepoint",
+    ):
+        db.on(event, lambda event=event, **_: seen.append(event))
+
+    await db.init()
+
+    async with db.transaction():
+        async with db.savepoint("keep"):
+            pass
+
+        try:
+            async with db.savepoint("undo"):
+                raise RuntimeError("rollback savepoint")
+        except RuntimeError:
+            pass
+
+    assert seen == [
+        "before_savepoint",
+        "after_savepoint",
+        "before_release_savepoint",
+        "after_release_savepoint",
+        "before_savepoint",
+        "after_savepoint",
+        "before_rollback_to_savepoint",
+        "after_rollback_to_savepoint",
     ]
 
 

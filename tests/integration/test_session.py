@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from pydantic import BaseModel, Field
 
 from ormdantic import Ormdantic, selectinload
@@ -370,3 +371,154 @@ async def test_session_rejects_operations_after_close(tmp_path) -> None:
         assert str(exc) == "session is closed"
     else:  # pragma: no cover
         raise AssertionError("closed session accepted add()")
+
+
+async def test_session_rejects_duplicate_staged_primary_keys(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'session_duplicate_pk.sqlite3'}")
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    async with db.session() as session:
+        session.add(Flavor(id="1", name="mocha"))
+        with pytest.raises(ValueError, match="primary key '1' is already staged"):
+            session.add(Flavor(id="1", name="latte"))
+
+
+async def test_session_merge_updates_pending_model_with_same_primary_key(
+    tmp_path,
+) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'session_merge_pending.sqlite3'}")
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    async with db.session() as session:
+        pending = Flavor(id="1", name="mocha")
+        session.add(pending)
+        merged = session.merge(Flavor(id="1", name="vanilla"))
+        assert merged is pending
+        assert pending.name == "vanilla"
+
+    stored = await db[Flavor].find_one("1")
+    assert stored is not None
+    assert stored.name == "vanilla"
+
+
+async def test_session_failed_flush_requires_rollback_and_cleans_state(
+    tmp_path,
+) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'session_failed_flush.sqlite3'}")
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    def fail_second_insert(**kwargs) -> None:
+        if kwargs["model"].id == "2":
+            raise RuntimeError("stop second insert")
+
+    db.on("before_insert", fail_second_insert)
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    session = db.session()
+    async with session:
+        session.add(Flavor(id="1", name="mocha"))
+        session.add(Flavor(id="2", name="latte"))
+        with pytest.raises(RuntimeError, match="stop second insert"):
+            await session.flush()
+
+        assert session.get_cached(Flavor, "1") is None
+        with pytest.raises(
+            RuntimeError, match="session flush failed; rollback required"
+        ):
+            session.add(Flavor(id="3", name="vanilla"))
+
+        await session.rollback()
+
+    assert await db[Flavor].count() == 0
+
+
+async def test_session_savepoint_restores_flushed_and_pending_state(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'session_savepoint.sqlite3'}")
+
+    @db.table(pk="id")
+    class Flavor(BaseModel):
+        id: str
+        name: str
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    async with db.session() as session:
+        session.add(Flavor(id="1", name="mocha"))
+        await session.flush()
+
+        with pytest.raises(RuntimeError, match="rollback savepoint"):
+            async with session.savepoint("optional_flavor"):
+                session.add(Flavor(id="2", name="latte"))
+                await session.flush()
+                assert session.get_cached(Flavor, "2") is not None
+                raise RuntimeError("rollback savepoint")
+
+        assert session.get_cached(Flavor, "1") is not None
+        assert session.get_cached(Flavor, "2") is None
+        session.add(Flavor(id="3", name="vanilla"))
+
+    assert await db[Flavor].count() == 2
+    assert await db[Flavor].find_one("1") is not None
+    assert await db[Flavor].find_one("2") is None
+    assert await db[Flavor].find_one("3") is not None
+
+
+async def test_session_tracks_collection_relationship_additions(tmp_path) -> None:
+    db = Ormdantic(f"sqlite:///{tmp_path / 'session_relationship_changes.sqlite3'}")
+
+    @db.table(pk="id", back_references={"posts": "author"})
+    class Author(BaseModel):
+        id: str = Field(default_factory=lambda: str(uuid4()))
+        name: str
+        posts: list[Post] = Field(default_factory=list)
+
+    @db.table(pk="id")
+    class Post(BaseModel):
+        id: str = Field(default_factory=lambda: str(uuid4()))
+        title: str
+        author: Author | str | None = None
+
+    Author.model_rebuild()
+    Post.model_rebuild()
+
+    await db.init()
+    await db.drop_all()
+    await db.create_all()
+
+    author = await db[Author].insert(Author(name="writer"))
+
+    async with db.session() as session:
+        managed = await session.get(Author, author.id, depth=1)
+        assert managed is not None
+        assert managed.posts == []
+        managed.posts.append(Post(title="auto tracked"))
+
+    stored = await db[Author].find_one(author.id, load=[selectinload("posts")])
+    assert stored is not None
+    assert [post.title for post in stored.posts] == ["auto tracked"]
+    assert stored.posts[0].author == author.id
