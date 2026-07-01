@@ -30,9 +30,14 @@ async def main() -> None:
             pass
 
     async with db.session() as session:
-        model = Flavor(id="3", name="vanilla")
-        session.add(model)
-        session.merge(Flavor(id="3", name="vanilla bean"))
+        try:
+            async with session.savepoint("optional_session_insert"):
+                session.add(Flavor(id="2", name="discarded"))
+                await session.flush()
+                raise RuntimeError("rollback only the session savepoint")
+        except RuntimeError:
+            pass
+        session.add(Flavor(id="3", name="vanilla"))
 
     assert await db[Flavor].count() == 2
 
