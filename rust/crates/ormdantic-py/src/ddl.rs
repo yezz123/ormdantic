@@ -633,7 +633,7 @@ mod tests {
 
         assert_eq!(
             sql[0],
-            "CREATE TABLE IF NOT EXISTS [flavor] ([id] TEXT PRIMARY KEY NONCLUSTERED NOT NULL)"
+            "IF OBJECT_ID(N'flavor', N'U') IS NULL CREATE TABLE [flavor] ([id] NVARCHAR(255) PRIMARY KEY NONCLUSTERED NOT NULL)"
         );
     }
 
