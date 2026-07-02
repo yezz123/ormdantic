@@ -336,55 +336,286 @@ fn render_dml_ast(
             conflict_target,
             update_assignments,
             returning,
-        } => {
-            require_columns(columns, "upsert")?;
-            if rows.is_empty() {
-                return Err(OrmdanticError::SqlCompile {
-                    message: "upsert query requires at least one row".to_string(),
-                });
-            }
-            let rendered_rows = rows
+        } => render_dml_upsert(
+            dialect,
+            table,
+            columns,
+            rows,
+            conflict_target,
+            update_assignments,
+            returning,
+            params,
+            bind_index,
+        ),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_dml_upsert(
+    dialect: &impl Dialect,
+    table: &TableSource,
+    columns: &[String],
+    rows: &[Vec<Expr>],
+    conflict_target: &[String],
+    update_assignments: &[(String, Expr)],
+    returning: &[Expr],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<(String, QueryOperation)> {
+    require_columns(columns, "upsert")?;
+    if rows.is_empty() {
+        return Err(OrmdanticError::SqlCompile {
+            message: "upsert query requires at least one row".to_string(),
+        });
+    }
+    validate_row_widths(columns, rows, "upsert")?;
+    let target = conflict_target
+        .first()
+        .or_else(|| columns.first())
+        .ok_or_else(|| OrmdanticError::SqlCompile {
+            message: "upsert query requires a conflict target".to_string(),
+        })?;
+
+    if matches!(dialect.kind(), DialectKind::MsSql | DialectKind::Oracle) {
+        if !returning.is_empty() {
+            return Err(OrmdanticError::UnsupportedFeature {
+                feature: "RETURNING from MERGE".to_string(),
+                dialect: dialect.name().to_string(),
+            });
+        }
+        return render_merge_upsert(
+            dialect,
+            table,
+            columns,
+            rows,
+            target,
+            update_assignments,
+            params,
+            bind_index,
+        );
+    }
+
+    let rendered_rows = rows
+        .iter()
+        .map(|row| {
+            Ok(format!(
+                "({})",
+                row.iter()
+                    .map(|expr| render_expr(dialect, expr, params, bind_index))
+                    .collect::<OrmdanticResult<Vec<_>>>()?
+                    .join(", ")
+            ))
+        })
+        .collect::<OrmdanticResult<Vec<_>>>()?
+        .join(", ");
+    let mut sql = format!(
+        "INSERT INTO {} ({}) VALUES {rendered_rows}",
+        render_table_source(dialect, table),
+        column_list(dialect, columns)
+    );
+    let update_columns = upsert_update_columns(columns, target, update_assignments);
+    sql.push(' ');
+    sql.push_str(&dialect.upsert_conflict_clause(target, &update_columns)?);
+    append_returning(dialect, &mut sql, returning, params, bind_index)?;
+    Ok((sql, QueryOperation::Upsert))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_merge_upsert(
+    dialect: &impl Dialect,
+    table: &TableSource,
+    columns: &[String],
+    rows: &[Vec<Expr>],
+    target: &str,
+    update_assignments: &[(String, Expr)],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<(String, QueryOperation)> {
+    let quoted_columns = column_list(dialect, columns);
+    let insert_values = columns
+        .iter()
+        .map(|column| source_column(dialect, column))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = match dialect.kind() {
+        DialectKind::MsSql => {
+            render_mssql_merge_source(dialect, columns, rows, params, bind_index)?
+        }
+        DialectKind::Oracle => {
+            render_oracle_merge_source(dialect, columns, rows, params, bind_index)?
+        }
+        _ => unreachable!("MERGE upsert is only selected for SQL Server and Oracle"),
+    };
+    let match_predicate = format!(
+        "{} = {}",
+        target_column(dialect, target),
+        source_column(dialect, target)
+    );
+    let update_sql = render_merge_update_clause(
+        dialect,
+        columns,
+        target,
+        update_assignments,
+        params,
+        bind_index,
+    )?;
+    let target_alias = match dialect.kind() {
+        DialectKind::MsSql => "AS target",
+        DialectKind::Oracle => "target",
+        _ => unreachable!("MERGE upsert is only selected for SQL Server and Oracle"),
+    };
+    let terminator = if dialect.kind() == DialectKind::MsSql {
+        ";"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "MERGE INTO {} {target_alias} USING {source} ON ({match_predicate}){update_sql} WHEN NOT MATCHED THEN INSERT ({quoted_columns}) VALUES ({insert_values}){terminator}",
+        render_table_source(dialect, table)
+    );
+    Ok((sql, QueryOperation::Upsert))
+}
+
+fn render_mssql_merge_source(
+    dialect: &impl Dialect,
+    columns: &[String],
+    rows: &[Vec<Expr>],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    let rendered_rows = rows
+        .iter()
+        .map(|row| {
+            Ok(format!(
+                "({})",
+                row.iter()
+                    .map(|expr| render_expr(dialect, expr, params, bind_index))
+                    .collect::<OrmdanticResult<Vec<_>>>()?
+                    .join(", ")
+            ))
+        })
+        .collect::<OrmdanticResult<Vec<_>>>()?
+        .join(", ");
+    Ok(format!(
+        "(VALUES {rendered_rows}) AS source ({})",
+        column_list(dialect, columns)
+    ))
+}
+
+fn render_oracle_merge_source(
+    dialect: &impl Dialect,
+    columns: &[String],
+    rows: &[Vec<Expr>],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    let selects = rows
+        .iter()
+        .map(|row| {
+            let projections = row
                 .iter()
-                .map(|row| {
+                .zip(columns.iter())
+                .map(|(expr, column)| {
                     Ok(format!(
-                        "({})",
-                        row.iter()
-                            .map(|expr| render_expr(dialect, expr, params, bind_index))
-                            .collect::<OrmdanticResult<Vec<_>>>()?
-                            .join(", ")
+                        "{} AS {}",
+                        render_expr(dialect, expr, params, bind_index)?,
+                        dialect.quote_ident(column)
                     ))
                 })
                 .collect::<OrmdanticResult<Vec<_>>>()?
                 .join(", ");
-            let mut sql = format!(
-                "INSERT INTO {} ({}) VALUES {rendered_rows}",
-                render_table_source(dialect, table),
-                column_list(dialect, columns)
-            );
-            let target = conflict_target
-                .first()
-                .or_else(|| columns.first())
-                .ok_or_else(|| OrmdanticError::SqlCompile {
-                    message: "upsert query requires a conflict target".to_string(),
-                })?;
-            let update_columns = if update_assignments.is_empty() {
-                columns
-                    .iter()
-                    .filter(|column| *column != target)
-                    .cloned()
-                    .collect::<Vec<_>>()
-            } else {
-                update_assignments
-                    .iter()
-                    .map(|(column, _)| column.clone())
-                    .collect::<Vec<_>>()
-            };
-            sql.push(' ');
-            sql.push_str(&dialect.upsert_conflict_clause(target, &update_columns));
-            append_returning(dialect, &mut sql, returning, params, bind_index)?;
-            Ok((sql, QueryOperation::Upsert))
+            Ok(format!("SELECT {projections} FROM dual"))
+        })
+        .collect::<OrmdanticResult<Vec<_>>>()?
+        .join(" UNION ALL ");
+    Ok(format!("({selects}) source"))
+}
+
+fn render_merge_update_clause(
+    dialect: &impl Dialect,
+    columns: &[String],
+    target: &str,
+    update_assignments: &[(String, Expr)],
+    params: &mut Vec<String>,
+    bind_index: &mut usize,
+) -> OrmdanticResult<String> {
+    let assignments = if update_assignments.is_empty() {
+        upsert_update_columns(columns, target, update_assignments)
+            .into_iter()
+            .map(|column| {
+                format!(
+                    "{} = {}",
+                    target_column(dialect, &column),
+                    source_column(dialect, &column)
+                )
+            })
+            .collect::<Vec<_>>()
+    } else {
+        update_assignments
+            .iter()
+            .map(|(column, expr)| {
+                Ok(format!(
+                    "{} = {}",
+                    target_column(dialect, column),
+                    render_expr(dialect, expr, params, bind_index)?
+                ))
+            })
+            .collect::<OrmdanticResult<Vec<_>>>()?
+    };
+    if assignments.is_empty() {
+        Ok(String::new())
+    } else {
+        Ok(format!(
+            " WHEN MATCHED THEN UPDATE SET {}",
+            assignments.join(", ")
+        ))
+    }
+}
+
+fn upsert_update_columns(
+    columns: &[String],
+    target: &str,
+    update_assignments: &[(String, Expr)],
+) -> Vec<String> {
+    if update_assignments.is_empty() {
+        columns
+            .iter()
+            .filter(|column| column.as_str() != target)
+            .cloned()
+            .collect()
+    } else {
+        update_assignments
+            .iter()
+            .map(|(column, _)| column.clone())
+            .collect()
+    }
+}
+
+fn target_column(dialect: &impl Dialect, column: &str) -> String {
+    format!("target.{}", dialect.quote_ident(column))
+}
+
+fn source_column(dialect: &impl Dialect, column: &str) -> String {
+    format!("source.{}", dialect.quote_ident(column))
+}
+
+fn validate_row_widths(
+    columns: &[String],
+    rows: &[Vec<Expr>],
+    operation: &str,
+) -> OrmdanticResult<()> {
+    for (index, row) in rows.iter().enumerate() {
+        if row.len() != columns.len() {
+            return Err(OrmdanticError::SqlCompile {
+                message: format!(
+                    "{operation} row {index} has {} values for {} columns",
+                    row.len(),
+                    columns.len()
+                ),
+            });
         }
     }
+    Ok(())
 }
 
 fn render_expr(
@@ -864,23 +1095,24 @@ fn compile_upsert(
     columns: &[String],
     pk: &str,
 ) -> OrmdanticResult<CompiledQuery> {
-    require_columns(columns, "upsert")?;
-    let insert = compile_insert(dialect, table, columns)?;
-    let update_columns = columns
+    let rows = vec![columns
         .iter()
-        .filter(|column| column.as_str() != pk)
-        .cloned()
-        .collect::<Vec<_>>();
-    compiled_query(
+        .map(|column| Expr::param(column.clone()))
+        .collect::<Vec<_>>()];
+    let mut params = Vec::new();
+    let mut bind_index = 1;
+    let (sql, operation) = render_dml_upsert(
         dialect,
-        format!(
-            "{} {}",
-            insert.sql(),
-            dialect.upsert_conflict_clause(pk, &update_columns)
-        ),
-        columns.to_vec(),
-        QueryOperation::Upsert,
-    )
+        &TableSource::table(table.name().to_string()),
+        columns,
+        &rows,
+        &[pk.to_string()],
+        &[],
+        &[],
+        &mut params,
+        &mut bind_index,
+    )?;
+    compiled_query(dialect, sql, params, operation)
 }
 
 fn compile_delete(
