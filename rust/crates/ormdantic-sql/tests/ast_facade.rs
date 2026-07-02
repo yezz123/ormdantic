@@ -122,6 +122,24 @@ fn dml_returning_requires_dialect_support() {
 }
 
 #[test]
+fn upsert_rejects_row_width_mismatches() {
+    let dml = DmlAst::Upsert {
+        table: TableSource::table("flavors"),
+        columns: vec!["id".to_string(), "name".to_string()],
+        rows: vec![vec![Expr::param("id")]],
+        conflict_target: vec!["id".to_string()],
+        update_assignments: Vec::new(),
+        returning: Vec::new(),
+    };
+
+    let error = dml
+        .compile(&PostgresDialect)
+        .expect_err("upsert row width mismatch should fail before rendering SQL");
+
+    assert!(error.to_string().contains("1 values for 2 columns"));
+}
+
+#[test]
 fn empty_projection_error_surfaces_from_public_ast() {
     let error = SelectAst::new(Vec::new())
         .compile(&PostgresDialect)

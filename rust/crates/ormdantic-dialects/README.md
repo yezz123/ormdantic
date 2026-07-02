@@ -2,7 +2,7 @@
 
 SQL dialect support for Ormdantic.
 
-`ormdantic-dialects` detects database kinds from names and SQLAlchemy-style URLs, then provides quoting, placeholder, upsert, returning, and JSON capability behavior to the SQL compiler and execution layer.
+`ormdantic-dialects` detects database kinds from names and SQLAlchemy-style URLs, then provides quoting, placeholder, insert-conflict upsert, returning, and JSON capability behavior to the SQL compiler and execution layer. SQL Server and Oracle use compiler-level `MERGE` upserts instead of insert conflict clauses.
 
 ## Public API
 
@@ -29,4 +29,4 @@ External dependencies: none.
 
 ## Tests
 
-The crate tests SQLAlchemy-style URL parsing, placeholder styles, quoting behavior, upsert clauses, and unknown dialect errors.
+The crate tests SQLAlchemy-style URL parsing, placeholder styles, quoting behavior, upsert conflict clauses, MERGE-only upsert rejection, and unknown dialect errors.
