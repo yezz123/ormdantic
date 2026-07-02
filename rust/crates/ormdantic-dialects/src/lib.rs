@@ -345,10 +345,14 @@ pub trait Dialect {
         ]
     }
 
-    fn upsert_conflict_clause(&self, conflict_column: &str, update_columns: &[String]) -> String {
+    fn upsert_conflict_clause(
+        &self,
+        conflict_column: &str,
+        update_columns: &[String],
+    ) -> OrmdanticResult<String> {
         let target = self.quote_ident(conflict_column);
         if update_columns.is_empty() {
-            return format!("ON CONFLICT ({target}) DO NOTHING");
+            return Ok(format!("ON CONFLICT ({target}) DO NOTHING"));
         }
 
         let assignments = update_columns
@@ -362,7 +366,9 @@ pub trait Dialect {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        format!("ON CONFLICT ({target}) DO UPDATE SET {assignments}")
+        Ok(format!(
+            "ON CONFLICT ({target}) DO UPDATE SET {assignments}"
+        ))
     }
 }
 
@@ -947,9 +953,13 @@ impl Dialect for MySqlDialect {
         ]
     }
 
-    fn upsert_conflict_clause(&self, _conflict_column: &str, update_columns: &[String]) -> String {
+    fn upsert_conflict_clause(
+        &self,
+        _conflict_column: &str,
+        update_columns: &[String],
+    ) -> OrmdanticResult<String> {
         if update_columns.is_empty() {
-            return "ON DUPLICATE KEY UPDATE 1 = 1".to_string();
+            return Ok("ON DUPLICATE KEY UPDATE 1 = 1".to_string());
         }
         let assignments = update_columns
             .iter()
@@ -962,7 +972,7 @@ impl Dialect for MySqlDialect {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        format!("ON DUPLICATE KEY UPDATE {assignments}")
+        Ok(format!("ON DUPLICATE KEY UPDATE {assignments}"))
     }
 }
 
@@ -1002,7 +1012,11 @@ impl Dialect for MariaDbDialect {
         MySqlDialect.reflection_queries(scope)
     }
 
-    fn upsert_conflict_clause(&self, conflict_column: &str, update_columns: &[String]) -> String {
+    fn upsert_conflict_clause(
+        &self,
+        conflict_column: &str,
+        update_columns: &[String],
+    ) -> OrmdanticResult<String> {
         MySqlDialect.upsert_conflict_clause(conflict_column, update_columns)
     }
 }
@@ -1028,7 +1042,7 @@ impl Dialect for MsSqlDialect {
     }
 
     fn supports_returning(&self) -> bool {
-        true
+        false
     }
 
     fn supports_native_uuid(&self) -> bool {
@@ -1127,6 +1141,17 @@ impl Dialect for MsSqlDialect {
             ),
         ]
     }
+
+    fn upsert_conflict_clause(
+        &self,
+        _conflict_column: &str,
+        _update_columns: &[String],
+    ) -> OrmdanticResult<String> {
+        Err(OrmdanticError::UnsupportedFeature {
+            feature: "INSERT conflict-clause upsert".to_string(),
+            dialect: self.name().to_string(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1150,7 +1175,7 @@ impl Dialect for OracleDialect {
     }
 
     fn supports_returning(&self) -> bool {
-        true
+        false
     }
 
     fn supports_native_uuid(&self) -> bool {
@@ -1270,6 +1295,17 @@ impl Dialect for OracleDialect {
                 ),
             ),
         ]
+    }
+
+    fn upsert_conflict_clause(
+        &self,
+        _conflict_column: &str,
+        _update_columns: &[String],
+    ) -> OrmdanticResult<String> {
+        Err(OrmdanticError::UnsupportedFeature {
+            feature: "INSERT conflict-clause upsert".to_string(),
+            dialect: self.name().to_string(),
+        })
     }
 }
 
@@ -1476,7 +1512,11 @@ impl Dialect for AnyDialect {
         }
     }
 
-    fn upsert_conflict_clause(&self, conflict_column: &str, update_columns: &[String]) -> String {
+    fn upsert_conflict_clause(
+        &self,
+        conflict_column: &str,
+        update_columns: &[String],
+    ) -> OrmdanticResult<String> {
         match self {
             Self::Sqlite(dialect) => {
                 dialect.upsert_conflict_clause(conflict_column, update_columns)
