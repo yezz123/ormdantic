@@ -23,7 +23,9 @@ SQL Server support includes:
 - identity options;
 - sequences;
 - regular views;
-- `OUTPUT` rows for insert/update/delete where modeled.
+- `MERGE` upserts.
+
+SQL Server `OUTPUT` rows are backend-specific result-bind behavior and are not compiled through Ormdantic's generic `RETURNING` API yet.
 
 ## Type Notes
 
