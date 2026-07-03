@@ -23,6 +23,7 @@ Oracle support includes:
 - regular views and materialized views;
 - comments;
 - foreign keys, unique constraints, and checks;
+- `MERGE` upserts;
 - migration history with paginated metadata reads.
 
 ## Type Notes
@@ -35,3 +36,5 @@ Oracle support includes:
 ## Runtime Notes
 
 Oracle can close a connection for some protocol-level error cases without returning the original Oracle code through the driver dependency. Ormdantic maps known cases exercised by the driver matrix and reconnects periodically for non-transactional committed write batches.
+
+Oracle `RETURNING INTO` requires out-bind handling and is not compiled through Ormdantic's generic `RETURNING` API yet.

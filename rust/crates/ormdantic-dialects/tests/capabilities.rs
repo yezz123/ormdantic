@@ -13,6 +13,8 @@ fn feature_sets_include_backend_capabilities() {
 
     assert!(MariaDbDialect.supports_feature(BackendFeature::Returning));
     assert!(!MySqlDialect.supports_feature(BackendFeature::Returning));
+    assert!(!MsSqlDialect.supports_feature(BackendFeature::Returning));
+    assert!(!OracleDialect.supports_feature(BackendFeature::Returning));
     assert!(!MsSqlDialect.supports_feature(BackendFeature::NativeJson));
     assert!(SqliteDialect.supports_feature(BackendFeature::Savepoints));
 }
