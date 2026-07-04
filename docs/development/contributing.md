@@ -157,7 +157,8 @@ Install Git hooks after the first sync:
 uv run --group linting pre-commit install
 ```
 
-The hooks run the configured `pre-commit-hooks` and Ruff checks before commits.
+The hooks run the configured `pre-commit-hooks`, Ruff checks, and Ty type
+checking before commits.
 
 ## Command Reference
 
