@@ -8,6 +8,9 @@ hide:
 This guide takes you from a fresh clone to a pull request that is ready to
 review. Most commands run from the repository root.
 
+For the full `uv`, `maturin`, and Rust toolchain setup, see
+[Local Development](local-development.md).
+
 Ormdantic has two main parts:
 
 - A Python package in `ormdantic/`.
@@ -157,7 +160,8 @@ uv run --group linting pre-commit install
 ```
 
 The hooks run the configured `pre-commit-hooks`, Ruff checks, and Ty type
-checking before commits.
+checking before commits. The hook set also checks TOML formatting with Taplo
+and Rust formatting with `cargo fmt --check`.
 
 ## Command Reference
 
@@ -165,6 +169,11 @@ checking before commits.
 | --- | --- |
 | Install all development dependencies | `uv sync --group dev` |
 | Rebuild the Python extension | `uv run --group dev maturin develop` |
+| Rebuild the extension and run Python tests | `make test` |
+| Run Rust and Python lint checks | `make lint` |
+| Build documentation | `make docs` |
+| Run coverage checks | `make coverage` |
+| Run benchmarks | `make bench` |
 | Run Python tests with coverage | `bash scripts/test.sh` |
 | Run one Python test file | `uv run --group testing pytest tests/unit/test_expression_api.py -q` |
 | Type-check Python | `bash scripts/lint.sh` |
@@ -175,6 +184,7 @@ checking before commits.
 | Serve the docs locally | `uv run --group docs zensical serve` |
 | Build the docs | `bash scripts/docs_build.sh` |
 | Run the server database matrix | `bash docker/databases/run-tests.sh` |
+| Smoke-test an installed distribution | `uv run python scripts/smoke_installed_package.py` |
 
 ## Development Loop
 
@@ -222,6 +232,12 @@ The native extension is missing or stale. Rebuild it from the repository root:
 
 ```bash
 uv run --group dev maturin develop
+```
+
+Then confirm the extension can import and reports its compiled drivers:
+
+```bash
+uv run python scripts/smoke_installed_package.py
 ```
 
 </details>
