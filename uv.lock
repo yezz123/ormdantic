@@ -781,7 +781,7 @@ dev = [
     { name = "pytest-asyncio", specifier = "==0.23.7" },
     { name = "pytest-benchmark", specifier = ">=5.2.0" },
     { name = "pytest-codspeed", specifier = ">=5.0.3" },
-    { name = "pytest-cov", specifier = "==7.1.0" },
+    { name = "pytest-cov", specifier = ">=6.2.0" },
     { name = "pytest-pretty" },
     { name = "python-decouple" },
     { name = "pyyaml", specifier = ">=5.3.1" },
@@ -808,7 +808,7 @@ testing = [
     { name = "pytest-asyncio", specifier = "==0.23.7" },
     { name = "pytest-benchmark", specifier = ">=5.2.0" },
     { name = "pytest-codspeed", specifier = ">=5.0.3" },
-    { name = "pytest-cov", specifier = "==7.1.0" },
+    { name = "pytest-cov", specifier = ">=6.2.0" },
     { name = "pytest-pretty" },
     { name = "python-decouple" },
 ]
