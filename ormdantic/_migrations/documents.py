@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 
 def toml_loads(payload: str | bytes | bytearray) -> dict[str, Any]:
     text = payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
-    try:
+    if sys.version_info >= (3, 11):
         import tomllib
-    except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
-        try:
-            import tomli as tomllib  # type: ignore[no-redef]
-        except ModuleNotFoundError as exc:  # pragma: no cover
-            raise RuntimeError(
-                "Reading TOML migration files on Python < 3.11 requires tomli"
-            ) from exc
+    else:
+        import tomli as tomllib
+
     return tomllib.loads(text)
 
 

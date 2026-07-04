@@ -647,6 +647,10 @@ def normalized_postgres_storage_parameters(
     parameters: list[tuple[str, str]] = []
     items = values.items() if isinstance(values, Mapping) else values
     for raw_name, raw_value in sorted(items, key=lambda item: str(item[0])):
+        if not isinstance(raw_name, str):
+            raise ValueError(
+                f"PostgreSQL storage parameter for {storage_target} must be a string"
+            )
         name = raw_name.strip()
         option_name = f"PostgreSQL storage parameter for {storage_target}"
         if not name:

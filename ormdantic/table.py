@@ -100,6 +100,7 @@ class Table(Generic[ModelType]):
         """Find a model by primary key."""
         load_plan = self._resolve_load_plan(depth, load)
         if load_plan.paths:
+            load_paths = load_plan.paths
             joined_filters, joined_order_by, joined_values = (
                 self._joined_loader_query_parts(load_plan)
             )
@@ -108,12 +109,12 @@ class Table(Generic[ModelType]):
                 "select_one",
                 lambda: self._rust_handle.find_one_with_paths(
                     joined_values,
-                    list(load_plan.paths),
+                    list(load_paths),
                     joined_filters,
                     joined_order_by,
                 ),
                 parameters=joined_values,
-                context={"load_paths": list(load_plan.paths)},
+                context={"load_paths": list(load_paths)},
             )
         else:
             primary_key = py_type_to_sql(self._table_map, pk)
@@ -166,6 +167,7 @@ class Table(Generic[ModelType]):
         filters, values = self._compile_where(where)
         legacy_order_by = self._legacy_order_columns(order_by)
         if load_plan.paths:
+            load_paths = load_plan.paths
             joined_filters, joined_order_by, joined_values = (
                 self._joined_loader_query_parts(load_plan)
             )
@@ -179,7 +181,7 @@ class Table(Generic[ModelType]):
                     order.value,
                     limit or None,
                     offset or None,
-                    list(load_plan.paths),
+                    list(load_paths),
                     joined_filters,
                     joined_order_by,
                 ),
@@ -187,7 +189,7 @@ class Table(Generic[ModelType]):
                 context={
                     "limit": limit or None,
                     "offset": offset or None,
-                    "load_paths": list(load_plan.paths),
+                    "load_paths": list(load_paths),
                 },
             )
             data = (
@@ -493,6 +495,7 @@ class Table(Generic[ModelType]):
             expr_column(self._table_data.pk).in_(primary_keys)
         )
         if load_plan.paths:
+            load_paths = load_plan.paths
             joined_filters, joined_order_by, joined_values = (
                 self._joined_loader_query_parts(load_plan)
             )
@@ -506,12 +509,12 @@ class Table(Generic[ModelType]):
                     Order.asc.value,
                     None,
                     None,
-                    list(load_plan.paths),
+                    list(load_paths),
                     joined_filters,
                     joined_order_by,
                 ),
                 parameters=values,
-                context={"load_paths": list(load_plan.paths)},
+                context={"load_paths": list(load_paths)},
             )
             data = (
                 await self._deserialize(

@@ -1806,6 +1806,8 @@ def _reflect_server_namespaces(
             "AND ep.minor_id = 0 AND ep.name = N'MS_Description' "
             f"WHERE {namespace_filter('s.name')} ORDER BY s.name"
         )
+    else:
+        return []
     return [
         NamespaceSnapshot(str(row[0]), _optional_str(row[1]) if len(row) > 1 else None)
         for row in _query_rows_url(rust, url, sql)
@@ -1899,6 +1901,8 @@ def _reflect_server_sequences(
             f"TO_CHAR(cache_size), order_flag FROM {sequences} {owner_filter} "
             "ORDER BY sequence_name"
         )
+    else:
+        return []
     snapshots = [
         _reflected_sequence_snapshot(dialect, schema, row)
         for row in _query_rows_url(rust, url, sql)
@@ -2088,6 +2092,8 @@ def _reflect_server_views(
                 f"{materialized_owner_filter} ORDER BY m.mview_name"
             ),
         )
+    else:
+        return []
     rows = _query_rows_url(rust, url, sql)
     snapshots = [
         ViewSnapshot(

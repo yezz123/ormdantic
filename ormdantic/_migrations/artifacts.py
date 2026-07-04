@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from os import PathLike
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ormdantic._migrations.documents import toml_dumps, toml_loads
 from ormdantic._migrations.models import (
@@ -361,7 +361,7 @@ def coerce_artifact(
     if isinstance(artifact, MigrationArtifact):
         return artifact
     if isinstance(artifact, Mapping):
-        return MigrationArtifact.from_dict(artifact)
+        return MigrationArtifact.from_dict(cast(Mapping[str, Any], artifact))
     return MigrationArtifact.read(artifact)
 
 

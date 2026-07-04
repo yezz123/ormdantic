@@ -50,6 +50,8 @@ class OrmSerializer(Generic[SerializedType]):
             if load_paths is not None
             else self._get_result_schema(table_data, depth, is_array)
         )
+        if result_schema is None:
+            result_schema = ResultSchema(table_data=table_data, is_array=is_array)
         self._result_schema = ResultSchema(
             is_array=is_array,
             references={table_data.tablename: result_schema},

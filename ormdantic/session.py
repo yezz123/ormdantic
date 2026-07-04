@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from types import TracebackType
 from typing import Any, TypeGuard
 
 from pydantic import BaseModel
+from typing_extensions import Self
 
 
 @dataclass(frozen=True)
@@ -37,13 +39,18 @@ class Session:
         self._savepoint_sequence = 0
         self._closed = False
 
-    async def __aenter__(self) -> Session:
+    async def __aenter__(self) -> Self:
         """Begin a native transaction and return the session."""
         self._ensure_open()
         await self._database._begin(self._transaction_options)
         return self
 
-    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """Commit on success and roll back on error."""
         if self._closed:
             return
@@ -479,13 +486,18 @@ class _SessionSavepoint:
         self._name = name
         self._state: _UnitOfWorkSnapshot | None = None
 
-    async def __aenter__(self) -> "_SessionSavepoint":
+    async def __aenter__(self) -> Self:
         self._session._ensure_usable()
         self._state = self._session._capture_state()
         await self._session._database._savepoint(self._name)
         return self
 
-    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._state is None:
             return
         if exc_type is not None:
