@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import importlib
 from dataclasses import dataclass
+from types import TracebackType
 from typing import Any, Iterator
+
+from typing_extensions import Self
 
 from ormdantic.errors import (
     DatabaseConnectionError,
@@ -163,12 +166,17 @@ class NativeTransaction:
         """Create a transaction bound to a native engine."""
         self._engine = engine
 
-    async def __aenter__(self) -> NativeTransaction:
+    async def __aenter__(self) -> Self:
         """Begin the transaction and return the context manager."""
         await self._engine.begin()
         return self
 
-    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """Commit on success and roll back on error."""
         if exc_type is None:
             await self._engine.commit()

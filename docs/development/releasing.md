@@ -1,21 +1,16 @@
 # Releasing
 
-Ormdantic releases are driven by Git tags. A release publishes the Rust crates to
-crates.io first, then publishes the Python distribution to PyPI, then creates or
-updates the GitHub Release with the built artifacts.
+Ormdantic releases are driven by Git tags. A release publishes the Rust crates to crates.io first, then publishes the Python distribution to PyPI, then creates or updates the GitHub Release with the built artifacts.
 
-## One-Time Setup
+## One-time setup
 
 Configure these before the first release:
 
-- Add a `CARGO_REGISTRY_TOKEN` repository secret with permission to publish all
-  `ormdantic-*` crates on crates.io.
-- Configure PyPI trusted publishing for the `ormdantic` project with the
-  `.github/workflows/release.yml` workflow and the `release` environment.
-- Protect the GitHub `release` environment if releases should require manual
-  approval.
+- Add a `CARGO_REGISTRY_TOKEN` repository secret with permission to publish all `ormdantic-*` crates on crates.io.
+- Configure PyPI trusted publishing for the `ormdantic` project with the `.github/workflows/release.yml` workflow and the `release` environment.
+- Protect the GitHub `release` environment if releases should require manual approval.
 
-## Prepare A Release
+## Prepare a release
 
 Use the bump script to keep the Python and Rust versions in sync:
 

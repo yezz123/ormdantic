@@ -1,8 +1,8 @@
-# Rust Bridge Internals
+# Rust bridge internals
 
 These modules are private implementation details. The public runtime uses Rust-owned database and table handles exposed through `ormdantic._ormdantic`; Python modules keep the user-facing facade small while delegating hydration, filter normalization, schema compilation, reflection, and migration execution to Rust.
 
-## Pydantic Introspection
+## Pydantic introspection
 
 ::: ormdantic._introspect.FieldMetadata
 ::: ormdantic._introspect.model_fields
@@ -15,13 +15,13 @@ These modules are private implementation details. The public runtime uses Rust-o
 ::: ormdantic._introspect.first_model_arg
 ::: ormdantic._introspect.rebuild_model
 
-## Schema Helpers
+## Schema helpers
 
 ::: ormdantic.schema.validate_table_map
 ::: ormdantic.schema.compile_create_table_sql
 ::: ormdantic.schema.compile_drop_table_sql
 
-## Hydration Bridge
+## Hydration bridge
 
 ::: ormdantic.hydration.hydrate_flat_payload
 ::: ormdantic.hydration.hydrate_joined_payload

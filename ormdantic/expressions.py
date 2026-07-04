@@ -191,10 +191,10 @@ class SqlExpression:
     def ge(self, value: Any) -> "QueryExpression":
         return predicate("ge", self, value)
 
-    def __eq__(self, value: Any) -> "QueryExpression":  # type: ignore[override]
+    def __eq__(self, value: object) -> "QueryExpression":  # ty: ignore[invalid-method-override]
         return self.eq(value)
 
-    def __ne__(self, value: Any) -> "QueryExpression":  # type: ignore[override]
+    def __ne__(self, value: object) -> "QueryExpression":  # ty: ignore[invalid-method-override]
         return self.ne(value)
 
     def __lt__(self, value: Any) -> "QueryExpression":

@@ -1,4 +1,6 @@
-# Dialect Support
+# Dialect support
+
+This page summarizes backend support across the Rust SQL compiler, native execution layer, upsert behavior, row-returning data manipulation language (DML), and continuous integration (CI) coverage.
 
 | Dialect    | SQL compiler | Native execution           | Upsert strategy             | Row-returning DML | CI                   |
 | ---------- | ------------ | -------------------------- | --------------------------- | ----------------- | -------------------- |
@@ -9,7 +11,7 @@
 | SQL Server | Full         | Full with `mssql` feature  | `MERGE`                     | Not compiled      | Required service job |
 | Oracle     | Full         | Full with `oracle` feature | `MERGE`                     | Not compiled      | Required service job |
 
-## Notes
+## Support notes
 
 - SQLite is the local baseline for all ORM behavior tests.
 - PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle have gated Rust integration tests that run when their `ORMDANTIC_*_URL` variables are set.

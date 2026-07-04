@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Ormdantic raises typed exceptions for common runtime failures. Catch the most specific class when you can, and use `error.context` for structured metadata.
+Use this page when Ormdantic raises an exception or a database operation behaves differently from what you expected. Ormdantic raises typed exceptions for common runtime failures. Catch the most specific class you can, then inspect `error.context` for structured metadata.
 
 ```python
 from ormdantic import QueryExecutionError
@@ -12,29 +12,29 @@ except QueryExecutionError as exc:
     print(exc.context["table"], exc.context["operation"])
 ```
 
-## Connection Failures
+## Fix connection failures
 
 `DatabaseConnectionError` means the native runtime could not open or use the configured database connection.
 
-Check:
+Check these items first:
 
-- the URL scheme matches an installed backend, such as `sqlite`, `postgresql`, `mysql`, `mariadb`, `mssql`, or `oracle`;
-- network host, port, database name, and credentials are correct;
-- the Rust extension was built with the backend you are using;
-- `db.runtime_diagnostics()["capabilities"]` reports the expected backend as available.
+- the URL scheme matches an installed backend, such as `sqlite`, `postgresql`, `mysql`, `mariadb`, `mssql`, or `oracle`
+- network host, port, database name, and credentials are correct
+- the Rust extension was built with the backend you are using
+- `db.runtime_diagnostics()["capabilities"]` reports the expected backend as available
 
-## Schema Failures
+## Fix schema failures
 
 `SchemaError` covers schema creation, table drops, and backend DDL failures. The context includes the backend and operation, and native details are preserved on `native_message`.
 
 Common fixes:
 
-- call `await db.init()` after all models are registered;
-- verify primary key and relationship fields are present on the Pydantic model;
-- check backend-specific metadata, such as index options, tablespaces, partitions, or enum support;
-- run `db.migrations.dry_run()` before applying schema changes to inspect generated SQL.
+- call `await db.init()` after all models are registered
+- verify primary key and relationship fields are present on the Pydantic model
+- check backend-specific metadata, such as index options, tablespaces, partitions, or enum support
+- run `db.migrations.dry_run()` before applying schema changes to inspect generated SQL
 
-## Query Failures
+## Fix query failures
 
 `QueryCompilationError` means Ormdantic could not compile the query payload. `QueryExecutionError` means the SQL compiled but the database rejected or failed the execution.
 
@@ -47,7 +47,7 @@ db.on_query(lambda **event: print(event["sql"], event["bind_names"]))
 
 Debug event payloads redact sensitive values by bind name. Names containing tokens such as `password`, `secret`, `token`, or `api_key` show `<redacted>` instead of the original value.
 
-## Migrations And Reflection
+## Fix migration and reflection failures
 
 `MigrationError` wraps migration history, apply, rollback, and dirty-state failures. If the migration table is dirty after a failed apply, repair it intentionally:
 

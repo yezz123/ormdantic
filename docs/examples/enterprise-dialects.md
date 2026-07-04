@@ -1,12 +1,14 @@
-# Enterprise Dialects
+# Enterprise dialects
 
 This guide checks runtime driver availability for PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle.
 
-## What The Example Covers
+Use it before running cross-database tests or enabling backend-specific metadata in production.
 
-- `runtime_capabilities()`;
-- supported dialect names;
-- detecting source builds that omit optional engines.
+## What the example covers
+
+- `runtime_capabilities()`
+- supported dialect names
+- detecting source builds that omit optional engines
 
 ```python
 --8<-- "examples/enterprise_dialects.py"
@@ -18,6 +20,6 @@ Run it locally:
 python examples/enterprise_dialects.py
 ```
 
-## Driver-Specific Documentation
+## Driver-specific documentation
 
 Read the [Drivers](../drivers/index.md) section before relying on backend-specific DDL behavior. Each backend has different identifier, type, transaction, and reflection details.

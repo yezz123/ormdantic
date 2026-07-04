@@ -133,21 +133,21 @@ extra_css:
 
 nav:
   - Home: index.md
-  - Start:
+  - Learn:
+      - Start Here: learning-path.md
       - Why Ormdantic: why-ormdantic.md
       - Philosophy: philosophy.md
-      - Learning Path: learning-path.md
       - Installation: installation.md
-      - Quickstart: quickstart.md
+      - First Steps: quickstart.md
   - Concepts:
       - Overview: concepts/index.md
-      - Database And Tables: concepts/database-and-tables.md
-      - Field Types And Metadata: concepts/field-types-and-metadata.md
+      - Database and Tables: concepts/database-and-tables.md
+      - Field Types and Metadata: concepts/field-types-and-metadata.md
       - Relationships: concepts/relationships.md
       - Querying: concepts/querying.md
       - Loading Strategies: concepts/loading-strategies.md
-      - Transactions And Sessions: concepts/transactions-and-sessions.md
-      - Migrations And Reflection: concepts/migrations-and-reflection.md
+      - Transactions and Sessions: concepts/transactions-and-sessions.md
+      - Migrations and Reflection: concepts/migrations-and-reflection.md
       - Events: concepts/events.md
       - Native Engine: concepts/native-engine.md
   - Drivers:
@@ -158,19 +158,19 @@ nav:
       - MariaDB: drivers/mariadb.md
       - SQL Server: drivers/mssql.md
       - Oracle: drivers/oracle.md
-  - Guides:
+  - How-to Guides:
       - Existing Databases: examples/existing-databases.md
       - Basic CRUD: examples/basic-crud.md
       - Relationships: examples/relationships.md
-      - Transactions And Sessions: examples/transactions-sessions.md
+      - Transactions and Sessions: examples/transactions-sessions.md
       - Query Expressions: examples/query-expressions.md
-      - Migrations And Reflection: examples/migrations-reflection.md
+      - Migrations and Reflection: examples/migrations-reflection.md
       - Enterprise Dialects: examples/enterprise-dialects.md
       - Troubleshooting: troubleshooting.md
       - Performance: performance.md
       - SQLAlchemy Comparison: comparisons/sqlalchemy.md
       - SQLModel Comparison: comparisons/sqlmodel.md
-  - Python API:
+  - API Reference:
       - Overview: api/reference.md
       - Ormdantic: api/ormdantic.md
       - Table: api/table.md

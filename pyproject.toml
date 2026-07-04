@@ -11,33 +11,34 @@ authors = [{ name = "Yasser Tahiri", email = "hello@yezz.me" }]
 keywords = ["orm", "pydantic", "asyncio", "rust", "sql", "sqlalchemy"]
 
 classifiers = [
-    'Development Status :: 3 - Alpha',
-    'Programming Language :: Python',
-    'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.10',
-    'Programming Language :: Python :: 3.11',
-    'Programming Language :: Python :: 3.12',
-    'Programming Language :: Python :: 3.13',
-    'Programming Language :: Python :: 3.14',
-    'Programming Language :: Python :: Implementation :: CPython',
-    'Programming Language :: Python :: Implementation :: PyPy',
-    'Programming Language :: Python :: Implementation :: GraalPy',
-    'Programming Language :: Rust',
-    'Framework :: Pydantic',
-    'Framework :: Pydantic :: 2',
-    'Intended Audience :: Developers',
-    'Intended Audience :: Information Technology',
-    'Operating System :: POSIX :: Linux',
-    'Operating System :: Microsoft :: Windows',
-    'Operating System :: MacOS',
-    'Typing :: Typed',
+  'Development Status :: 3 - Alpha',
+  'Programming Language :: Python',
+  'Programming Language :: Python :: 3',
+  'Programming Language :: Python :: 3 :: Only',
+  'Programming Language :: Python :: 3.10',
+  'Programming Language :: Python :: 3.11',
+  'Programming Language :: Python :: 3.12',
+  'Programming Language :: Python :: 3.13',
+  'Programming Language :: Python :: 3.14',
+  'Programming Language :: Python :: Implementation :: CPython',
+  'Programming Language :: Python :: Implementation :: PyPy',
+  'Programming Language :: Python :: Implementation :: GraalPy',
+  'Programming Language :: Rust',
+  'Framework :: Pydantic',
+  'Framework :: Pydantic :: 2',
+  'Intended Audience :: Developers',
+  'Intended Audience :: Information Technology',
+  'Operating System :: POSIX :: Linux',
+  'Operating System :: Microsoft :: Windows',
+  'Operating System :: MacOS',
+  'Typing :: Typed',
 ]
 
 dependencies = [
-    "pydantic>=2.0.0",
-    "tomli>=2.0.0; python_version < '3.11'",
-    "typer>=0.26.7",
+  "pydantic>=2.0.0",
+  "tomli>=2.0.0; python_version < '3.11'",
+  "typing-extensions>=4.0.0",
+  "typer>=0.26.7",
 ]
 
 dynamic = ['readme', 'version']
@@ -67,7 +68,7 @@ testing = [
   "pytest-benchmark>=5.2.0",
   "pytest-codspeed>=5.0.3",
 ]
-linting = ["pre-commit==4.6.0", "mypy==2.1.0", "ruff", "black"]
+linting = ["pre-commit>=4.6.0", "ty>=0.0.56"]
 docs = [
   "cairosvg >=2.8.2",
   "griffe-typingdoc >=0.3.0",
@@ -103,12 +104,13 @@ known_third_party = ["pydantic", "typing_extensions"]
 [tool.ruff.lint]
 mccabe = { max-complexity = 14 }
 select = [
-  "E", # pycodestyle errors
-  "W", # pycodestyle warnings
-  "F", # pyflakes
-  "I", # isort
-  "C", # flake8-comprehensions
-  "B", # flake8-bugbear
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "C",   # flake8-comprehensions
+  "B",   # flake8-bugbear
+  "PYI", # typing style checks
 ]
 ignore = [
   "E501", # line too long, handled by black
@@ -137,20 +139,19 @@ source = [
   'D:\a\ormdantic\ormdantic\ormdantic',
 ]
 
-[tool.mypy]
-plugins = "pydantic.mypy"
-follow_imports = "silent"
-strict_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_generics = true
-check_untyped_defs = true
-ignore_missing_imports = true
-disallow_untyped_defs = true
+[tool.ty.environment]
+python-version = "3.10"
 
-[[tool.mypy.overrides]]
-module = ['dotenv.*']
-ignore_missing_imports = true
+[tool.ty.src]
+include = ["ormdantic"]
+
+[tool.ty.rules]
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+
+[tool.ty.terminal]
+error-on-warning = true
+output-format = "concise"
 
 [tool.coverage.report]
 precision = 2

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Type, TypeVar
+from typing import Any
+
+from typing_extensions import Self
 
 REDACTED_VALUE = "<redacted>"
 SENSITIVE_PARAMETER_TOKENS = frozenset(
@@ -25,8 +27,6 @@ SENSITIVE_PARAMETER_TOKENS = frozenset(
         "token",
     }
 )
-
-ErrorT = TypeVar("ErrorT", bound="OrmdanticError")
 
 
 class OrmdanticError(ValueError):
@@ -52,7 +52,7 @@ class OrmdanticError(ValueError):
             self.context.setdefault("native_error_type", self.native_error_type)
         super().__init__(msg)
 
-    def with_context(self: ErrorT, **context: Any) -> ErrorT:
+    def with_context(self, **context: Any) -> Self:
         """Attach additional context without replacing existing keys."""
         for key, value in context.items():
             if value is not None:
@@ -134,8 +134,8 @@ class MustUnionForeignKeyError(ConfigurationError):
         table_a: str,
         table_b: str,
         field: str,
-        model_b: Type,  # type: ignore
-        pk_type: Type,  # type: ignore
+        model_b: type[Any],
+        pk_type: type[Any],
     ) -> None:
         super().__init__(
             f'Relation defined on "{table_a}.{field}" to "{table_b}" must be a union'
@@ -146,7 +146,7 @@ class MustUnionForeignKeyError(ConfigurationError):
 class TypeConversionError(ConfigurationError):
     """Raised when a Python type fails to convert to SQL."""
 
-    def __init__(self, type: Type) -> None:  # type: ignore
+    def __init__(self, type: type[Any]) -> None:
         super().__init__(f"Type {type} is not supported by Ormdantic.")
 
 

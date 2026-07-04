@@ -1,4 +1,4 @@
-# Native Engine
+# Native engine
 
 The public ORM uses the native Rust runtime internally. Ormdantic also exposes a small `NativeEngine` wrapper for direct SQL execution.
 
@@ -10,13 +10,13 @@ result = await engine.execute("SELECT 1 AS value", ())
 assert result.scalar() == 1
 ```
 
-## When To Use It
+## When to use it
 
 Use `NativeEngine` when:
 
-- you need a small amount of direct SQL beside the ORM;
-- you are writing migration or operational tooling;
-- you want native driver behavior without registering Pydantic models.
+- you need a small amount of direct SQL beside the ORM
+- you are writing migration or operational tooling
+- you want native driver behavior without registering Pydantic models
 
 Prefer `Ormdantic` table handles for normal application persistence.
 

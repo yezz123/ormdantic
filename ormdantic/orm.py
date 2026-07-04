@@ -2,8 +2,10 @@
 
 import importlib
 from time import perf_counter
-from types import UnionType
+from types import TracebackType, UnionType
 from typing import Any, Callable, ForwardRef, Literal, Type, Union, get_args, get_origin
+
+from typing_extensions import Self
 
 from ormdantic._introspect import (
     FieldMetadata,
@@ -1747,11 +1749,16 @@ class _OrmdanticTransaction:
         self._database = database
         self._options = options
 
-    async def __aenter__(self) -> "_OrmdanticTransaction":
+    async def __aenter__(self) -> Self:
         await self._database._begin(self._options)
         return self
 
-    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if exc_type is None:
             await self._database._commit()
         else:
@@ -1763,11 +1770,16 @@ class _OrmdanticSavepoint:
         self._database = database
         self._name = name
 
-    async def __aenter__(self) -> "_OrmdanticSavepoint":
+    async def __aenter__(self) -> Self:
         await self._database._savepoint(self._name)
         return self
 
-    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if exc_type is not None:
             await self._database._rollback_to_savepoint(self._name)
         else:

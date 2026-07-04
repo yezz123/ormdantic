@@ -1,8 +1,8 @@
-# Loading Strategies
+# Loading strategies
 
 Relationship loading is explicit. You choose the path and strategy.
 
-## Strategies
+## Choose a strategy
 
 | Strategy | Helper | Use when |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Relationship loading is explicit. You choose the path and strategy.
 | Lazy | `lazyload("path")` | You want to mark a path as loadable later through explicit APIs. |
 | No load | `noload("path")` | You want to prevent a relationship path from loading. |
 
-## Examples
+## Use loader options
 
 ```python
 from ormdantic import joinedload, selectinload
@@ -34,7 +34,7 @@ await db[Supplier].find_many(
 )
 ```
 
-## Depth Loading
+## Use depth loading
 
 `depth` loads relationship paths by graph distance:
 
@@ -44,7 +44,7 @@ await db[Supplier].find_many(depth=1)
 
 Loader options are preferred for production code because they document the exact paths and strategies.
 
-## Explicit Single-Model Loading
+## Load one relationship explicitly
 
 ```python
 supplier = await db[Supplier].find_one("s1")

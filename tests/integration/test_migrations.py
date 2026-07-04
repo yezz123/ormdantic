@@ -313,9 +313,9 @@ def test_migration_cli_create_preview_and_apply(tmp_path, capsys) -> None:
 
     url = f"sqlite:///{tmp_path / 'cli.sqlite3'}"
     assert main(["migrations", "apply", url, str(artifact_path)]) == 0
-    assert "applied" in capsys.readouterr().out
+    assert "Applied migration: 001_cli" in capsys.readouterr().out
     assert main(["migrations", "status", url]) == 0
-    assert "dirty: False" in capsys.readouterr().out
+    assert "Dirty: no" in capsys.readouterr().out
     assert main(["migrations", "history", url]) == 0
     history_output = capsys.readouterr().out
     assert "001_cli" in history_output
@@ -327,9 +327,9 @@ def test_migration_cli_create_preview_and_apply(tmp_path, capsys) -> None:
     )
     assert "ok" in capsys.readouterr().out
     assert main(["migrations", "rollback", url, str(artifact_path)]) == 0
-    assert "rolled-back" in capsys.readouterr().out
+    assert "Rolled back migration: 001_cli" in capsys.readouterr().out
     assert main(["migrations", "repair", url, "--clear-dirty"]) == 0
-    assert "repaired:" in capsys.readouterr().out
+    assert "Repaired migration rows:" in capsys.readouterr().out
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-# Rust Core
+# Rust core
 
 Ormdantic is split into a thin Python API and a focused Rust workspace. Python keeps Pydantic model declarations, decorators, event callbacks, and final model construction; Rust owns the runtime table handles, schema validation, filter normalization, SQL compilation, relationship load planning, result-shape planning, reflection, migration execution, and native database execution.
 
@@ -23,7 +23,7 @@ flowchart TD
     Engine --> Dialects
 ```
 
-## Crate Responsibilities
+## Crate responsibilities
 
 | Crate                | Responsibility                                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -37,7 +37,7 @@ flowchart TD
 
 Each crate also has a repository README with its public API summary. Start with the [Rust workspace README](https://github.com/yezz123/ormdantic/tree/main/rust).
 
-## Python Boundary
+## Python boundary
 
 Python still owns:
 
@@ -59,7 +59,7 @@ Rust owns:
 - Native database execution.
 - Result-shape planning and nested row folding.
 
-## Engine Drivers
+## Engine drivers
 
 `ormdantic-engine` is organized by driver modules:
 
@@ -74,7 +74,7 @@ Rust owns:
 
 SQLite, PostgreSQL, and MySQL are enabled by default. MariaDB, SQL Server, Oracle, and `all-engines` builds are feature-gated in `ormdantic-engine`.
 
-## Workspace Rules
+## Workspace rules
 
 - Keep PyO3-specific code in `ormdantic-py`.
 - Keep dialect-specific syntax out of generic query planning.

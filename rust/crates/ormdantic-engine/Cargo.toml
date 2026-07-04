@@ -31,7 +31,11 @@ ormdantic-dialects.workspace = true
 ormdantic-schema.workspace = true
 postgres = "0.19"
 regex = "1"
-rusqlite = { version = "0.32.1", features = ["bundled", "column_decltype", "functions"] }
+rusqlite = { version = "0.32.1", features = [
+  "bundled",
+  "column_decltype",
+  "functions",
+] }
 tiberius = { version = "0.12.3", default-features = false, features = [
   "rustls",
   "tds73",

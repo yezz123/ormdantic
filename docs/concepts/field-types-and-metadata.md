@@ -1,8 +1,8 @@
-# Field Types And Metadata
+# Field types and metadata
 
-Ormdantic reads Pydantic model fields and converts them to runtime column metadata.
+Ormdantic reads Pydantic model fields and converts them to runtime column metadata. Use this page when you need to understand how annotations, `Field(...)` constraints, and metadata objects become database schema.
 
-## Supported Field Shapes
+## Supported field shapes
 
 Common Python types map to database column kinds:
 
@@ -34,7 +34,7 @@ class Flavor(BaseModel):
     price: Decimal = Field(gt=0, max_digits=8, decimal_places=2)
 ```
 
-## Column Options
+## Column options
 
 Use `TableColumn` for database-native options:
 
@@ -58,9 +58,9 @@ class Flavor(BaseModel):
 
 `TableColumn` supports comments, server defaults, computed columns, autoincrement, identity options, collations, numeric precision and scale, named foreign key options, enum type options, and SQLite conflict policies.
 
-## Indexes And Constraints
+## Indexes and constraints
 
-Use the short decorator options for simple cases:
+Use the short decorator options for ordinary cases:
 
 ```python
 @db.table(pk="id", indexed=["name"], unique=["sku"])

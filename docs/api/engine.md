@@ -1,4 +1,4 @@
-# Native Engine
+# Native engine
 
 The native engine wraps the Rust execution layer exposed by `ormdantic._ormdantic`.
 

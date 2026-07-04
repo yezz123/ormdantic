@@ -1,8 +1,10 @@
 # Python API Reference
 
-The API reference is generated from Ormdantic's Python source with mkdocstrings and supplemented with usage notes.
+The API reference is generated from Ormdantic's Python source with mkdocstrings and supplemented with usage notes. Use it when you need exact objects, method signatures, metadata fields, and error classes.
 
-## Public Surface
+If you are learning the library, start with [First steps](../quickstart.md) and [Concepts](../concepts/index.md). This page works best after you know the main ideas.
+
+## Public surface
 
 | Area | Page |
 | --- | --- |
@@ -19,7 +21,7 @@ The API reference is generated from Ormdantic's Python source with mkdocstrings 
 | Association and hybrid descriptors | [Associations](associations.md) |
 | Exceptions | [Errors](errors.md) |
 
-## Main Re-Exports
+## Main re-exports
 
 Most application code imports from `ormdantic`:
 
@@ -37,15 +39,17 @@ from ormdantic import (
 
 Lower-level modules remain importable when you need a narrower namespace.
 
-## Core Database Objects
+## Core database objects
+
+Use these objects first. They are the main application surface.
 
 | Object | Use it for |
 | --- | --- |
 | `Ormdantic` | Create a database registry, register tables, initialize schema, open sessions and transactions, inspect live databases, and access migrations. |
 | `Table` | Work with one registered model through `db[Model]`. |
-| `Order` | Choose ascending or descending order for simple table queries. |
+| `Order` | Choose ascending or descending order for table queries. |
 
-## Metadata Objects
+## Metadata objects
 
 Use these when decorator shortcuts are not enough.
 
@@ -61,7 +65,7 @@ Use these when decorator shortcuts are not enough.
 | `DatabaseSequence` | Database sequences. |
 | `DatabaseView` | Regular and materialized views. |
 
-## Query Expression Objects
+## Query expression objects
 
 Use dictionary filters first. Use expressions when you need composed SQL.
 
@@ -82,7 +86,9 @@ Use dictionary filters first. Use expressions when you need composed SQL.
 | `not_` | Negate an expression. |
 | `raw_sql_safe` | Opt in to raw SQL fragments only when the SQL is trusted. |
 
-## Relationship Loader Helpers
+## Relationship loader helpers
+
+Use loader helpers when a query should include, defer, or block related models.
 
 | Helper | Use it for |
 | --- | --- |
@@ -94,11 +100,11 @@ Use dictionary filters first. Use expressions when you need composed SQL.
 
 Loader options can be refined with:
 
-- `filter(...)` for relationship-local filters;
-- `sorted_by(...)` for relationship-local ordering;
-- `batched(...)` for select-in batch size.
+- `filter(...)` for relationship-local filters
+- `sorted_by(...)` for relationship-local ordering
+- `batched(...)` for select-in batch size
 
-## Associations And Events
+## Associations and events
 
 | Object | Use it for |
 | --- | --- |
@@ -106,7 +112,7 @@ Loader options can be refined with:
 | `hybrid_property` | Define a Python property that can also participate in ORM logic. |
 | `EventRegistry` | Register and dispatch lifecycle hooks. Most users use `db.on(...)` rather than constructing the registry directly. |
 
-## Runtime And Errors
+## Runtime and errors
 
 | Object | Use it for |
 | --- | --- |

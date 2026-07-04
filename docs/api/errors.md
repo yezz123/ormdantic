@@ -1,4 +1,6 @@
-# Errors Handling
+# Error handling
+
+Ormdantic error classes preserve stable categories while keeping native driver messages available where useful.
 
 ::: ormdantic.errors.OrmdanticError
 ::: ormdantic.errors.ConfigurationError

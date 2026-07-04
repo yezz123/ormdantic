@@ -1,6 +1,6 @@
 # Drivers
 
-Ormdantic's Python package talks to databases through native Rust drivers compiled into `ormdantic._ormdantic`.
+Ormdantic talks to databases through native Rust drivers compiled into `ormdantic._ormdantic`. Use this section when you choose a backend, debug a connection URL, or need to know which database features stay backend-specific.
 
 Check your installed runtime:
 
@@ -10,7 +10,9 @@ from ormdantic import runtime_capabilities
 runtime_capabilities()
 ```
 
-## Supported Backends
+The result tells you which drivers are available in the installed extension.
+
+## Supported backends
 
 | Backend | URL schemes | Notes |
 | --- | --- | --- |
@@ -21,27 +23,31 @@ runtime_capabilities()
 | SQL Server | `mssql://`, `mssql+pyodbc://` | Feature-gated in Rust builds. |
 | Oracle | `oracle://`, `oracle+oracledb://` | Feature-gated in Rust builds. |
 
-## What Is Normalized
+## What Ormdantic normalizes
 
 Ormdantic normalizes:
 
-- identifier quoting;
-- bind parameter syntax;
-- basic scalar value conversion;
-- common DDL operations;
-- table, column, index, and constraint snapshots;
-- migration history storage;
-- relationship loading query shapes.
+- identifier quoting
+- bind parameter syntax
+- basic scalar value conversion
+- common data definition language (DDL) operations
+- table, column, index, and constraint snapshots
+- migration history storage
+- relationship loading query shapes
 
-## What Remains Backend-Specific
+The goal is not to pretend every database is the same. The goal is to make the common path predictable.
+
+## What remains backend-specific
 
 Ormdantic documents instead of hiding:
 
-- string key length rules;
-- exact decimal representation;
-- transaction DDL behavior;
-- native enum support;
-- tablespaces and filegroups;
-- identity/autoincrement behavior;
-- view and materialized view reflection;
-- conflict syntax and returning/output behavior.
+- string key length rules
+- exact decimal representation
+- transaction DDL behavior
+- native enum support
+- tablespaces and filegroups
+- identity and autoincrement behavior
+- view and materialized view reflection
+- conflict syntax and returning or output behavior
+
+Read the page for your backend before relying on generated SQL in production.

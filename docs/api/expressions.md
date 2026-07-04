@@ -1,8 +1,10 @@
-# Query Expressions
+# Query expressions
 
 Expression helpers build serializable SQL AST fragments consumed by the Rust compiler.
 
-## Core Classes
+Use these helpers when dictionary filters are not enough for the query you need.
+
+## Core classes
 
 ::: ormdantic.expressions.QueryExpression
 ::: ormdantic.expressions.RelationExpression
@@ -10,7 +12,7 @@ Expression helpers build serializable SQL AST fragments consumed by the Rust com
 ::: ormdantic.expressions.SelectExpressionQuery
 ::: ormdantic.expressions.UpdateExpressionQuery
 
-## Helper Functions
+## Helper functions
 
 ::: ormdantic.expressions.column
 ::: ormdantic.expressions.projection
