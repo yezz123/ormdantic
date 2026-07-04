@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
@@ -53,6 +52,7 @@ from ormdantic._migrations.sql import (
 from ormdantic._migrations.sql import (
     table_matches_filters as _table_matches_filters,
 )
+from ormdantic._native import import_native_extension
 
 ForeignKeyReflection = dict[str, str | bool | None]
 KeyConstraintReflection = tuple[
@@ -5034,16 +5034,7 @@ def _sqlite_numeric_precision_scale(value: Any) -> tuple[int | None, int | None]
 
 
 def _require_migration_symbol(symbol: str) -> Any:
-    try:
-        rust = importlib.import_module("ormdantic._ormdantic")
-    except ImportError as exc:  # pragma: no cover - exercised when extension is absent
-        raise RuntimeError(
-            "Ormdantic requires the Rust extension for migration reflection. "
-            "Install the package with maturin or reinstall the wheel."
-        ) from exc
-    if not hasattr(rust, symbol):
-        raise RuntimeError(
-            "Ormdantic requires the Rust extension for migration reflection. "
-            "Install the package with maturin or reinstall the wheel."
-        )
-    return rust
+    return import_native_extension(
+        context="migration reflection",
+        required_symbols=(symbol,),
+    )

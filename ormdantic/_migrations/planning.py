@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -36,6 +35,7 @@ from ormdantic._migrations.models import (
     optional_str,
 )
 from ormdantic._migrations.sql import dialect_name, quote_ident, sql_literal
+from ormdantic._native import import_native_extension
 
 
 def diff_snapshots(
@@ -5645,16 +5645,7 @@ def _check_suffix(check: RuntimeCheck) -> str:
 
 
 def _require_migration_symbol(symbol: str) -> Any:
-    try:
-        rust = importlib.import_module("ormdantic._ormdantic")
-    except ImportError as exc:  # pragma: no cover - exercised when extension is absent
-        raise RuntimeError(
-            "Ormdantic requires the Rust extension for migration planning. "
-            "Install the package with maturin or reinstall the wheel."
-        ) from exc
-    if not hasattr(rust, symbol):
-        raise RuntimeError(
-            "Ormdantic requires the Rust extension for migration planning. "
-            "Install the package with maturin or reinstall the wheel."
-        )
-    return rust
+    return import_native_extension(
+        context="migration planning",
+        required_symbols=(symbol,),
+    )

@@ -3,37 +3,38 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, Iterator
 
 from typing_extensions import Self
 
+from ormdantic._native import (
+    import_native_extension,
+    raise_native_extension_unavailable,
+    unavailable_runtime_capabilities,
+)
 from ormdantic.errors import (
     DatabaseConnectionError,
+    NativeExtensionError,
     QueryExecutionError,
     TransactionError,
     classify_native_error,
 )
 
 try:
-    _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
-except ImportError:  # pragma: no cover - exercised when extension is not built
+    _ormdantic: Any | None = import_native_extension(
+        context="runtime capability diagnostics",
+        required_symbols=("runtime_capabilities",),
+    )
+except NativeExtensionError:  # pragma: no cover - exercised when extension is not built
     _ormdantic = None
 
 
 def runtime_capabilities() -> dict[str, bool]:
     """Return the database runtimes compiled into the Rust extension."""
     if _ormdantic is None or not hasattr(_ormdantic, "runtime_capabilities"):
-        return {
-            "sqlite": False,
-            "postgresql": False,
-            "mysql": False,
-            "mariadb": False,
-            "mssql": False,
-            "oracle": False,
-        }
+        return unavailable_runtime_capabilities()
     return dict(_ormdantic.runtime_capabilities())
 
 
@@ -69,9 +70,9 @@ class NativeEngine:
     def __init__(self, url: str) -> None:
         """Open a native connection for a database URL."""
         if _ormdantic is None or not hasattr(_ormdantic, "PyNativeConnection"):
-            raise RuntimeError(
-                "Ormdantic vNext requires the Rust extension for native execution. "
-                "Install the package with maturin or reinstall the wheel."
+            raise_native_extension_unavailable(
+                context="native execution",
+                required_symbols=("PyNativeConnection",),
             )
         self.url = url
         try:

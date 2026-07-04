@@ -1,6 +1,5 @@
 """Value conversion helpers for the Rust runtime."""
 
-import importlib
 import json
 from enum import Enum
 from typing import Any
@@ -8,9 +7,13 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from ormdantic._native import import_native_extension
 from ormdantic.models.models import Map
 
-_ormdantic = importlib.import_module("ormdantic._ormdantic")
+_ormdantic = import_native_extension(
+    context="SQL value conversion",
+    required_symbols=("sql_value",),
+)
 
 
 def model_instance_table(model: BaseModel, table_map: Map) -> str:

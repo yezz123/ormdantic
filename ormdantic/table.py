@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -11,6 +10,7 @@ from typing import Any, Generic, Literal
 
 from pydantic import BaseModel
 
+from ormdantic._native import import_native_extension
 from ormdantic.engine import NativeResult
 from ormdantic.errors import (
     HydrationError,
@@ -44,7 +44,21 @@ from ormdantic.serializer import OrmSerializer
 from ormdantic.types import ModelType
 from ormdantic.values import py_type_to_sql
 
-_ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
+_ormdantic: Any = import_native_extension(
+    context="table query compilation",
+    required_symbols=(
+        "compile_count",
+        "compile_delete_pk",
+        "compile_find_many",
+        "compile_insert",
+        "compile_select_pk",
+        "compile_typed_expression_query",
+        "compile_typed_update_query",
+        "compile_update",
+        "compile_upsert",
+        "normalize_filters",
+    ),
+)
 DEFAULT_SELECTIN_BATCH_SIZE = 500
 QUERY_LOGGER = logging.getLogger("ormdantic.query")
 

@@ -1,10 +1,14 @@
 """Naming helpers backed by the Rust extension."""
 
-import importlib
 import re
 from typing import Union
 
-_ormdantic = importlib.import_module("ormdantic._ormdantic")
+from ormdantic._native import import_native_extension
+
+_ormdantic = import_native_extension(
+    context="identifier naming",
+    required_symbols=("snake_case",),
+)
 
 
 def snake_case(string: str) -> str:

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
 from typing import Any, cast
 
-_ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
+from ormdantic._native import import_native_extension
+
+_ormdantic: Any = import_native_extension(
+    context="result hydration",
+    required_symbols=("hydrate_flat", "hydrate_joined", "plan_result_shape"),
+)
 
 
 def hydrate_flat_payload(

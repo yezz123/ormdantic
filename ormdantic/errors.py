@@ -79,6 +79,10 @@ class DatabaseConnectionError(OrmdanticError):
     """Raised when the native runtime cannot connect to the database."""
 
 
+class NativeExtensionError(OrmdanticError):
+    """Raised when Ormdantic's Rust extension is unavailable or incomplete."""
+
+
 class SchemaError(OrmdanticError):
     """Raised for schema creation, validation, or DDL failures."""
 

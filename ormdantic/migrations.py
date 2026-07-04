@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -410,11 +409,15 @@ from ormdantic._migrations.sql import (
 from ormdantic._migrations.sql import (
     table_matches_filters as _table_matches_filters,
 )
-from ormdantic.errors import MigrationError, classify_native_error
+from ormdantic._native import (
+    import_native_extension,
+    raise_native_extension_unavailable,
+)
+from ormdantic.errors import MigrationError, NativeExtensionError, classify_native_error
 
 try:
-    _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
-except ImportError:  # pragma: no cover - exercised when extension is not built
+    _ormdantic: Any | None = import_native_extension(context="migration planning")
+except NativeExtensionError:  # pragma: no cover - exercised when extension is not built
     _ormdantic = None
 
 
@@ -1132,8 +1135,8 @@ class MigrationManager:
 
 def _require_migration_symbol(symbol: str) -> Any:
     if _ormdantic is None or not hasattr(_ormdantic, symbol):
-        raise RuntimeError(
-            "Ormdantic requires the Rust extension for migration planning. "
-            "Install the package with maturin or reinstall the wheel."
+        raise_native_extension_unavailable(
+            context="migration planning",
+            required_symbols=(symbol,),
         )
     return _ormdantic
