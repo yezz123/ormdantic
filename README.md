@@ -85,6 +85,21 @@ Start with the documentation when you are new:
 - `docs/examples/` contains task-focused how-to guides.
 - `docs/api/` documents the Python API with generated references and usage notes.
 
+## Migration CLI
+
+Migration commands can read the database URL from `--url`, an exported
+`DATABASE_URL`, or a local `.env` file:
+
+```bash
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+uv run ormdantic migrations init
+uv run ormdantic migrations apply-dir migrations
+uv run ormdantic migrations current
+```
+
+The CLI prints redacted connection details and summaries such as
+`Applied 2 migrations from migrations.` instead of only raw revision IDs.
+
 ## Development
 
 Common commands:
