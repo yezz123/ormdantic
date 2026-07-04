@@ -1,13 +1,13 @@
-# Metadata Models
+# Metadata models
 
 Metadata models are Pydantic models used by table decorators, migrations, and reflection.
 
-## Result And Relationship
+## Result and relationship
 
 ::: ormdantic.models.Result
 ::: ormdantic.models.Relationship
 
-## Table Metadata
+## Table metadata
 
 ::: ormdantic.models.TableColumn
 ::: ormdantic.models.TableIndex
@@ -16,13 +16,13 @@ Metadata models are Pydantic models used by table decorators, migrations, and re
 ::: ormdantic.models.TableForeignKey
 ::: ormdantic.models.TableExclusion
 
-## Database-Level Metadata
+## Database-level metadata
 
 ::: ormdantic.models.DatabaseNamespace
 ::: ormdantic.models.DatabaseSequence
 ::: ormdantic.models.DatabaseView
 
-## Where They Are Used
+## Where they are used
 
 ```python
 from ormdantic import TableColumn, TableIndex, TableUnique

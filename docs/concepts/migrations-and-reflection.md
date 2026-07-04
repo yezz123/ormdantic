@@ -1,8 +1,8 @@
-# Migrations And Reflection
+# Migrations and reflection
 
-Ormdantic migrations are snapshot-based.
+Ormdantic migrations are snapshot-based. A snapshot describes the schema Ormdantic sees, either from registered Python models or from a live database.
 
-## Snapshots
+## Create snapshots
 
 A snapshot is a structured representation of schema metadata:
 
@@ -13,7 +13,7 @@ live = db.migrations.live_snapshot()
 
 `snapshot()` comes from registered Python models. `live_snapshot()` reflects the connected database.
 
-## Diff And Plan
+## Diff and plan changes
 
 ```python
 diff = db.migrations.diff(before=live, after=target)
@@ -22,7 +22,7 @@ plan = db.migrations.generate_plan(before=live, after=target)
 
 A diff describes changes. A plan contains SQL operations and rollback operations where available.
 
-## Dry Run
+## Preview SQL with a dry run
 
 ```python
 sql = db.migrations.dry_run(before=live, after=target)
@@ -30,7 +30,7 @@ sql = db.migrations.dry_run(before=live, after=target)
 
 Use this in review tooling to inspect SQL before applying it.
 
-## Migration Files
+## Create migration files
 
 ```python
 artifact = db.migrations.create_migration(
@@ -42,7 +42,7 @@ artifact = db.migrations.create_migration(
 
 Migration artifacts include revision metadata, schema diff, planned operations, rollback operations, warnings, and checksums.
 
-## History Table
+## Read the history table
 
 Applied migrations are recorded in `ormdantic_migrations`. The manager can read current state, history, dirty flags, and repair metadata:
 
@@ -52,7 +52,7 @@ await db.migrations.history()
 await db.migrations.repair(clear_dirty=True)
 ```
 
-## Reflection
+## Inspect a live database
 
 `db.inspect()` returns an async inspector:
 

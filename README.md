@@ -24,13 +24,13 @@ Ormdantic lets you declare database tables with Pydantic v2 models and run async
 
 The project is designed for applications that want Python model ergonomics without giving up SQL database features. Python owns the model and API surface; Rust owns SQL compilation, type conversion, and driver execution.
 
-## What You Get
+## What you get
 
 | Area | What Ormdantic Provides |
 | --- | --- |
 | Models | Pydantic models decorated as database tables. |
 | CRUD | Async insert, update, upsert, delete, find, count, and bulk update helpers. |
-| Queries | Dictionary filters for simple cases and expression objects for advanced SQL. |
+| Queries | Dictionary filters for ordinary cases and expression objects for advanced SQL. |
 | Relationships | Explicit joined and select-in loaders, plus explicit relationship loading. |
 | Transactions | Async transaction and session contexts. |
 | Migrations | Snapshots, diffs, plans, migration artifacts, history, rollback, repair, and squash helpers. |
@@ -43,7 +43,7 @@ The project is designed for applications that want Python model ergonomics witho
 uv add ormdantic
 ```
 
-## First Example
+## First example
 
 ```python
 from pydantic import BaseModel, Field
@@ -74,14 +74,15 @@ async def main() -> None:
         print(flavor.name)
 ```
 
-## Learn The Project
+## Learn the project
 
 Start with the documentation when you are new:
 
-- `docs/quickstart.md` shows the smallest useful workflow.
+- `docs/learning-path.md` tells new and advanced readers where to start.
+- `docs/quickstart.md` walks through the first model, first table, first query, first session, and first migration preview.
 - `docs/concepts/` explains tables, fields, relationships, querying, loading, sessions, migrations, events, and the native engine.
 - `docs/drivers/` explains SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle behavior.
-- `docs/examples/` contains runnable beginner and advanced guides.
+- `docs/examples/` contains task-focused how-to guides.
 - `docs/api/` documents the Python API with generated references and usage notes.
 
 ## Development

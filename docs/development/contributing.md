@@ -77,8 +77,7 @@ uv run --group dev maturin develop
 bash scripts/test.sh
 ```
 
-Re-run `maturin develop` after Rust changes so Python imports the extension you
-just built.
+Re-run `maturin develop` after Rust changes so Python imports the extension you built.
 
 </details>
 

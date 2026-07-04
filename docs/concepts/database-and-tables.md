@@ -1,6 +1,6 @@
-# Database And Tables
+# Database and tables
 
-The `Ormdantic` object is the registry for one database connection.
+The `Ormdantic` object is the registry for one database connection. It knows the URL, registered Pydantic models, schema metadata, events, migrations, and native runtime state.
 
 ```python
 from ormdantic import Ormdantic
@@ -10,14 +10,14 @@ db = Ormdantic("sqlite:///app.sqlite3")
 
 It stores:
 
-- the connection URL;
-- registered table metadata;
-- registered namespaces, sequences, and views;
-- event handlers;
-- the native Rust runtime once initialized;
-- the migration manager.
+- the connection URL
+- registered table metadata
+- registered namespaces, sequences, and views
+- event handlers
+- the native Rust runtime once initialized
+- the migration manager
 
-## Register A Table
+## Register a table
 
 Use `@db.table(...)` on a Pydantic model:
 
@@ -34,7 +34,7 @@ class User(BaseModel):
 
 The model remains a Pydantic model. Ormdantic stores the database metadata beside it.
 
-## Table Decorator Options
+## Table decorator options
 
 Common options:
 
@@ -42,8 +42,8 @@ Common options:
 | --- | --- |
 | `pk` | Primary key field name. |
 | `tablename` | Override the generated table name. |
-| `indexed` | Create simple indexes for fields. |
-| `unique` | Create simple unique constraints for fields. |
+| `indexed` | Create single-column indexes for fields. |
+| `unique` | Create single-column unique constraints for fields. |
 | `columns` | Per-field `TableColumn` metadata. |
 | `indexes` | Explicit `TableIndex` objects. |
 | `check_constraints` | Table-level `TableCheck` objects. |
@@ -53,15 +53,17 @@ Common options:
 
 Advanced backend options include PostgreSQL tablespaces and partitions, SQL Server filegroups and clustered primary keys, MySQL table options, SQLite conflict behavior, and Oracle table compression.
 
-## Initialize Schema
+## Initialize the schema
+
+Call `init()` after all models are registered:
 
 ```python
 await db.init()
 ```
 
-`init()` creates registered namespaces, sequences, tables, indexes, comments, backend-specific options, and views. For existing production databases, prefer migrations instead of calling `create_all()` blindly.
+`init()` creates registered namespaces, sequences, tables, indexes, comments, backend-specific options, and views. For existing production databases, prefer migrations so you can inspect generated SQL before applying it.
 
-## Table Handles
+## Use table handles
 
 Access a model's table handle with `db[Model]`:
 
@@ -71,14 +73,14 @@ users = await db[User].find_many({"active": True})
 
 The handle methods include:
 
-- `find_one`;
-- `find_many`;
-- `insert`;
-- `update`;
-- `upsert`;
-- `delete`;
-- `count`;
-- `select`;
-- `update_where`.
+- `find_one`
+- `find_many`
+- `insert`
+- `update`
+- `upsert`
+- `delete`
+- `count`
+- `select`
+- `update_where`
 
 See [Table API](../api/table.md).

@@ -1,8 +1,12 @@
-# Existing Databases
+# Existing databases
 
-Use `db.inspect()` when you are starting from a database that already has tables.
-The inspector reflects live metadata and returns the same snapshot objects used by
-migration autogeneration.
+Use `db.inspect()` when you are starting from a database that already has tables. The inspector reflects live metadata and returns the same snapshot objects used by migration autogeneration.
+
+This workflow has three parts:
+
+1. Inspect the live database
+2. Generate editable model scaffolding
+3. Compare edited models back to the database
 
 ```python
 from ormdantic import Ormdantic
@@ -18,8 +22,7 @@ foreign_keys = await inspector.foreign_keys("crm_customer", schema="public")
 constraints = await inspector.constraints("crm_customer", schema="public")
 ```
 
-`name_patterns`, `include_tables`, and `exclude_tables` use shell-style matching.
-For example, this reflects all `crm_*` tables except archive tables:
+`name_patterns`, `include_tables`, and `exclude_tables` use shell-style matching. For example, this reflects all `crm_*` tables except archive tables:
 
 ```python
 snapshot = await inspector.schema(
@@ -29,10 +32,9 @@ snapshot = await inspector.schema(
 )
 ```
 
-## Generate Model Scaffolding
+## Generate model scaffolding
 
-`scaffold_models()` returns editable Python source for Pydantic models and
-`@db.table()` decorators:
+`scaffold_models()` returns editable Python source for Pydantic models and `@db.table()` decorators:
 
 ```python
 source = await inspector.scaffold_models(
@@ -68,11 +70,9 @@ class CrmCustomer(BaseModel):
     created_at: datetime | None = None
 ```
 
-Review the generated source before using it as application code. Reflection can
-infer column shapes, nullability, indexes, and constraints, but relationships and
-domain-specific field validation usually need human naming and validation rules.
+Review the generated source before using it as application code. Reflection can infer column shapes, nullability, indexes, and constraints, but relationships and domain-specific field validation need human naming and validation rules.
 
-## Compare To Registered Models
+## Compare to registered models
 
 After you edit the generated models, compare them against the live database:
 
@@ -86,8 +86,7 @@ for item in diff.summary():
     print(item)
 ```
 
-When the diff is expected, create a migration artifact from the same live
-reflection data:
+When the diff is expected, create a migration artifact from the same live reflection data:
 
 ```python
 artifact = db.migrations.autogenerate(
@@ -99,10 +98,9 @@ artifact = db.migrations.autogenerate(
 )
 ```
 
-## Cache Invalidation
+## Clear the reflection cache
 
-The inspector caches reflected snapshots by schema and filter scope. Clear the
-cache after DDL runs outside Ormdantic:
+The inspector caches reflected snapshots by schema and filter scope. Clear the cache after DDL runs outside Ormdantic:
 
 ```python
 inspector.invalidate_cache()

@@ -1,14 +1,16 @@
-# Query Expressions
+# Query expressions
 
-Dictionary filters cover simple cases. Expression helpers are for composed SQL.
+Dictionary filters cover ordinary CRUD screens. Expression helpers are for grouping, aggregates, subqueries, window functions, and reusable SQL fragments.
 
-## What The Example Covers
+Use this guide after [Querying](../concepts/querying.md).
 
-- `column(...)` expressions;
-- comparison operators;
-- aggregate helpers;
-- select query objects;
-- expression-backed table `select` calls.
+## What the example covers
+
+- `column(...)` expressions
+- comparison operators
+- aggregate helpers
+- select query objects
+- expression-backed table `select` calls
 
 ```python
 --8<-- "examples/query_expressions.py"
@@ -20,6 +22,6 @@ Run it locally:
 python examples/query_expressions.py
 ```
 
-## Rule Of Thumb
+## Rule of thumb
 
 Start with dictionary filters for ordinary CRUD screens. Move to expression helpers when you need grouping, aggregates, subqueries, window functions, or reusable expression objects.

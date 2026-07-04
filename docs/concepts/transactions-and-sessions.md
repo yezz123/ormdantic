@@ -1,11 +1,13 @@
-# Transactions And Sessions
+# Transactions and sessions
 
 Ormdantic exposes two transaction layers:
 
-- direct database transactions;
-- the `Session` unit-of-work helper.
+- direct database transactions
+- the `Session` unit-of-work helper
 
-## Direct Transaction
+Use direct transactions when you already know each operation. Use sessions when you want to stage model objects and let Ormdantic flush them in dependency order.
+
+## Use a direct transaction
 
 ```python
 async with db.transaction():
@@ -14,7 +16,7 @@ async with db.transaction():
 
 The context manager commits on success and rolls back on error.
 
-## Transaction Options
+## Pass transaction options
 
 The transaction API accepts backend-aware options such as isolation level, read-only mode, and deferrable behavior where supported.
 
@@ -25,7 +27,7 @@ async with db.transaction(isolation_level="serializable", read_only=False):
 
 Unsupported options are rejected instead of silently ignored.
 
-## Savepoints
+## Use savepoints
 
 ```python
 async with db.transaction():
@@ -35,7 +37,7 @@ async with db.transaction():
 
 If the savepoint block raises, Ormdantic rolls back to the savepoint and releases it according to backend support.
 
-## Sessions
+## Use sessions
 
 Sessions stage object changes:
 
@@ -64,7 +66,7 @@ async with db.session() as session:
 
 If a flush fails, the session restores its staged state to the pre-flush snapshot and enters a failed state. Call `rollback()` before using the session again. Context-managed sessions do this automatically when the failure leaves the context.
 
-## Session Methods
+## Session methods
 
 | Method | Purpose |
 | --- | --- |
@@ -79,16 +81,16 @@ If a flush fails, the session restores its staged state to the pre-flush snapsho
 | `refresh(model)` | Reload by primary key. |
 | `get(Model, pk)` | Return cached or loaded model. |
 
-## Lifecycle Events
+## Lifecycle events
 
 Transaction and session work dispatch lifecycle events in order:
 
-- `before_begin`, `after_begin`;
-- `before_flush`, `after_flush`;
-- `before_commit`, `after_commit`;
-- `before_rollback`, `after_rollback`;
-- `before_savepoint`, `after_savepoint`;
-- `before_release_savepoint`, `after_release_savepoint`;
-- `before_rollback_to_savepoint`, `after_rollback_to_savepoint`.
+- `before_begin`, `after_begin`
+- `before_flush`, `after_flush`
+- `before_commit`, `after_commit`
+- `before_rollback`, `after_rollback`
+- `before_savepoint`, `after_savepoint`
+- `before_release_savepoint`, `after_release_savepoint`
+- `before_rollback_to_savepoint`, `after_rollback_to_savepoint`
 
 Transaction and savepoint `after_*` events include `error=None` on success and the classified exception when the operation fails.

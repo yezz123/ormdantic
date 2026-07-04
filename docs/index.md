@@ -4,29 +4,13 @@
   <img src="logo.svg" alt="Ormdantic logo" width="540">
 </p>
 
-Ormdantic is a Rust-backed asynchronous ORM for Python applications that already use Pydantic models as their data boundary.
+Ormdantic is a Rust-backed asynchronous ORM for Python applications that already use Pydantic models as their data boundary. It lets you turn a Pydantic model into a database table, then use async Python methods for inserts, queries, relationships, sessions, migrations, and reflection.
 
-It keeps the public API Pythonic:
+If you are new, start with [First steps](quickstart.md). If you already know ORMs, use this page to see the shape of the library, then jump to [Concepts](concepts/index.md), [Drivers](drivers/index.md), or the [API reference](api/reference.md).
 
-- declare tables with Pydantic v2 models;
-- register them with `Ormdantic`;
-- query, insert, update, delete, migrate, and reflect schemas from Python;
-- let the Rust runtime handle SQL compilation, hydration, and database execution.
+## The smallest useful example
 
-The result is an ORM that is intentionally smaller than SQLAlchemy, more database-aware than a generic repository layer, and explicit about async behavior.
-
-## What Ormdantic Gives You
-
-| Need | Ormdantic answer |
-| --- | --- |
-| One model shape for API and persistence | Pydantic models are the table models. |
-| Fast SQL compilation and row hydration | Rust owns query compilation, result-shape planning, and native execution. |
-| Async-safe relationship loading | Relationship paths are loaded explicitly with `joinedload`, `selectinload`, `lazyload`, or `noload`. |
-| Cross-driver schema metadata | Table, column, index, constraint, sequence, namespace, and view options are modeled in Python. |
-| Native migrations | Snapshots, diffs, plans, migration files, history, repair, rollback, and live reflection are built in. |
-| Backend-specific control | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite each have their own documented behavior. |
-
-## First Example
+The smallest useful Ormdantic file can look like this:
 
 ```python
 from pydantic import BaseModel, Field
@@ -54,12 +38,29 @@ async def main() -> None:
     assert [flavor.name for flavor in result.data] == ["Vanilla"]
 ```
 
-## Where To Go Next
+That example does three things:
 
-- Read [Why Ormdantic](why-ormdantic.md) for the problem it solves.
-- Read [Philosophy](philosophy.md) for the design boundaries.
-- Use [Learning Path](learning-path.md) to choose the beginner, intermediate, or advanced reading order.
-- Follow [Quickstart](quickstart.md) to build a small app.
-- Use [Concepts](concepts/index.md) when you need to understand how a feature fits.
-- Use [Drivers](drivers/index.md) when choosing or tuning a database backend.
-- Use [Python API](api/reference.md) for generated reference pages.
+- `Ormdantic("sqlite:///app.sqlite3")` creates a database registry for one connection
+- `@db.table(...)` registers a Pydantic model as a table
+- `db[Flavor]` returns a table handle for CRUD and queries
+
+## What Ormdantic gives you
+
+Ormdantic keeps the public API Pythonic and puts repeated runtime work in Rust.
+
+| Need | Ormdantic answer |
+| --- | --- |
+| One model shape for API and persistence | Pydantic models are the table models. |
+| Async CRUD | `insert`, `find_one`, `find_many`, `update`, `upsert`, `delete`, `count`, `select`, and `update_where`. |
+| Relationship loading | Explicit `joinedload`, `selectinload`, `lazyload`, and `noload` options. |
+| Sessions and transactions | Async contexts for groups of writes that commit or roll back together. |
+| Migrations and reflection | Snapshots, diffs, migration files, history, repair, rollback, and live database inspection. |
+| Backend-specific control | SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle pages document driver behavior. |
+
+## Choose your path
+
+Ormdantic has two main reader paths:
+
+- **New to Ormdantic**: follow [Start here](learning-path.md), then [Installation](installation.md), then [First steps](quickstart.md)
+- **Already building an app**: read [Concepts](concepts/index.md) for the mental model, then use [How-to guides](examples/basic-crud.md) for task examples
+- **Designing production schemas**: read [Drivers](drivers/index.md), [Migrations and reflection](concepts/migrations-and-reflection.md), and the [API reference](api/reference.md)

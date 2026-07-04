@@ -1,12 +1,12 @@
 # Querying
 
-Every registered model has a `Table` handle:
+Every registered model has a `Table` handle. Use that handle for primary-key lookups, filtered lists, expression queries, counts, and bulk updates.
 
 ```python
 flavors = db[Flavor]
 ```
 
-## Simple Filters
+## Use dictionary filters
 
 Use dictionaries for common equality and comparison filters:
 
@@ -17,7 +17,7 @@ result = await db[Flavor].find_many(
 )
 ```
 
-## Primary Key Lookup
+## Look up a primary key
 
 ```python
 flavor = await db[Flavor].find_one("vanilla")
@@ -25,7 +25,7 @@ flavor = await db[Flavor].find_one("vanilla")
 
 `find_one` accepts a primary key value or a filter expression.
 
-## Expression Queries
+## Use expression queries
 
 Use expression helpers when dictionary filters are not enough:
 
@@ -45,7 +45,7 @@ rows = await db[Flavor].select(query)
 
 Expression helpers include `column`, `literal`, `case`, `cast`, `tuple_`, aggregate helpers, `exists`, `subquery`, `cte`, `over`, and `raw_sql_safe`.
 
-## Counts And Bulk Updates
+## Count and update rows in bulk
 
 ```python
 count = await db[Flavor].count({"rating": {"gte": 4}})
@@ -56,7 +56,7 @@ updated = await db[Flavor].update_where(
 )
 ```
 
-## Result Objects
+## Read result objects
 
 `find_many` returns `Result[Model]`:
 
