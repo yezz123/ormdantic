@@ -7,6 +7,9 @@ from collections.abc import Sequence
 import typer
 
 from ormdantic._migrations.cli import (
+    MigrationCliError as MigrationCliError,
+)
+from ormdantic._migrations.cli import (
     _artifact_for_revision as _artifact_for_revision,
 )
 from ormdantic._migrations.cli import (
@@ -72,6 +75,7 @@ from ormdantic._migrations.cli import (
 from ormdantic._migrations.cli import (
     status_command as status_command,
 )
+from ormdantic.errors import OrmdanticError
 
 app = typer.Typer(help="Ormdantic command line tools.", no_args_is_help=True)
 app.add_typer(migrations_app, name="migrations")
@@ -80,7 +84,7 @@ app.add_typer(migrations_app, name="migrations")
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the Ormdantic command line interface."""
     try:
-        app(
+        result = app(
             args=list(argv) if argv is not None else None,
             prog_name="ormdantic",
             standalone_mode=False,
@@ -89,6 +93,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     except typer.Exit as exc:
         return int(exc.exit_code)
+    except (
+        MigrationCliError,
+        OrmdanticError,
+        FileNotFoundError,
+        OSError,
+        ValueError,
+    ) as exc:
+        typer.secho(f"Error: {exc}", fg=typer.colors.RED)
+        return 1
+    if isinstance(result, int):
+        return result
     return 0
 
 
