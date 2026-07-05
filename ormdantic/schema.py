@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Callable
 from decimal import Decimal
 from enum import Enum
@@ -17,7 +16,11 @@ from ormdantic._introspect import (
     model_field,
     model_fields,
 )
-from ormdantic.errors import TypeConversionError
+from ormdantic._native import (
+    import_native_extension,
+    raise_native_extension_unavailable,
+)
+from ormdantic.errors import NativeExtensionError, TypeConversionError
 from ormdantic.models import (
     Map,
     TableCheck,
@@ -30,8 +33,8 @@ from ormdantic.models import (
 from ormdantic.naming import snake_case
 
 try:
-    _ormdantic: Any | None = importlib.import_module("ormdantic._ormdantic")
-except ImportError:  # pragma: no cover - exercised when extension is not built
+    _ormdantic: Any | None = import_native_extension(context="schema compilation")
+except NativeExtensionError:  # pragma: no cover - exercised when extension is not built
     _ormdantic = None
 
 RuntimeIndexDescriptor = tuple[
@@ -1475,8 +1478,8 @@ def sql_literal(value: Any) -> str:
 
 def _require_schema_symbol(symbol: str) -> Any:
     if _ormdantic is None or not hasattr(_ormdantic, symbol):
-        raise RuntimeError(
-            "Ormdantic requires the Rust extension for schema compilation. "
-            "Install the package with maturin or reinstall the wheel."
+        raise_native_extension_unavailable(
+            context="schema compilation",
+            required_symbols=(symbol,),
         )
     return _ormdantic

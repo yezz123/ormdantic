@@ -12,6 +12,28 @@ except QueryExecutionError as exc:
     print(exc.context["table"], exc.context["operation"])
 ```
 
+## Fix native extension import failures
+
+`NativeExtensionError` means Python could not import `ormdantic._ormdantic` or
+the loaded extension is missing symbols required by the installed Python
+package. This usually means the wheel does not match the active Python
+interpreter, the editable build is stale, or the package was upgraded without
+rebuilding the extension.
+
+From a source checkout, rebuild and smoke-test the extension:
+
+```bash
+uv sync --group dev
+uv run --group dev maturin develop
+uv run python scripts/smoke_installed_package.py
+```
+
+For an installed wheel, reinstall the package into the active environment:
+
+```bash
+pip install --force-reinstall ormdantic
+```
+
 ## Fix connection failures
 
 `DatabaseConnectionError` means the native runtime could not open or use the configured database connection.

@@ -37,6 +37,36 @@ The script updates and checks:
 - Internal `ormdantic-*` entries in `Cargo.toml` `[workspace.dependencies]`.
 - `Cargo.lock` package entries for the workspace crates.
 
+## Required Checks
+
+Before tagging, run or confirm these gates:
+
+- `make lint` for Rust formatting, Rust clippy, and Python type checks.
+- `make test` for the local editable extension and Python test suite.
+- `make docs` for the documentation site.
+- `make coverage` when preparing a release candidate or coverage-sensitive change.
+- `make bench` for runtime, hydration, serializer, migration, or query-planning changes.
+- `bash docker/databases/run-tests.sh` for backend-specific driver or dialect changes.
+- `uv run python scripts/smoke_installed_package.py` after building or installing an artifact locally.
+
+The release workflow repeats the release verification checks and smoke-tests
+the built source distribution and wheels before uploading artifacts.
+
+## Wheel and Source Distribution Matrix
+
+The release workflow builds:
+
+- one source distribution on Ubuntu with Python 3.12
+- wheels on `ubuntu-latest`, `macos-latest`, and `windows-latest`
+- wheels for Python 3.10, 3.11, 3.12, 3.13, and 3.14
+
+Every built artifact is checked with `twine`. The wheel matrix installs the
+wheel into a clean virtual environment and runs
+`scripts/smoke_installed_package.py`. The source distribution job installs the
+sdist into a clean virtual environment and runs the same smoke script, proving
+the installed package imports and can execute a basic SQLite query without any
+external database service.
+
 ## Publish
 
 Create and push a tag that matches the version:

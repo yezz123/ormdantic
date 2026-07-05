@@ -1,6 +1,5 @@
 """Module providing a way to create ORM models and schemas"""
 
-import importlib
 from time import perf_counter
 from types import TracebackType, UnionType
 from typing import Any, Callable, ForwardRef, Literal, Type, Union, get_args, get_origin
@@ -14,6 +13,7 @@ from ormdantic._introspect import (
     model_field,
     model_fields,
 )
+from ormdantic._native import import_native_extension
 from ormdantic.errors import (
     MismatchingBackReferenceError,
     MustUnionForeignKeyError,
@@ -79,7 +79,16 @@ from ormdantic.session import Session
 from ormdantic.table import Table
 from ormdantic.types import ModelType
 
-_ormdantic: Any = importlib.import_module("ormdantic._ormdantic")
+_ormdantic: Any = import_native_extension(
+    context="database runtime initialization",
+    required_symbols=(
+        "PyDatabase",
+        "PyTransactionOptions",
+        "compile_drop_table_sql",
+        "execute_native",
+        "runtime_capabilities",
+    ),
+)
 
 TransactionIsolationLevel = Literal[
     "read_uncommitted",
