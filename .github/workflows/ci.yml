@@ -25,8 +25,8 @@ jobs:
       - run: uv sync --group linting
       - run: bash scripts/lint.sh
 
-  coverage:
-    name: py${{ matrix.python-version}} on ${{ matrix.os}}
+  tests:
+    name: py${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}-latest
     strategy:
       fail-fast: false
@@ -35,16 +35,27 @@ jobs:
         os: [ubuntu, macos, windows]
     env:
       DATABASE_URL: sqlite:///db.sqlite3
-      ORMDANTIC_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
-      ORMDANTIC_TEST_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
-      ORMDANTIC_TEST_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
-      ORMDANTIC_TEST_MSSQL_URL: mssql://sa:Password123@localhost:1433/master?trust_cert=true
-      ORMDANTIC_TEST_ORACLE_URL: oracle://system:oracle@localhost:1521/FREEPDB1
-      ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
-      ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
-      ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
-      ORMDANTIC_MSSQL_URL: mssql://sa:Password123@localhost:1433/master?trust_cert=true
-      ORMDANTIC_ORACLE_URL: oracle://system:oracle@localhost:1521/FREEPDB1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
+
+      - run: cargo test --workspace --exclude ormdantic-py
+      - run: uv sync --group dev
+      - run: uv run --group dev maturin develop
+      - run: bash scripts/test.sh
+
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:///db.sqlite3
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,22 +76,39 @@ jobs:
       - name: Python SQLite coverage
         run: bash scripts/test.sh
         env:
-          CONTEXT: py${{ matrix.python-version }}-${{ matrix.os }}-sqlite-coverage
+          CONTEXT: py312-ubuntu-sqlite-coverage
       - name: Python external database coverage
         run: |
           uv run --group testing pytest \
             tests/integration/test_migrations_external.py \
             tests/integration/test_relationship_loading_external.py \
+            tests/integration/test_transactions_external.py \
+            tests/integration/test_value_fidelity.py \
             --cov=ormdantic \
             --cov-append \
             --cov-report=xml \
             -q
         env:
-          CONTEXT: py${{ matrix.python-version }}-${{ matrix.os }}-database-coverage
+          CONTEXT: py312-ubuntu-database-coverage
+          ORMDANTIC_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_TEST_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_TEST_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
+          ORMDANTIC_TEST_MSSQL_URL: mssql://sa:Password123@localhost:1433/master?trust_cert=true
+          ORMDANTIC_TEST_ORACLE_URL: oracle://system:oracle@localhost:1521/FREEPDB1
       - name: Rust coverage with database URLs
         run: bash scripts/coverage-rust.sh
+        env:
+          ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
       - name: Rust SQL Server and Oracle smoke tests
         run: cargo test -p ormdantic-engine --features mssql,oracle --test driver_matrix --test mssql_exec --test oracle_exec
+        env:
+          ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
+          ORMDANTIC_MSSQL_URL: mssql://sa:Password123@localhost:1433/master?trust_cert=true
+          ORMDANTIC_ORACLE_URL: oracle://system:oracle@localhost:1521/FREEPDB1
       - name: Combined coverage gate
         run: uv run --group testing python scripts/coverage_combined.py --fail-under 99
 
@@ -99,7 +127,7 @@ jobs:
 
   check:
     if: always()
-    needs: [lint, coverage]
+    needs: [lint, tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
