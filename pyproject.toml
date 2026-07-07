@@ -87,9 +87,6 @@ dev = [
   "maturin>=1,<2",
 ]
 
-[tool.uv]
-default-groups = ["linting"]
-
 [tool.hatch.version]
 path = "ormdantic/__init__.py"
 
