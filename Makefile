@@ -1,4 +1,4 @@
-.PHONY: test lint docs coverage bench format taplo-check
+.PHONY: test lint docs coverage coverage-combined bench format taplo-check
 
 test:
 	uv run --group dev maturin develop
@@ -16,6 +16,10 @@ coverage:
 	uv run --group dev maturin develop
 	bash scripts/test.sh
 	bash scripts/coverage-rust.sh
+	uv run --group testing python scripts/coverage_combined.py
+
+coverage-combined:
+	uv run --group testing python scripts/coverage_combined.py $(if $(COMBINED_COVERAGE_FAIL_UNDER),--fail-under $(COMBINED_COVERAGE_FAIL_UNDER),)
 
 bench:
 	uv run --group dev maturin develop
