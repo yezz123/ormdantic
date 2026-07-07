@@ -228,7 +228,8 @@ fn parse_pg_numeric(raw: &[u8]) -> Result<String, Box<dyn Error + Sync + Send>> 
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_postgres_sqlstate, parse_pg_numeric};
+    use super::{classify_postgres_sqlstate, parse_pg_numeric, pg_params};
+    use crate::DbValue;
     use ormdantic_core::ExecutionErrorKind;
 
     #[test]
@@ -277,5 +278,37 @@ mod tests {
         ];
 
         assert_eq!(parse_pg_numeric(&raw).unwrap(), "-0.0012");
+    }
+
+    #[test]
+    fn postgres_params_cover_all_db_value_variants() {
+        let params = pg_params(&[
+            DbValue::Null,
+            DbValue::Integer(-1),
+            DbValue::UnsignedInteger(42),
+            DbValue::UnsignedInteger(u64::MAX),
+            DbValue::Decimal("12.34".to_string()),
+            DbValue::Real(1.5),
+            DbValue::Text("flavor".to_string()),
+            DbValue::Bool(true),
+        ]);
+
+        assert_eq!(params.len(), 8);
+    }
+
+    #[test]
+    fn parses_postgres_numeric_special_values_and_errors() {
+        let nan = [0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00];
+        let infinity = [0x00, 0x00, 0x00, 0x00, 0xd0, 0x00, 0x00, 0x00];
+        let neg_infinity = [0x00, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00];
+        let invalid_sign = [0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x00, 0x00];
+        let truncated_digits = [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+        assert_eq!(parse_pg_numeric(&nan).unwrap(), "NaN");
+        assert_eq!(parse_pg_numeric(&infinity).unwrap(), "Infinity");
+        assert_eq!(parse_pg_numeric(&neg_infinity).unwrap(), "-Infinity");
+        assert!(parse_pg_numeric(&[]).is_err());
+        assert!(parse_pg_numeric(&invalid_sign).is_err());
+        assert!(parse_pg_numeric(&truncated_digits).is_err());
     }
 }

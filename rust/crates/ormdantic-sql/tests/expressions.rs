@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use ormdantic_dialects::{PostgresDialect, SqliteDialect};
 use ormdantic_sql::{
-    BinaryOp, CommonTableExpr, DmlAst, Expr, OrderExpr, OrderNulls, Projection, SelectAst,
-    SortDirection, TableSource, UnaryOp,
+    BinaryOp, CommonTableExpr, DmlAst, Expr, JoinAst, JoinKind, OrderExpr, OrderNulls, Projection,
+    SelectAst, SortDirection, TableSource, UnaryOp,
 };
 
 #[test]
@@ -112,6 +112,119 @@ fn compiles_empty_expression_in_lists_as_constants() {
 }
 
 #[test]
+fn compiles_remaining_literal_unary_and_binary_expression_arms() {
+    let query = SelectAst::new(vec![
+        Projection::aliased(
+            Expr::Binary {
+                left: Box::new(Expr::column("name")),
+                op: BinaryOp::Ne,
+                right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::String(
+                    "mint".to_string(),
+                ))),
+            },
+            "not_mint",
+        ),
+        Projection::aliased(
+            Expr::Binary {
+                left: Box::new(Expr::column("score")),
+                op: BinaryOp::Le,
+                right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(10))),
+            },
+            "score_le",
+        ),
+        Projection::aliased(
+            Expr::Binary {
+                left: Box::new(Expr::column("score")),
+                op: BinaryOp::Ge,
+                right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(1))),
+            },
+            "score_ge",
+        ),
+        Projection::aliased(
+            Expr::Binary {
+                left: Box::new(Expr::Binary {
+                    left: Box::new(Expr::column("score")),
+                    op: BinaryOp::Sub,
+                    right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(1))),
+                }),
+                op: BinaryOp::Mul,
+                right: Box::new(Expr::Binary {
+                    left: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(2))),
+                    op: BinaryOp::Div,
+                    right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(1))),
+                }),
+            },
+            "score_math",
+        ),
+        Projection::aliased(
+            Expr::Binary {
+                left: Box::new(Expr::column("name")),
+                op: BinaryOp::Like,
+                right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::String(
+                    "m%".to_string(),
+                ))),
+            },
+            "like_name",
+        ),
+        Projection::aliased(
+            Expr::Binary {
+                left: Box::new(Expr::column("name")),
+                op: BinaryOp::ILike,
+                right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::String(
+                    "M%".to_string(),
+                ))),
+            },
+            "ilike_name",
+        ),
+        Projection::aliased(
+            Expr::Unary {
+                op: UnaryOp::IsNull,
+                expr: Box::new(Expr::column("deleted_at")),
+            },
+            "deleted_null",
+        ),
+        Projection::aliased(
+            Expr::Unary {
+                op: UnaryOp::IsNotNull,
+                expr: Box::new(Expr::column("created_at")),
+            },
+            "created_not_null",
+        ),
+        Projection::aliased(
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Boolean(false))),
+            },
+            "not_false",
+        ),
+    ])
+    .from(TableSource::table("flavors"))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::Binary {
+            left: Box::new(Expr::column("score")),
+            op: BinaryOp::Lt,
+            right: Box::new(Expr::param("max_score")),
+        }),
+        op: BinaryOp::Or,
+        right: Box::new(Expr::Binary {
+            left: Box::new(Expr::column("active")),
+            op: BinaryOp::Eq,
+            right: Box::new(Expr::Literal(ormdantic_sql::SqlLiteral::Boolean(true))),
+        }),
+    });
+
+    let compiled = query
+        .compile(&PostgresDialect)
+        .expect("remaining expression arms should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "SELECT (\"name\" != 'mint') AS \"not_mint\", (\"score\" <= 10) AS \"score_le\", (\"score\" >= 1) AS \"score_ge\", ((\"score\" - 1) * (2 / 1)) AS \"score_math\", (\"name\" LIKE 'm%') AS \"like_name\", (\"name\" ILIKE 'M%') AS \"ilike_name\", (\"deleted_at\" IS NULL) AS \"deleted_null\", (\"created_at\" IS NOT NULL) AS \"created_not_null\", (NOT FALSE) AS \"not_false\" FROM \"flavors\" WHERE ((\"score\" < $1) OR (\"active\" = TRUE))"
+    );
+    assert_eq!(compiled.params(), &["max_score".to_string()]);
+}
+
+#[test]
 fn rewrites_sqlite_decimal_expression_comparisons_and_ordering() {
     let decimal_columns = HashSet::from(["amount".to_string()]);
     let table_names = vec!["prices".to_string()];
@@ -151,6 +264,151 @@ fn rewrites_sqlite_decimal_expression_comparisons_and_ordering() {
             "exact_1".to_string(),
             "minimum".to_string()
         ]
+    );
+}
+
+#[test]
+fn rewrites_sqlite_decimal_nested_expression_shapes() {
+    let decimal_columns = HashSet::from(["amount".to_string()]);
+    let table_names = vec!["prices".to_string(), "discounts".to_string()];
+    let subquery = SelectAst::new(vec![Projection::new(Expr::column("id"))])
+        .from(TableSource::table("limits"));
+    let query = SelectAst::new(vec![
+        Projection::aliased(
+            Expr::Case {
+                whens: vec![(
+                    Expr::InList {
+                        expr: Box::new(Expr::qualified_column("prices", "amount")),
+                        values: vec![Expr::param("blocked_amount")],
+                        negated: true,
+                    },
+                    Expr::Cast {
+                        expr: Box::new(Expr::qualified_column("prices", "amount")),
+                        type_name: "TEXT".to_string(),
+                    },
+                )],
+                else_expr: Some(Box::new(Expr::Tuple(vec![
+                    Expr::Function {
+                        name: "ABS".to_string(),
+                        args: vec![Expr::Unary {
+                            op: UnaryOp::Neg,
+                            expr: Box::new(Expr::qualified_column("prices", "amount")),
+                        }],
+                    },
+                    Expr::Literal(ormdantic_sql::SqlLiteral::Null),
+                ]))),
+            },
+            "amount_bucket",
+        ),
+        Projection::aliased(
+            Expr::Window {
+                expr: Box::new(Expr::Function {
+                    name: "COUNT".to_string(),
+                    args: vec![Expr::RawSafe("*".to_string())],
+                }),
+                partition_by: vec![Expr::qualified_column("prices", "amount")],
+                order_by: vec![OrderExpr::new(
+                    Expr::qualified_column("prices", "amount"),
+                    SortDirection::Desc,
+                )],
+            },
+            "amount_window",
+        ),
+    ])
+    .from(TableSource::aliased_table("prices", "prices"))
+    .join(JoinAst::new(
+        JoinKind::Inner,
+        TableSource::aliased_table("discounts", "discounts"),
+        Some(Expr::eq(
+            Expr::qualified_column("discounts", "amount"),
+            Expr::qualified_column("prices", "amount"),
+        )),
+    ))
+    .where_expr(Expr::Binary {
+        left: Box::new(Expr::Between {
+            expr: Box::new(Expr::column("other_amount")),
+            low: Box::new(Expr::param("other_low")),
+            high: Box::new(Expr::param("other_high")),
+        }),
+        op: BinaryOp::And,
+        right: Box::new(Expr::InSubquery {
+            expr: Box::new(Expr::qualified_column("prices", "amount")),
+            select: Box::new(subquery),
+            negated: true,
+        }),
+    })
+    .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names);
+
+    let compiled = query
+        .compile(&SqliteDialect)
+        .expect("nested decimal expression query should compile");
+    let sql = compiled.sql();
+
+    assert!(
+        sql.contains("NOT (ormdantic_decimal_cmp(\"prices\".\"amount\", ?) = 0)"),
+        "{sql}"
+    );
+    assert!(sql.contains("CAST(\"prices\".\"amount\" AS TEXT)"), "{sql}");
+    assert!(sql.contains("ABS((-\"prices\".\"amount\")), NULL"), "{sql}");
+    assert!(
+        sql.contains(
+            "COUNT(*) OVER (PARTITION BY \"prices\".\"amount\" ORDER BY ormdantic_decimal_sort_key(\"prices\".\"amount\") DESC)"
+        ),
+        "{sql}"
+    );
+    assert!(
+        sql.contains("(\"prices\".\"amount\" NOT IN (SELECT \"id\" FROM \"limits\"))"),
+        "{sql}"
+    );
+    assert_eq!(
+        compiled.params(),
+        &[
+            "blocked_amount".to_string(),
+            "other_low".to_string(),
+            "other_high".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn dml_decimal_rewrite_preserves_insert_upsert_and_empty_column_sets() {
+    let decimal_columns = HashSet::from(["amount".to_string()]);
+    let table_names = vec!["prices".to_string()];
+    let insert = DmlAst::Insert {
+        table: TableSource::table("prices"),
+        columns: vec!["id".to_string(), "amount".to_string()],
+        rows: vec![vec![Expr::param("id"), Expr::param("amount")]],
+        returning: Vec::new(),
+    }
+    .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names);
+    let upsert = DmlAst::Upsert {
+        table: TableSource::table("prices"),
+        columns: vec!["id".to_string(), "amount".to_string()],
+        rows: vec![vec![Expr::param("id"), Expr::param("amount")]],
+        conflict_target: vec!["id".to_string()],
+        update_assignments: vec![("amount".to_string(), Expr::param("amount"))],
+        returning: Vec::new(),
+    }
+    .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names);
+    let update = DmlAst::Update {
+        table: TableSource::table("prices"),
+        assignments: vec![("amount".to_string(), Expr::param("amount"))],
+        where_expr: Some(Expr::eq(Expr::column("amount"), Expr::param("old_amount"))),
+        returning: Vec::new(),
+    }
+    .rewrite_sqlite_decimal_columns(&HashSet::new(), &table_names);
+
+    assert_eq!(
+        insert.compile(&SqliteDialect).unwrap().sql(),
+        "INSERT INTO \"prices\" (\"id\", \"amount\") VALUES (?, ?)"
+    );
+    assert_eq!(
+        upsert.compile(&SqliteDialect).unwrap().sql(),
+        "INSERT INTO \"prices\" (\"id\", \"amount\") VALUES (?, ?) ON CONFLICT (\"id\") DO UPDATE SET \"amount\" = excluded.\"amount\""
+    );
+    assert_eq!(
+        update.compile(&SqliteDialect).unwrap().sql(),
+        "UPDATE \"prices\" SET \"amount\" = ? WHERE (\"amount\" = ?)"
     );
 }
 
@@ -383,4 +641,220 @@ fn compiles_ctes_and_window_expressions() {
         compiled.params(),
         &["status".to_string(), "minimum_total".to_string()]
     );
+}
+
+#[test]
+fn compiles_recursive_ctes_join_variants_distinct_and_window_partitions() {
+    let recursive_seed = SelectAst::new(vec![
+        Projection::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(1))),
+        Projection::new(Expr::Literal(ormdantic_sql::SqlLiteral::Integer(0))),
+    ]);
+    let query = SelectAst::new(vec![
+        Projection::new(Expr::qualified_column("tree", "id")),
+        Projection::aliased(
+            Expr::Window {
+                expr: Box::new(Expr::Function {
+                    name: "COUNT".to_string(),
+                    args: vec![Expr::RawSafe("*".to_string())],
+                }),
+                partition_by: vec![Expr::qualified_column("tree", "depth")],
+                order_by: vec![OrderExpr::new(
+                    Expr::qualified_column("tree", "id"),
+                    SortDirection::Asc,
+                )
+                .nulls(OrderNulls::First)],
+            },
+            "depth_count",
+        ),
+        Projection::aliased(
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr: Box::new(Expr::qualified_column("tree", "depth")),
+            },
+            "negative_depth",
+        ),
+    ])
+    .with_cte(
+        CommonTableExpr::new("tree", recursive_seed)
+            .columns(vec!["id".to_string(), "depth".to_string()])
+            .recursive(true),
+    )
+    .from(TableSource::aliased_table("tree", "tree"))
+    .join(JoinAst::new(
+        JoinKind::Left,
+        TableSource::aliased_table("labels", "labels"),
+        Some(Expr::eq(
+            Expr::qualified_column("labels", "id"),
+            Expr::qualified_column("tree", "id"),
+        )),
+    ))
+    .join(JoinAst::new(
+        JoinKind::Right,
+        TableSource::RawSafe("LATERAL (SELECT 1 AS marker) AS marker".to_string()),
+        Some(Expr::Literal(ormdantic_sql::SqlLiteral::Boolean(true))),
+    ))
+    .join(JoinAst::new(
+        JoinKind::Full,
+        TableSource::aliased_table("fallback", "fallback"),
+        Some(Expr::Unary {
+            op: UnaryOp::Not,
+            expr: Box::new(Expr::Binary {
+                left: Box::new(Expr::qualified_column("fallback", "id")),
+                op: BinaryOp::Eq,
+                right: Box::new(Expr::qualified_column("tree", "id")),
+            }),
+        }),
+    ))
+    .join(JoinAst::new(
+        JoinKind::Cross,
+        TableSource::RawSafe("(SELECT 'x' AS tag) AS tags".to_string()),
+        None,
+    ))
+    .where_expr(Expr::Between {
+        expr: Box::new(Expr::qualified_column("tree", "depth")),
+        low: Box::new(Expr::param("min_depth")),
+        high: Box::new(Expr::param("max_depth")),
+    })
+    .distinct(true)
+    .limit(25)
+    .offset(50);
+
+    let compiled = query
+        .compile(&PostgresDialect)
+        .expect("recursive join query should compile");
+
+    assert_eq!(
+        compiled.sql(),
+        "WITH RECURSIVE \"tree\" (\"id\", \"depth\") AS (SELECT 1, 0) SELECT DISTINCT \"tree\".\"id\", COUNT(*) OVER (PARTITION BY \"tree\".\"depth\" ORDER BY \"tree\".\"id\" ASC NULLS FIRST) AS \"depth_count\", (-\"tree\".\"depth\") AS \"negative_depth\" FROM \"tree\" AS \"tree\" LEFT JOIN \"labels\" AS \"labels\" ON (\"labels\".\"id\" = \"tree\".\"id\") RIGHT JOIN LATERAL (SELECT 1 AS marker) AS marker ON TRUE FULL JOIN \"fallback\" AS \"fallback\" ON (NOT (\"fallback\".\"id\" = \"tree\".\"id\")) CROSS JOIN (SELECT 'x' AS tag) AS tags WHERE (\"tree\".\"depth\" BETWEEN $1 AND $2) LIMIT 25 OFFSET 50"
+    );
+    assert_eq!(
+        compiled.params(),
+        &["min_depth".to_string(), "max_depth".to_string()]
+    );
+}
+
+#[test]
+fn rewrites_sqlite_decimal_branches_for_select_and_dml() {
+    let decimal_columns = HashSet::from(["amount".to_string()]);
+    let table_names = vec!["prices".to_string()];
+    let untouched = SelectAst::new(vec![Projection::new(Expr::column("amount"))])
+        .from(TableSource::table("prices"))
+        .rewrite_sqlite_decimal_columns(&HashSet::new(), &table_names)
+        .compile(&SqliteDialect)
+        .expect("empty decimal set should leave query untouched");
+
+    assert_eq!(untouched.sql(), "SELECT \"amount\" FROM \"prices\"");
+
+    let query = SelectAst::new(vec![
+        Projection::aliased(
+            Expr::Cast {
+                expr: Box::new(Expr::Case {
+                    whens: vec![(
+                        Expr::InList {
+                            expr: Box::new(Expr::column("amount")),
+                            values: vec![Expr::param("amount_a"), Expr::param("amount_b")],
+                            negated: true,
+                        },
+                        Expr::Tuple(vec![Expr::column("amount"), Expr::param("fallback")]),
+                    )],
+                    else_expr: Some(Box::new(Expr::Function {
+                        name: "ABS".to_string(),
+                        args: vec![Expr::column("amount")],
+                    })),
+                }),
+                type_name: "TEXT".to_string(),
+            },
+            "amount_key",
+        ),
+        Projection::aliased(
+            Expr::InSubquery {
+                expr: Box::new(Expr::column("amount")),
+                select: Box::new(
+                    SelectAst::new(vec![Projection::new(Expr::column("amount"))])
+                        .from(TableSource::table("archived_prices")),
+                ),
+                negated: true,
+            },
+            "not_archived",
+        ),
+    ])
+    .from(TableSource::table("prices"))
+    .join(JoinAst::new(
+        JoinKind::Inner,
+        TableSource::aliased_table("thresholds", "thresholds"),
+        Some(Expr::Binary {
+            left: Box::new(Expr::qualified_column("prices", "amount")),
+            op: BinaryOp::Le,
+            right: Box::new(Expr::qualified_column("thresholds", "amount")),
+        }),
+    ))
+    .where_expr(Expr::Between {
+        expr: Box::new(Expr::column("amount")),
+        low: Box::new(Expr::param("low")),
+        high: Box::new(Expr::param("high")),
+    })
+    .group_by(vec![Expr::column("amount")])
+    .having(Expr::Binary {
+        left: Box::new(Expr::column("amount")),
+        op: BinaryOp::Ne,
+        right: Box::new(Expr::param("excluded")),
+    })
+    .order_by(vec![OrderExpr::new(
+        Expr::Function {
+            name: "COALESCE".to_string(),
+            args: vec![Expr::column("amount"), Expr::param("fallback_order")],
+        },
+        SortDirection::Desc,
+    )])
+    .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names);
+
+    let compiled = query
+        .compile(&SqliteDialect)
+        .expect("decimal rewrite should compile");
+
+    assert!(compiled.sql().contains("NOT ((ormdantic_decimal_cmp"));
+    assert!(compiled
+        .sql()
+        .contains("ormdantic_decimal_cmp(\"amount\", ?) >= 0"));
+    assert!(compiled
+        .sql()
+        .contains("ormdantic_decimal_cmp(\"amount\", ?) <= 0"));
+    assert!(compiled.sql().contains("GROUP BY \"amount\""));
+    assert!(compiled
+        .sql()
+        .contains("HAVING (ormdantic_decimal_cmp(\"amount\", ?) != 0)"));
+    assert!(compiled
+        .sql()
+        .contains("ORDER BY COALESCE(\"amount\", ?) DESC"));
+    assert_eq!(
+        compiled.params(),
+        &[
+            "amount_a".to_string(),
+            "amount_b".to_string(),
+            "fallback".to_string(),
+            "low".to_string(),
+            "high".to_string(),
+            "excluded".to_string(),
+            "fallback_order".to_string()
+        ]
+    );
+
+    let delete = DmlAst::Delete {
+        table: TableSource::table("prices"),
+        where_expr: Some(Expr::Between {
+            expr: Box::new(Expr::column("amount")),
+            low: Box::new(Expr::param("low")),
+            high: Box::new(Expr::param("high")),
+        }),
+        returning: Vec::new(),
+    }
+    .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names)
+    .compile(&SqliteDialect)
+    .expect("rewritten decimal delete should compile");
+
+    assert_eq!(
+        delete.sql(),
+        "DELETE FROM \"prices\" WHERE ((ormdantic_decimal_cmp(\"amount\", ?) >= 0) AND (ormdantic_decimal_cmp(\"amount\", ?) <= 0))"
+    );
+    assert_eq!(delete.params(), &["low".to_string(), "high".to_string()]);
 }

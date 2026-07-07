@@ -520,6 +520,10 @@ mod tests {
     #[test]
     fn sqlite_declared_numeric_values_decode_as_decimal() {
         assert_eq!(
+            sqlite_value(ValueRef::Null, Some("NUMERIC(12, 2)")),
+            DbValue::Null
+        );
+        assert_eq!(
             sqlite_value(ValueRef::Text(b"123.45"), Some("NUMERIC(12, 2)")),
             DbValue::Decimal("123.45".to_string())
         );
@@ -535,10 +539,24 @@ mod tests {
             sqlite_value(ValueRef::Text(b"123.45"), Some("TEXT")),
             DbValue::Text("123.45".to_string())
         );
+        assert_eq!(sqlite_value(ValueRef::Real(3.5), None), DbValue::Real(3.5));
+        assert_eq!(
+            sqlite_value(ValueRef::Blob(b"blob-text"), None),
+            DbValue::Text("blob-text".to_string())
+        );
     }
 
     #[test]
     fn sqlite_declared_integer_text_values_decode_as_exact_integers() {
+        assert_eq!(sqlite_value(ValueRef::Null, Some("INTEGER")), DbValue::Null);
+        assert_eq!(
+            sqlite_value(ValueRef::Integer(7), Some("INTEGER")),
+            DbValue::Integer(7)
+        );
+        assert_eq!(
+            sqlite_value(ValueRef::Real(7.5), Some("INTEGER")),
+            DbValue::Real(7.5)
+        );
         assert_eq!(
             sqlite_value(ValueRef::Text(b"18446744073709551615"), Some("INTEGER")),
             DbValue::UnsignedInteger(u64::MAX)
@@ -563,6 +581,8 @@ mod tests {
 
     #[test]
     fn sqlite_decimal_comparison_handles_precision_and_exponents() {
+        assert_eq!(decimal_cmp("-1", "1").unwrap(), Ordering::Less);
+        assert_eq!(decimal_cmp("0", "-0.0").unwrap(), Ordering::Equal);
         assert_eq!(decimal_cmp("10", "2").unwrap(), Ordering::Greater);
         assert_eq!(
             decimal_cmp(
@@ -575,6 +595,10 @@ mod tests {
         assert_eq!(decimal_cmp("1.20", "1.2").unwrap(), Ordering::Equal);
         assert_eq!(decimal_cmp("1E+3", "999.99").unwrap(), Ordering::Greater);
         assert_eq!(decimal_cmp("-0.01", "-0.001").unwrap(), Ordering::Less);
+        assert!(normalize_decimal("").is_err());
+        assert!(normalize_decimal("abc").is_err());
+        assert!(normalize_decimal("1e").is_err());
+        assert!(normalize_decimal("1x").is_err());
     }
 
     #[test]
@@ -614,6 +638,10 @@ mod tests {
         assert!(!decimal_multiple_of("10", "3").unwrap());
         assert!(decimal_multiple_of("0", "0.05").unwrap());
         assert!(decimal_multiple_of("1", "0").is_err());
+        assert!(!decimal_multiple_of("0.001", "0.01").unwrap());
+        assert!(decimal_digits_divisible("12a", "3").is_err());
+        assert!(decimal_digits_divisible("1", "0").is_err());
+        assert!(subtract_decimal_digits("1", "2").is_err());
     }
 
     #[test]
@@ -621,5 +649,83 @@ mod tests {
         assert!(regex_match("AB", r"^[A-Z]{2}$").unwrap());
         assert!(!regex_match("ab", r"^[A-Z]{2}$").unwrap());
         assert!(regex_match("AB", "[").is_err());
+    }
+
+    #[test]
+    fn sqlite_registered_scalar_functions_cover_nulls_scalars_and_errors() {
+        let connection = Connection::open_in_memory().expect("sqlite memory should open");
+        register_sqlite_functions(&connection).expect("sqlite functions should register");
+
+        let cmp: Option<i64> = connection
+            .query_row(
+                "SELECT ormdantic_decimal_cmp(?, ?)",
+                ["1.20", "1.2"],
+                |row| row.get(0),
+            )
+            .expect("decimal cmp should run");
+        assert_eq!(cmp, Some(0));
+        let null_cmp: Option<i64> = connection
+            .query_row("SELECT ormdantic_decimal_cmp(NULL, ?)", ["1.2"], |row| {
+                row.get(0)
+            })
+            .expect("decimal cmp should return null for null operands");
+        assert_eq!(null_cmp, None);
+        let sort_key: Option<String> = connection
+            .query_row("SELECT ormdantic_decimal_sort_key(?)", ["-2"], |row| {
+                row.get(0)
+            })
+            .expect("decimal sort key should run");
+        assert!(sort_key
+            .expect("sort key should be present")
+            .starts_with("0|"));
+        let null_sort: Option<String> = connection
+            .query_row("SELECT ormdantic_decimal_sort_key(NULL)", [], |row| {
+                row.get(0)
+            })
+            .expect("decimal sort key should return null for null values");
+        assert_eq!(null_sort, None);
+        let regex: Option<bool> = connection
+            .query_row(
+                "SELECT ormdantic_regex_match(?, ?)",
+                ["AB", "^[A-Z]+$"],
+                |row| row.get(0),
+            )
+            .expect("regex match should run");
+        assert_eq!(regex, Some(true));
+        let null_regex: Option<bool> = connection
+            .query_row(
+                "SELECT ormdantic_regex_match(NULL, ?)",
+                ["^[A-Z]+$"],
+                |row| row.get(0),
+            )
+            .expect("regex match should return null for null operands");
+        assert_eq!(null_regex, None);
+        let multiple: Option<bool> = connection
+            .query_row(
+                "SELECT ormdantic_decimal_multiple_of(?, ?)",
+                ["1.20", "0.05"],
+                |row| row.get(0),
+            )
+            .expect("decimal multiple_of should run");
+        assert_eq!(multiple, Some(true));
+        let null_multiple: Option<bool> = connection
+            .query_row(
+                "SELECT ormdantic_decimal_multiple_of(NULL, ?)",
+                ["0.05"],
+                |row| row.get(0),
+            )
+            .expect("multiple_of should return null for null operands");
+        assert_eq!(null_multiple, None);
+
+        assert!(connection
+            .query_row("SELECT ormdantic_regex_match(?, ?)", ["AB", "["], |row| {
+                row.get::<_, Option<bool>>(0)
+            })
+            .is_err());
+        assert!(connection
+            .query_row("SELECT ormdantic_decimal_sort_key(?)", ["1e"], |row| {
+                row.get::<_, Option<String>>(0)
+            })
+            .is_err());
     }
 }

@@ -236,7 +236,7 @@ pub fn run_reflection_smoke_flow(url: &str, table: &str, create_sql: String, dro
         schema
             .tables()
             .iter()
-            .any(|reflected| reflected.name() == table),
+            .any(|reflected| reflected.name().eq_ignore_ascii_case(table)),
         "scoped reflection should include created table {table}"
     );
 

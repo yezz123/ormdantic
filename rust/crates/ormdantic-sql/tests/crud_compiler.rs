@@ -173,6 +173,54 @@ fn compiles_sqlite_delete() {
 }
 
 #[test]
+fn query_ast_validation_errors_cover_empty_column_sets() {
+    let empty_select = QueryAst::Select {
+        table: TableRef::new("flavors"),
+        columns: Vec::new(),
+        filters: Vec::new(),
+        order_by: Vec::new(),
+        limit: None,
+        offset: None,
+    }
+    .compile(&SqliteDialect)
+    .expect_err("select without columns should fail");
+    assert!(empty_select
+        .to_string()
+        .contains("select query requires at least one column"));
+
+    for (operation, error) in [
+        (
+            QueryAst::Insert {
+                table: TableRef::new("flavors"),
+                columns: Vec::new(),
+            },
+            "insert query requires at least one column",
+        ),
+        (
+            QueryAst::Update {
+                table: TableRef::new("flavors"),
+                columns: Vec::new(),
+                pk: "id".to_string(),
+            },
+            "update query requires at least one column",
+        ),
+        (
+            QueryAst::Upsert {
+                table: TableRef::new("flavors"),
+                columns: Vec::new(),
+                pk: "id".to_string(),
+            },
+            "upsert query requires at least one column",
+        ),
+    ] {
+        let actual = operation
+            .compile(&SqliteDialect)
+            .expect_err("empty column operation should fail");
+        assert!(actual.to_string().contains(error), "{actual}");
+    }
+}
+
+#[test]
 fn compiles_sql_server_upsert_as_merge() {
     let query = QueryAst::Upsert {
         table: TableRef::new("flavors"),

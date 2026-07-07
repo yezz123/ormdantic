@@ -149,6 +149,42 @@ fn column_types_follow_backend_capabilities() {
         "DECIMAL_TEXT(9, 2)"
     );
     assert_eq!(
+        SqliteDialect.render_column_type(&ColumnDef::new("amount", FieldKind::Decimal)),
+        "DECIMAL_TEXT"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("amount", FieldKind::Decimal)),
+        "NUMERIC"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("count", FieldKind::Integer)),
+        "INTEGER"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("ratio", FieldKind::Float)),
+        "REAL"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("active", FieldKind::Boolean)),
+        "BOOLEAN"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("served_on", FieldKind::Date)),
+        "DATE"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("served_at", FieldKind::DateTime)),
+        "TIMESTAMP"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("payload", FieldKind::Binary)),
+        "BLOB"
+    );
+    assert_eq!(
+        PostgresDialect.render_column_type(&ColumnDef::new("legacy", FieldKind::Unknown)),
+        "TEXT"
+    );
+    assert_eq!(
         PostgresDialect.render_column_type(&ColumnDef::new(
             "flavor",
             FieldKind::Enum {

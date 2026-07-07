@@ -26,6 +26,10 @@ fn renders_begin_transaction_options() {
         ])
     );
     assert_eq!(
+        PostgresDialect.begin_transaction_sql(&TransactionOptions::new()),
+        strings(&["BEGIN"])
+    );
+    assert_eq!(
         MySqlDialect.begin_transaction_sql(&options),
         strings(&[
             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
@@ -56,6 +60,9 @@ fn renders_begin_transaction_options() {
         ),
         strings(&["SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"])
     );
+    assert!(OracleDialect
+        .begin_transaction_sql(&TransactionOptions::new())
+        .is_empty());
     assert_eq!(
         SqliteDialect.begin_transaction_sql(&TransactionOptions::new()),
         strings(&["BEGIN"])

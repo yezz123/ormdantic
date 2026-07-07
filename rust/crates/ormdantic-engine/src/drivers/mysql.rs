@@ -162,4 +162,47 @@ mod tests {
             DbValue::Text("123.45".to_string())
         );
     }
+
+    #[test]
+    fn mysql_params_cover_all_db_value_variants() {
+        let params = mysql_params(&[
+            DbValue::Null,
+            DbValue::Integer(-1),
+            DbValue::UnsignedInteger(42),
+            DbValue::Decimal("12.34".to_string()),
+            DbValue::Real(1.5),
+            DbValue::Text("flavor".to_string()),
+            DbValue::Bool(true),
+        ]);
+
+        assert_eq!(
+            params,
+            vec![
+                Value::NULL,
+                Value::Int(-1),
+                Value::UInt(42),
+                Value::Bytes(b"12.34".to_vec()),
+                Value::Double(1.5),
+                Value::Bytes(b"flavor".to_vec()),
+                Value::Int(1),
+            ]
+        );
+    }
+
+    #[test]
+    fn mysql_value_covers_scalar_and_fallback_values() {
+        assert_eq!(mysql_value(Value::NULL, None), DbValue::Null);
+        assert_eq!(mysql_value(Value::Int(-2), None), DbValue::Integer(-2));
+        assert_eq!(
+            mysql_value(Value::UInt(2), None),
+            DbValue::UnsignedInteger(2)
+        );
+        assert_eq!(mysql_value(Value::Float(2.5), None), DbValue::Real(2.5));
+        assert_eq!(mysql_value(Value::Double(3.5), None), DbValue::Real(3.5));
+
+        match mysql_value(Value::Date(2026, 7, 7, 1, 2, 3, 0), None) {
+            DbValue::Text(value) => assert!(value.contains("Date")),
+            other => panic!("expected fallback text, got {other:?}"),
+        }
+    }
 }

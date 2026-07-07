@@ -143,3 +143,42 @@ fn compiles_joined_relationship_filters_in_join_on_clause() {
         &["loader_0__kind".to_string(), "id".to_string()]
     );
 }
+
+#[test]
+fn joined_select_validation_and_limit_offset_edges() {
+    let empty_columns = QueryAst::JoinedSelect {
+        table: TableRef::new("coffee"),
+        columns: Vec::new(),
+        joins: Vec::new(),
+        filters: Vec::new(),
+        relationship_filters: Vec::new(),
+        order_by: Vec::new(),
+        relationship_order_by: Vec::new(),
+        limit: None,
+        offset: None,
+    }
+    .compile(&SqliteDialect)
+    .expect_err("joined select without columns should fail");
+    assert!(empty_columns
+        .to_string()
+        .contains("joined select query requires at least one column"));
+
+    let paged = QueryAst::JoinedSelect {
+        table: TableRef::new("coffee"),
+        columns: vec![JoinedSelectColumn::aliased("coffee", "id", "coffee\\id")],
+        joins: Vec::new(),
+        filters: Vec::new(),
+        relationship_filters: Vec::new(),
+        order_by: vec![OrderBy::new("id", SortDirection::Asc)],
+        relationship_order_by: Vec::new(),
+        limit: Some(20),
+        offset: Some(40),
+    }
+    .compile(&SqliteDialect)
+    .expect("joined select with paging should compile");
+
+    assert_eq!(
+        paged.sql(),
+        "SELECT \"coffee\".\"id\" AS \"coffee\\id\" FROM \"coffee\" ORDER BY \"coffee\".\"id\" ASC LIMIT 20 OFFSET 40"
+    );
+}

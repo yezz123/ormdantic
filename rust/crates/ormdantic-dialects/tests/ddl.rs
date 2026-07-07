@@ -1,8 +1,12 @@
-use ormdantic_dialects::{AnyDialect, Dialect, PostgresDialect};
+use ormdantic_dialects::{
+    AnyDialect, Dialect, MariaDbDialect, MsSqlDialect, MySqlDialect, OracleDialect,
+    PostgresDialect, SqliteDialect,
+};
 use ormdantic_schema::{
-    CheckConstraintDef, ColumnDef, ConstraintDef, ConstraintTiming, ExclusionConstraintDef,
-    ExclusionElementDef, FieldKind, ForeignKeyAction, ForeignKeyDef, ForeignKeyMatch, IdentityDef,
-    IndexDef, NamespaceDef, SchemaOperation, TableDef, UniqueConstraintDef,
+    CheckConstraintDef, ColumnDef, ComputedDef, ConstraintDef, ConstraintTiming,
+    ExclusionConstraintDef, ExclusionElementDef, FieldKind, ForeignKeyAction, ForeignKeyDef,
+    ForeignKeyMatch, IdentityDef, IndexDef, NamespaceDef, SchemaOperation, TableDef,
+    UniqueConstraintDef,
 };
 
 fn sample_table() -> TableDef {
@@ -104,6 +108,12 @@ fn renders_schema_qualified_table_operations() {
             name: table.qualified_name().to_string(),
         })
         .expect("schema-qualified drop should compile");
+    let oracle_drop = AnyDialect::parse("oracle")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::DropTable {
+            name: table.qualified_name().to_string(),
+        })
+        .expect("oracle schema-qualified drop should compile");
 
     assert_eq!(
         statements,
@@ -117,6 +127,36 @@ fn renders_schema_qualified_table_operations() {
     assert_eq!(
         drop,
         vec![r#"DROP TABLE IF EXISTS "inventory"."flavor""#.to_string()]
+    );
+    assert_eq!(
+        oracle_drop,
+        vec![r#"DROP TABLE "inventory"."flavor""#.to_string()]
+    );
+}
+
+#[test]
+fn renders_mssql_schema_qualified_create_table_object_name() {
+    let table = TableDef::from_parts(
+        "flav'or",
+        "Flavor",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_schema("inv'entory");
+
+    let statements = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(table))
+        .expect("mssql should escape schema-qualified object names");
+
+    assert_eq!(
+        statements,
+        vec![
+            "IF OBJECT_ID(N'inv''entory.flav''or', N'U') IS NULL CREATE TABLE [inv'entory].[flav'or] ([id] INTEGER PRIMARY KEY NOT NULL)".to_string()
+        ]
     );
 }
 
@@ -210,10 +250,16 @@ fn renders_namespace_comments_for_supported_dialects() {
         .unwrap()
         .compile_schema_operation(&set)
         .unwrap();
+    let mssql_clear = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&clear)
+        .unwrap();
     assert!(mssql_set[0].contains("sys.sp_updateextendedproperty"));
     assert!(mssql_set[0].contains("sys.sp_addextendedproperty"));
     assert!(mssql_set[0].contains("@level0type = N'SCHEMA'"));
     assert!(mssql_set[0].contains("@value = N'new schema'"));
+    assert!(mssql_clear[0].contains("sys.sp_dropextendedproperty"));
+    assert!(mssql_clear[0].contains("@level0type = N'SCHEMA'"));
 
     let mysql_error = AnyDialect::parse("mysql")
         .unwrap()
@@ -224,14 +270,22 @@ fn renders_namespace_comments_for_supported_dialects() {
 
 #[test]
 fn rejects_namespace_schema_operations_on_unsupported_dialects() {
-    let operation = SchemaOperation::CreateNamespace(NamespaceDef::new("inventory"));
+    let create = SchemaOperation::CreateNamespace(NamespaceDef::new("inventory"));
+    let drop = SchemaOperation::DropNamespace {
+        name: "inventory".to_string(),
+    };
 
     for dialect in ["sqlite", "oracle"] {
-        let error = AnyDialect::parse(dialect)
+        let create_error = AnyDialect::parse(dialect)
             .unwrap()
-            .compile_schema_operation(&operation)
+            .compile_schema_operation(&create)
             .expect_err("namespace DDL should be dialect-gated");
-        assert!(error.to_string().contains("namespaces/schemas"));
+        let drop_error = AnyDialect::parse(dialect)
+            .unwrap()
+            .compile_schema_operation(&drop)
+            .expect_err("namespace drop should be dialect-gated");
+        assert!(create_error.to_string().contains("namespaces/schemas"));
+        assert!(drop_error.to_string().contains("namespaces/schemas"));
     }
 }
 
@@ -1632,6 +1686,7 @@ fn renders_sqlite_conflict_clauses() {
                 .primary_key(true)
                 .with_sqlite_on_conflict_primary_key("REPLACE"),
             ColumnDef::new("name", FieldKind::String).with_sqlite_on_conflict_not_null("FAIL"),
+            ColumnDef::new("slug", FieldKind::String).with_sqlite_on_conflict_unique("ABORT"),
         ],
         Vec::new(),
         vec![
@@ -1666,7 +1721,7 @@ fn renders_sqlite_conflict_clauses() {
     assert_eq!(
         sqlite_create,
         vec![
-            r#"CREATE TABLE IF NOT EXISTS "flavor" ("id" INTEGER PRIMARY KEY ON CONFLICT REPLACE NOT NULL, "name" TEXT NOT NULL ON CONFLICT FAIL, CONSTRAINT "flavor_name_unique" UNIQUE ("name") ON CONFLICT IGNORE)"#.to_string()
+            r#"CREATE TABLE IF NOT EXISTS "flavor" ("id" INTEGER PRIMARY KEY ON CONFLICT REPLACE NOT NULL, "name" TEXT NOT NULL ON CONFLICT FAIL, "slug" TEXT NOT NULL, CONSTRAINT "flavor_name_unique" UNIQUE ("name") ON CONFLICT IGNORE)"#.to_string()
         ]
     );
     assert!(postgres_column_error.to_string().contains("SQLite"));
@@ -1761,7 +1816,10 @@ fn renders_postgres_child_partitions() {
             ColumnDef::new("name", FieldKind::String),
         ],
         Vec::new(),
-        Vec::new(),
+        vec![UniqueConstraintDef::new(
+            "flavor_2026_id_unique",
+            vec!["id".to_string()],
+        )],
         Vec::new(),
     )
     .with_postgres_partition_of("flavor")
@@ -1770,6 +1828,21 @@ fn renders_postgres_child_partitions() {
 
     let postgres_create = PostgresDialect
         .compile_schema_operation(&SchemaOperation::CreateTable(table.clone()))
+        .unwrap();
+    let empty_child_create = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(
+            TableDef::from_parts(
+                "flavor_2027",
+                "Flavor2027",
+                "id",
+                vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .with_postgres_partition_of("flavor")
+            .with_postgres_partition_for("FOR VALUES FROM (2027) TO (2028)"),
+        ))
         .unwrap();
     let sqlite_error = AnyDialect::parse("sqlite")
         .unwrap()
@@ -1798,7 +1871,14 @@ fn renders_postgres_child_partitions() {
     assert_eq!(
         postgres_create,
         vec![
-            r#"CREATE TABLE IF NOT EXISTS "flavor_2026" PARTITION OF "flavor" FOR VALUES FROM (2026) TO (2027) WITH (fillfactor = 70)"#
+            r#"CREATE TABLE IF NOT EXISTS "flavor_2026" PARTITION OF "flavor" (CONSTRAINT "flavor_2026_id_unique" UNIQUE ("id")) FOR VALUES FROM (2026) TO (2027) WITH (fillfactor = 70)"#
+                .to_string()
+        ]
+    );
+    assert_eq!(
+        empty_child_create,
+        vec![
+            r#"CREATE TABLE IF NOT EXISTS "flavor_2027" PARTITION OF "flavor" FOR VALUES FROM (2027) TO (2028)"#
                 .to_string()
         ]
     );
@@ -1985,6 +2065,88 @@ fn renders_multiple_of_check_constraints_by_backend() {
     ));
     assert!(mssql[0]
         .contains("CONSTRAINT [flavor_quantity_multiple_of_check] CHECK (quantity % 5 = 0)"));
+}
+
+#[test]
+fn renders_check_constraint_expression_edge_cases() {
+    let decimal_table = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer).primary_key(true),
+            ColumnDef::new("rating", FieldKind::Decimal).numeric(5, 2),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_check_constraints(vec![
+        CheckConstraintDef::new("rating >= 1.25").named("flavor_rating_min")
+    ]);
+    let sqlite_decimal = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(decimal_table))
+        .expect("sqlite should rewrite decimal comparisons when columns are available");
+    assert!(sqlite_decimal[0].contains(
+        r#"CONSTRAINT "flavor_rating_min" CHECK (ormdantic_decimal_cmp(rating, '1.25') >= 0)"#
+    ));
+
+    let sqlite_add_decimal = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::AddConstraint {
+            table: "flavor".to_string(),
+            constraint: ConstraintDef::Check(CheckConstraintDef::new("rating >= 1.25")),
+        })
+        .expect("sqlite add constraint has no column metadata for decimal rewrites");
+    let sqlite_bad_regex = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::AddConstraint {
+            table: "flavor".to_string(),
+            constraint: ConstraintDef::Check(CheckConstraintDef::new(
+                "ormdantic_regex_match(, 'x')",
+            )),
+        })
+        .expect("malformed regex sentinel should remain an ordinary check");
+    let sqlite_bad_multiple = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::AddConstraint {
+            table: "flavor".to_string(),
+            constraint: ConstraintDef::Check(CheckConstraintDef::new(
+                "ormdantic_multiple_of(quantity, )",
+            )),
+        })
+        .expect("malformed multiple-of sentinel should remain an ordinary check");
+    let not_deferrable_unique = AnyDialect::parse("oracle")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::AddConstraint {
+            table: "flavor".to_string(),
+            constraint: ConstraintDef::Unique(
+                UniqueConstraintDef::new("flavor_code_unique", vec!["code".to_string()])
+                    .with_timing(ConstraintTiming::new(Some(false), false)),
+            ),
+        })
+        .expect("oracle should render explicit NOT DEFERRABLE timing");
+
+    assert_eq!(
+        sqlite_add_decimal,
+        vec![r#"ALTER TABLE "flavor" ADD CHECK (rating >= 1.25)"#.to_string()]
+    );
+    assert_eq!(
+        sqlite_bad_regex,
+        vec![r#"ALTER TABLE "flavor" ADD CHECK (ormdantic_regex_match(, 'x'))"#.to_string()]
+    );
+    assert_eq!(
+        sqlite_bad_multiple,
+        vec![r#"ALTER TABLE "flavor" ADD CHECK (ormdantic_multiple_of(quantity, ))"#.to_string()]
+    );
+    assert_eq!(
+        not_deferrable_unique,
+        vec![
+            r#"ALTER TABLE "flavor" ADD CONSTRAINT "flavor_code_unique" UNIQUE ("code") NOT DEFERRABLE"#
+                .to_string()
+        ]
+    );
 }
 
 #[test]
@@ -2509,4 +2671,689 @@ fn renders_postgres_exclusion_constraints_only_for_postgres() {
     assert!(error
         .to_string()
         .contains("feature 'exclusion constraints' is not supported by dialect 'sqlite'"));
+}
+
+#[test]
+fn rejects_invalid_postgres_partition_child_shapes() {
+    let missing_bound = TableDef::from_parts(
+        "flavor_2026",
+        "Flavor2026",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_postgres_partition_of("flavor");
+    let inherited_child = TableDef::from_parts(
+        "flavor_2026",
+        "Flavor2026",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_postgres_partition_of("flavor")
+    .with_postgres_partition_for("FOR VALUES FROM (2026) TO (2027)")
+    .with_postgres_inherits(vec!["base_flavor".to_string()]);
+
+    let missing_bound_error = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(missing_bound))
+        .expect_err("partition child missing bound should fail");
+    let inherited_child_error = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(inherited_child))
+        .expect_err("partition child cannot inherit");
+
+    assert!(missing_bound_error
+        .to_string()
+        .contains("missing a partition bound"));
+    assert!(inherited_child_error
+        .to_string()
+        .contains("cannot also use"));
+}
+
+#[test]
+fn renders_mssql_nonclustered_primary_key_and_mysql_column_modify_edges() {
+    let mssql_table = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_mssql_primary_key_nonclustered(true);
+    let mssql_sql = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(mssql_table))
+        .unwrap();
+    assert!(mssql_sql[0].contains("PRIMARY KEY NONCLUSTERED"));
+
+    let computed_column = ColumnDef::new("score", FieldKind::Integer)
+        .with_server_default("0")
+        .with_collation("utf8mb4_bin")
+        .with_computed(ComputedDef::new("base_score + bonus").persisted(true))
+        .with_comment("score cache");
+    let mysql_comment = AnyDialect::parse("mysql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetColumnComment {
+            table: "flavor".to_string(),
+            column: computed_column,
+        })
+        .unwrap();
+    assert_eq!(
+        mysql_comment,
+        vec![
+            "ALTER TABLE `flavor` MODIFY COLUMN `score` INTEGER NOT NULL DEFAULT 0 COLLATE utf8mb4_bin GENERATED ALWAYS AS (base_score + bonus) STORED COMMENT 'score cache'".to_string()
+        ]
+    );
+
+    let clear_comment = AnyDialect::parse("mysql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetColumnComment {
+            table: "flavor".to_string(),
+            column: ColumnDef::new("score", FieldKind::Integer),
+        })
+        .unwrap();
+    assert_eq!(
+        clear_comment,
+        vec!["ALTER TABLE `flavor` MODIFY COLUMN `score` INTEGER NOT NULL COMMENT ''".to_string()]
+    );
+
+    let identity_comment = AnyDialect::parse("mysql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetColumnComment {
+            table: "flavor".to_string(),
+            column: ColumnDef::new("id", FieldKind::Integer)
+                .with_identity(IdentityDef::new())
+                .with_comment("surrogate key"),
+        })
+        .unwrap();
+    assert_eq!(
+        identity_comment,
+        vec![
+            "ALTER TABLE `flavor` MODIFY COLUMN `id` INTEGER NOT NULL AUTO_INCREMENT COMMENT 'surrogate key'"
+                .to_string()
+        ]
+    );
+}
+
+#[test]
+fn rejects_invalid_sqlite_conflict_policy_and_unsupported_check_inheritance() {
+    let invalid_conflict = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer)
+            .primary_key(true)
+            .with_sqlite_on_conflict_primary_key("explode")],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let conflict_error = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(invalid_conflict))
+        .expect_err("invalid sqlite conflict policy should fail");
+    assert!(conflict_error
+        .to_string()
+        .contains("invalid SQLite conflict policy"));
+
+    let invalid_not_null = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer).primary_key(true),
+            ColumnDef::new("name", FieldKind::String).with_sqlite_on_conflict_not_null("explode"),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let invalid_unique = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer).primary_key(true),
+            ColumnDef::new("name", FieldKind::String).with_sqlite_on_conflict_unique("explode"),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    for table in [invalid_not_null, invalid_unique] {
+        let error = AnyDialect::parse("sqlite")
+            .unwrap()
+            .compile_schema_operation(&SchemaOperation::CreateTable(table))
+            .expect_err("invalid sqlite conflict policy should fail");
+        assert!(error.to_string().contains("invalid SQLite conflict policy"));
+    }
+
+    let no_inherit = SchemaOperation::AddConstraint {
+        table: "flavor".to_string(),
+        constraint: ConstraintDef::Check(
+            CheckConstraintDef::new("rating >= 0")
+                .named("flavor_rating_check")
+                .no_inherit(),
+        ),
+    };
+    let sqlite_error = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&no_inherit)
+        .expect_err("sqlite should reject no inherit checks");
+    assert!(sqlite_error.to_string().contains("NO INHERIT"));
+}
+
+#[test]
+fn rejects_deferred_create_table_constraint_followup_errors() {
+    let mssql_check = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_check_constraints(vec![CheckConstraintDef::new("id > 0")
+        .named("flavor_id_check")
+        .no_inherit()
+        .not_validated()]);
+    let mssql_fk = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer).primary_key(true),
+            ColumnDef::new("supplier_id", FieldKind::Integer),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_foreign_keys(vec![ForeignKeyDef::new(
+        vec!["supplier_id".to_string()],
+        "supplier",
+        vec!["id".to_string()],
+    )
+    .named("flavor_supplier_fk")
+    .with_timing(ConstraintTiming::new(Some(true), false))
+    .not_validated()]);
+
+    let check_error = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(mssql_check))
+        .expect_err("deferred check follow-up should validate NO INHERIT");
+    let fk_error = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(mssql_fk))
+        .expect_err("deferred foreign-key follow-up should validate timing");
+
+    assert!(check_error.to_string().contains("NO INHERIT"));
+    assert!(fk_error.to_string().contains("deferrable foreign keys"));
+}
+
+#[test]
+fn rejects_inline_create_table_foreign_key_timing_errors() {
+    let table = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer).primary_key(true),
+            ColumnDef::new("supplier_id", FieldKind::Integer),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_foreign_keys(vec![ForeignKeyDef::new(
+        vec!["supplier_id".to_string()],
+        "supplier",
+        vec!["id".to_string()],
+    )
+    .named("flavor_supplier_fk")
+    .with_timing(ConstraintTiming::new(Some(true), false))]);
+
+    let error = AnyDialect::parse("mysql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(table))
+        .expect_err("inline foreign-key timing should be validated");
+    assert!(error.to_string().contains("deferrable foreign keys"));
+}
+
+#[test]
+fn renders_remaining_foreign_key_actions_and_match_simple() {
+    let operation = SchemaOperation::AddConstraint {
+        table: "flavor".to_string(),
+        constraint: ConstraintDef::ForeignKey(
+            ForeignKeyDef::new(
+                vec!["supplier_id".to_string()],
+                "supplier",
+                vec!["id".to_string()],
+            )
+            .named("flavor_supplier_fk")
+            .with_match(ForeignKeyMatch::Simple)
+            .on_delete(ForeignKeyAction::Restrict)
+            .on_update(ForeignKeyAction::SetDefault),
+        ),
+    };
+
+    let sql = PostgresDialect
+        .compile_schema_operation(&operation)
+        .expect("postgres should render all foreign key action variants");
+    assert_eq!(
+        sql,
+        vec![
+            r#"ALTER TABLE "flavor" ADD CONSTRAINT "flavor_supplier_fk" FOREIGN KEY ("supplier_id") REFERENCES "supplier" ("id") MATCH SIMPLE ON DELETE RESTRICT ON UPDATE SET DEFAULT"#.to_string()
+        ]
+    );
+
+    let no_action = SchemaOperation::AddConstraint {
+        table: "flavor".to_string(),
+        constraint: ConstraintDef::ForeignKey(
+            ForeignKeyDef::new(
+                vec!["supplier_id".to_string()],
+                "supplier",
+                vec!["id".to_string()],
+            )
+            .on_delete(ForeignKeyAction::NoAction),
+        ),
+    };
+    let no_action_sql = PostgresDialect
+        .compile_schema_operation(&no_action)
+        .expect("postgres should render NO ACTION");
+    assert!(no_action_sql[0].contains("ON DELETE NO ACTION"));
+}
+
+#[test]
+fn renders_column_operation_comment_and_nullability_edges() {
+    let add = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::AddColumn {
+            table: "inventory.flavor".to_string(),
+            column: ColumnDef::new("name", FieldKind::String).with_comment("display name"),
+        })
+        .expect("postgres should render column add comments");
+    assert_eq!(
+        add,
+        vec![
+            r#"ALTER TABLE "inventory"."flavor" ADD COLUMN "name" TEXT NOT NULL"#.to_string(),
+            r#"COMMENT ON COLUMN "inventory"."flavor"."name" IS 'display name'"#.to_string(),
+        ]
+    );
+
+    let drop = AnyDialect::parse("mysql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::DropColumn {
+            table: "inventory.flavor".to_string(),
+            column: "old_name".to_string(),
+        })
+        .expect("mysql should render schema-qualified column drops");
+    assert_eq!(
+        drop,
+        vec!["ALTER TABLE `inventory`.`flavor` DROP COLUMN `old_name`".to_string()]
+    );
+
+    let mssql_not_null = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::AlterColumn {
+            table: "flavor".to_string(),
+            column: ColumnDef::new("rating", FieldKind::Integer),
+        })
+        .expect("mssql should render non-null alter column");
+    assert_eq!(
+        mssql_not_null,
+        vec!["ALTER TABLE [flavor] ALTER COLUMN [rating] INTEGER NOT NULL".to_string()]
+    );
+}
+
+#[test]
+fn renders_schema_qualified_column_comments_for_oracle_and_mssql_clear() {
+    let oracle_set = AnyDialect::parse("oracle")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetColumnComment {
+            table: "inventory.flavor".to_string(),
+            column: ColumnDef::new("name", FieldKind::String).with_comment("localized label"),
+        })
+        .expect("oracle should render column comments");
+    let oracle_clear = AnyDialect::parse("oracle")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetColumnComment {
+            table: "inventory.flavor".to_string(),
+            column: ColumnDef::new("name", FieldKind::String),
+        })
+        .expect("oracle should render clearing column comments");
+    let mssql_clear = AnyDialect::parse("mssql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetColumnComment {
+            table: "inventory.flavor".to_string(),
+            column: ColumnDef::new("name", FieldKind::String),
+        })
+        .expect("mssql should render clearing schema-qualified column comments");
+
+    assert_eq!(
+        oracle_set,
+        vec![r#"COMMENT ON COLUMN "inventory"."flavor"."name" IS 'localized label'"#.to_string()]
+    );
+    assert_eq!(
+        oracle_clear,
+        vec![r#"COMMENT ON COLUMN "inventory"."flavor"."name" IS ''"#.to_string()]
+    );
+    assert!(mssql_clear[0].contains("DECLARE @schema sysname = N'inventory'"));
+    assert!(mssql_clear[0].contains("t.name = N'flavor'"));
+    assert!(mssql_clear[0].contains("c.name = N'name'"));
+    assert!(mssql_clear[0].contains("sys.sp_dropextendedproperty"));
+}
+
+#[test]
+fn renders_computed_create_table_columns_and_identity_no_max_conflict() {
+    let table = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer).primary_key(true),
+            ColumnDef::new("score", FieldKind::Integer)
+                .with_computed(ComputedDef::new("base_score + bonus").persisted(true)),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+
+    let postgres = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(table.clone()))
+        .expect("postgres should render computed columns");
+    let mysql = AnyDialect::parse("mysql")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::CreateTable(table))
+        .expect("mysql should render computed columns");
+
+    assert!(postgres[0]
+        .contains(r#""score" INTEGER NOT NULL GENERATED ALWAYS AS (base_score + bonus) STORED"#));
+    assert!(mysql[0]
+        .contains("`score` INTEGER NOT NULL GENERATED ALWAYS AS (base_score + bonus) STORED"));
+
+    let conflict = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer)
+            .primary_key(true)
+            .with_identity(IdentityDef::new().max_value(100).no_max_value(true))],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let error = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(conflict))
+        .expect_err("identity no_max_value and max_value should be mutually exclusive");
+    assert!(error.to_string().contains("no_max_value"));
+}
+
+#[test]
+fn renders_noop_and_single_sided_postgres_table_storage_changes() {
+    let inherits_noop = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresInherits {
+            table: "flavor".to_string(),
+            add: Vec::new(),
+            drop: Vec::new(),
+        })
+        .expect("empty inheritance changes should be a no-op");
+    let storage_noop = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresWith {
+            table: "flavor".to_string(),
+            set: Vec::new(),
+            reset: Vec::new(),
+        })
+        .expect("empty storage changes should be a no-op");
+    let set_only = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresWith {
+            table: "flavor".to_string(),
+            set: vec![("fillfactor".to_string(), "80".to_string())],
+            reset: Vec::new(),
+        })
+        .expect("postgres should render SET storage parameters");
+    let reset_only = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresWith {
+            table: "flavor".to_string(),
+            set: Vec::new(),
+            reset: vec!["toast.autovacuum_enabled".to_string()],
+        })
+        .expect("postgres should render RESET storage parameters");
+
+    assert!(inherits_noop.is_empty());
+    assert!(storage_noop.is_empty());
+    assert_eq!(
+        set_only,
+        vec![r#"ALTER TABLE "flavor" SET (fillfactor = 80)"#.to_string()]
+    );
+    assert_eq!(
+        reset_only,
+        vec![r#"ALTER TABLE "flavor" RESET (toast.autovacuum_enabled)"#.to_string()]
+    );
+}
+
+#[test]
+fn rejects_invalid_postgres_storage_parameters() {
+    let invalid_set_name = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresWith {
+            table: "flavor".to_string(),
+            set: vec![("9fillfactor".to_string(), "70".to_string())],
+            reset: Vec::new(),
+        })
+        .expect_err("invalid postgres storage names should fail");
+    let invalid_set_value = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresWith {
+            table: "flavor".to_string(),
+            set: vec![("fillfactor".to_string(), "70;DROP".to_string())],
+            reset: Vec::new(),
+        })
+        .expect_err("invalid postgres storage values should fail");
+    let invalid_reset_name = PostgresDialect
+        .compile_schema_operation(&SchemaOperation::SetTablePostgresWith {
+            table: "flavor".to_string(),
+            set: Vec::new(),
+            reset: vec!["toast.bad-name".to_string()],
+        })
+        .expect_err("invalid postgres reset names should fail");
+
+    assert!(invalid_set_name
+        .to_string()
+        .contains("invalid PostgreSQL table storage parameter name"));
+    assert!(invalid_set_value
+        .to_string()
+        .contains("invalid PostgreSQL table storage parameter value"));
+    assert!(invalid_reset_name
+        .to_string()
+        .contains("invalid PostgreSQL table storage parameter name"));
+}
+
+#[test]
+fn rejects_invalid_mysql_table_option_tokens_and_partition_clauses() {
+    fn base_table() -> TableDef {
+        TableDef::from_parts(
+            "flavor",
+            "Flavor",
+            "id",
+            vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+    }
+
+    let mysql = AnyDialect::parse("mysql").unwrap();
+    let cases = vec![
+        ("mysql engine", base_table().with_mysql_engine("Inno-DB")),
+        ("mysql charset", base_table().with_mysql_charset("utf8-mb4")),
+        (
+            "mysql collation",
+            base_table().with_mysql_collation("utf8mb4;unicode_ci"),
+        ),
+        (
+            "mysql row format",
+            base_table().with_mysql_row_format("DYNAMIC ROW"),
+        ),
+        (
+            "mysql insert method",
+            base_table().with_mysql_insert_method("LAST;"),
+        ),
+        (
+            "mysql partition by",
+            base_table().with_mysql_partition_by("HASH (id); DROP TABLE flavor"),
+        ),
+        (
+            "mysql subpartition by",
+            base_table().with_mysql_subpartition_by("KEY (id) /* comment */"),
+        ),
+    ];
+
+    for (feature, table) in cases {
+        let error = mysql
+            .compile_schema_operation(&SchemaOperation::CreateTable(table))
+            .expect_err("invalid mysql table option should fail");
+        assert!(
+            error.to_string().contains(feature),
+            "expected {feature} in {error}"
+        );
+    }
+}
+
+#[test]
+fn renders_oracle_unique_compress_enabled_and_sqlite_tablespace_noop() {
+    let oracle = AnyDialect::parse("oracle")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::AddConstraint {
+            table: "flavor".to_string(),
+            constraint: ConstraintDef::Unique(
+                UniqueConstraintDef::new("flavor_code_unique", vec!["code".to_string()])
+                    .with_oracle_compress(),
+            ),
+        })
+        .expect("oracle should render enabled unique index compression");
+    let sqlite = AnyDialect::parse("sqlite")
+        .unwrap()
+        .compile_schema_operation(&SchemaOperation::SetTableTablespace {
+            table: "flavor".to_string(),
+            tablespace: Some("ignored".to_string()),
+        })
+        .expect("sqlite table tablespace changes should be ignored");
+
+    assert_eq!(
+        oracle,
+        vec![
+            r#"ALTER TABLE "flavor" ADD CONSTRAINT "flavor_code_unique" UNIQUE ("code") USING INDEX COMPRESS"#.to_string()
+        ]
+    );
+    assert!(sqlite.is_empty());
+}
+
+#[test]
+fn concrete_dialect_create_table_paths_cover_backend_specific_regions() {
+    let sqlite_table = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![
+            ColumnDef::new("id", FieldKind::Integer)
+                .primary_key(true)
+                .autoincrement(true)
+                .with_sqlite_on_conflict_primary_key("REPLACE"),
+            ColumnDef::new("name", FieldKind::String)
+                .with_sqlite_on_conflict_not_null("FAIL")
+                .with_collation("NOCASE"),
+            ColumnDef::new("rating", FieldKind::Decimal).numeric(6, 2),
+        ],
+        vec![IndexDef::new("flavor_name_idx", vec!["name".to_string()])],
+        vec![
+            UniqueConstraintDef::new("flavor_name_unique", vec!["name".to_string()])
+                .with_sqlite_on_conflict("IGNORE"),
+        ],
+        Vec::new(),
+    )
+    .with_check_constraints(vec![
+        CheckConstraintDef::new("rating >= 1.25").named("flavor_rating_min")
+    ]);
+    let sqlite = SqliteDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(sqlite_table))
+        .expect("concrete sqlite should compile table metadata");
+    assert!(sqlite[0].contains("PRIMARY KEY ON CONFLICT REPLACE"));
+    assert!(sqlite[0].contains("NOT NULL ON CONFLICT FAIL"));
+    assert!(sqlite[0].contains("UNIQUE (\"name\") ON CONFLICT IGNORE"));
+    assert!(sqlite[0].contains("ormdantic_decimal_cmp(rating, '1.25') >= 0"));
+
+    let mysql_table = TableDef::from_parts(
+        "flavor",
+        "Flavor",
+        "id",
+        vec![ColumnDef::new("id", FieldKind::Integer)
+            .primary_key(true)
+            .autoincrement(true)],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .with_mysql_engine("InnoDB")
+    .with_mysql_partition_by("HASH (id)")
+    .with_mysql_partitions(4)
+    .with_mysql_subpartition_by("KEY (id)")
+    .with_mysql_subpartitions(2)
+    .with_mysql_auto_increment(42);
+    let mysql = MySqlDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(mysql_table.clone()))
+        .expect("concrete mysql should compile partition options");
+    let mariadb = MariaDbDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(mysql_table))
+        .expect("concrete mariadb should compile partition options");
+    for sql in [mysql[0].as_str(), mariadb[0].as_str()] {
+        assert!(sql.contains("PARTITION BY HASH (id)"));
+        assert!(sql.contains("SUBPARTITION BY KEY (id)"));
+        assert!(sql.contains("AUTO_INCREMENT = 42"));
+    }
+
+    let mssql = MsSqlDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(
+            TableDef::from_parts(
+                "flavor",
+                "Flavor",
+                "id",
+                vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .with_schema("inventory"),
+        ))
+        .expect("concrete mssql should compile object guard");
+    assert!(mssql[0].contains("IF OBJECT_ID(N'inventory.flavor', N'U') IS NULL"));
+
+    let oracle = OracleDialect
+        .compile_schema_operation(&SchemaOperation::CreateTable(TableDef::from_parts(
+            "flavor",
+            "Flavor",
+            "id",
+            vec![ColumnDef::new("id", FieldKind::Integer).primary_key(true)],
+            Vec::new(),
+            vec![
+                UniqueConstraintDef::new("flavor_id_unique", vec!["id".to_string()])
+                    .with_oracle_compress_prefix(1)
+                    .with_oracle_tablespace("USERS"),
+            ],
+            Vec::new(),
+        )))
+        .expect("concrete oracle should compile unique index metadata");
+    assert!(oracle[0].contains("USING INDEX COMPRESS 1 TABLESPACE \"USERS\""));
+
+    let method_error = MySqlDialect
+        .compile_schema_operation(&SchemaOperation::CreateIndex {
+            table: "flavor".to_string(),
+            index: IndexDef::new("flavor_name_idx", vec!["name".to_string()]).method("btree"),
+        })
+        .expect_err("concrete mysql cannot render index methods");
+    assert!(method_error.to_string().contains("index methods"));
 }

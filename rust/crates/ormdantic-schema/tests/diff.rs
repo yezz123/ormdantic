@@ -1,8 +1,42 @@
 use ormdantic_schema::{
     CheckConstraintDef, ColumnDef, ConstraintDef, ExclusionConstraintDef, ExclusionElementDef,
-    FieldKind, IndexDef, NamespaceDef, SchemaDef, SchemaDiffer, SchemaOperation, SchemaSnapshot,
-    TableDef, UniqueConstraintDef,
+    FieldKind, IndexDef, NamespaceDef, SchemaDef, SchemaDiff, SchemaDiffer, SchemaOperation,
+    SchemaSnapshot, TableDef, UniqueConstraintDef,
 };
+
+#[test]
+fn schema_diff_reports_empty_operation_sets() {
+    let empty = SchemaDiff::default();
+    let explicit = SchemaDiff::new(Vec::new());
+
+    assert!(empty.is_empty());
+    assert!(explicit.is_empty());
+    assert_eq!(explicit.operations(), &[]);
+}
+
+#[test]
+fn schema_differ_rejects_duplicate_snapshot_names() {
+    let duplicate_table = TableDef::new("flavor", "id", vec!["id".to_string()]);
+    let table_error = SchemaDiffer::diff(
+        &SchemaSnapshot::new(SchemaDef::from_tables(vec![
+            duplicate_table.clone(),
+            duplicate_table,
+        ])),
+        &SchemaSnapshot::new(SchemaDef::new()),
+    )
+    .expect_err("duplicate table names should be rejected");
+    assert!(format!("{table_error:?}").contains("duplicate table 'flavor'"));
+
+    let namespace_error = SchemaDiffer::diff(
+        &SchemaSnapshot::new(SchemaDef::new().with_namespaces(vec![
+            NamespaceDef::new("inventory"),
+            NamespaceDef::new("inventory"),
+        ])),
+        &SchemaSnapshot::new(SchemaDef::new()),
+    )
+    .expect_err("duplicate namespace names should be rejected");
+    assert!(format!("{namespace_error:?}").contains("duplicate namespace 'inventory'"));
+}
 
 #[test]
 fn schema_differ_orders_namespace_changes_around_tables() {
