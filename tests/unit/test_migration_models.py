@@ -12,15 +12,30 @@ from ormdantic._migrations.models import (
     ExclusionConstraintSnapshot,
     ForeignKeyConstraintSnapshot,
     IndexSnapshot,
+    MigrationChange,
     MigrationOperation,
     MigrationPlan,
     NamespaceSnapshot,
+    RelationshipSnapshot,
+    SchemaDiff,
     SchemaSnapshot,
     SequenceSnapshot,
     TableCheckSnapshot,
     TableSnapshot,
     UniqueConstraintSnapshot,
     ViewSnapshot,
+    exclusion_elements,
+    mysql_index_lengths,
+    oracle_index_compress,
+    oracle_index_compress_runtime,
+    oracle_table_compress,
+    oracle_table_compress_runtime,
+    postgres_index_ops,
+    postgres_storage_parameters,
+    runtime_column_options,
+    runtime_column_tail,
+    runtime_sqlite_column_conflict,
+    string_list,
 )
 
 
@@ -355,6 +370,87 @@ def test_schema_snapshot_roundtrips_json_toml_and_runtime(tmp_path) -> None:
     assert SchemaSnapshot.read(json_path).views == snapshot.views
 
 
+def test_autogenerate_scope_filters_owned_schema_objects() -> None:
+    snapshot = SchemaSnapshot(
+        namespaces=[
+            NamespaceSnapshot("inventory"),
+            NamespaceSnapshot("enum_schema"),
+            NamespaceSnapshot("seq_schema"),
+            NamespaceSnapshot("view_schema"),
+            NamespaceSnapshot("unused"),
+        ],
+        enum_types=[
+            EnumTypeSnapshot("flavor_kind", ["mocha"], schema="enum_schema"),
+            EnumTypeSnapshot("unused_kind", ["old"], schema="unused"),
+        ],
+        sequences=[
+            SequenceSnapshot("flavor_seq", schema="seq_schema"),
+            SequenceSnapshot("unused_seq", schema="unused"),
+        ],
+        views=[
+            ViewSnapshot("flavor_view", "SELECT 1", schema="view_schema"),
+            ViewSnapshot("legacy_view", "SELECT 1", schema="unused"),
+        ],
+        tables=[
+            TableSnapshot(
+                model_key="Flavor",
+                name="flavor",
+                primary_key="id",
+                columns=[
+                    ColumnSnapshot("id", "int", nullable=False, primary_key=True),
+                    ColumnSnapshot(
+                        "kind",
+                        "enum:enum_schema.flavor_kind",
+                        nullable=True,
+                        primary_key=False,
+                        server_default=(
+                            'nextval(\'"seq_schema"."flavor_seq"\'::regclass)'
+                        ),
+                    ),
+                ],
+            ),
+            TableSnapshot("Legacy", "legacy", "id"),
+        ],
+    )
+
+    filtered = migrations._filter_snapshot_for_autogenerate_scope(
+        snapshot,
+        include_tables=["flavor*"],
+        exclude_tables=None,
+        schema="inventory",
+    )
+
+    assert [table.name for table in filtered.tables] == ["flavor"]
+    assert [enum_type.name for enum_type in filtered.enum_types] == ["flavor_kind"]
+    assert [sequence.name for sequence in filtered.sequences] == ["flavor_seq"]
+    assert [view.name for view in filtered.views] == ["flavor_view"]
+    assert {namespace.name for namespace in filtered.namespaces} == {
+        "inventory",
+        "enum_schema",
+        "seq_schema",
+        "view_schema",
+    }
+
+
+def test_migration_snapshot_key_helpers_cover_quoted_edges() -> None:
+    assert migrations._enum_column_kind_key("enum:flavor_kind") == (
+        None,
+        "flavor_kind",
+    )
+    assert migrations._enum_column_kind_key("enum:inventory.flavor_kind") == (
+        "inventory",
+        "flavor_kind",
+    )
+    assert migrations._sequence_key_from_default("CURRENT_TIMESTAMP") is None
+    assert migrations._sequence_key_from_default("nextval('flavor_seq'::regclass)") == (
+        None,
+        "flavor_seq",
+    )
+    assert migrations._sequence_key_from_default(
+        'nextval(\'"seq.schema"."flavor""seq"\'::regclass)'
+    ) == ("seq.schema", 'flavor"seq')
+
+
 def test_column_snapshot_coerces_runtime_values() -> None:
     column = ColumnSnapshot.from_runtime(
         (
@@ -479,6 +575,118 @@ def test_column_snapshot_coerces_runtime_values() -> None:
     assert legacy_timing.comment is None
     assert legacy_timing.deferrable is None
     assert legacy_timing.initially_deferred is True
+
+
+def test_runtime_normalization_helpers_cover_scalar_and_legacy_edges() -> None:
+    assert string_list(None) == []
+    assert string_list("single") == ["single"]
+    assert postgres_storage_parameters({"b": 2, "a": 1}) == [
+        ("a", "1"),
+        ("b", "2"),
+    ]
+    assert mysql_index_lengths({"name": 12}) == {"name": 12}
+    assert mysql_index_lengths([("code", "8")]) == {"code": 8}
+    assert postgres_index_ops({"name": "text_ops"}) == {"name": "text_ops"}
+    assert postgres_index_ops([("code", "varchar_ops")]) == {"code": "varchar_ops"}
+
+    with pytest.raises(ValueError, match="Oracle index compression"):
+        oracle_index_compress(object())
+
+    assert (
+        runtime_column_options(
+            ("id", "int", False, True, None, None, None, False, [], "legacy")
+        )
+        == {}
+    )
+    assert runtime_column_tail("legacy") == {}
+    assert runtime_sqlite_column_conflict("legacy") == {}
+    assert runtime_column_tail(((True, False), "Name", ("REPLACE", "FAIL"))) == {
+        "deferrable": True,
+        "initially_deferred": False,
+        "comment": "Name",
+        "sqlite_on_conflict_primary_key": "REPLACE",
+        "sqlite_on_conflict_not_null": "FAIL",
+        "sqlite_on_conflict_unique": None,
+    }
+    assert exclusion_elements("legacy") == []
+    assert exclusion_elements([("period", "&&")]) == [("period", "&&")]
+
+    legacy = UniqueConstraintSnapshot.from_runtime(
+        ("uq", ["id"], None, False, False, None, None, "Legacy comment")
+    )
+    assert legacy.comment == "Legacy comment"
+
+
+def test_column_snapshot_roundtrips_optional_dict_fields() -> None:
+    column = ColumnSnapshot(
+        "id",
+        "int",
+        nullable=False,
+        primary_key=True,
+        comment="Synthetic identifier",
+        max_length=32,
+        unique=True,
+        checks=[("multiple_of", "=", "5")],
+        server_default="nextval('flavor_id_seq')",
+        computed="id + 1",
+        computed_persisted=True,
+        autoincrement=True,
+        identity=True,
+        identity_always=True,
+        identity_start=10,
+        identity_increment=5,
+        identity_min_value=1,
+        identity_max_value=100,
+        identity_no_min_value=True,
+        identity_no_max_value=True,
+        identity_cycle=True,
+        identity_cache=20,
+        identity_order=True,
+        identity_on_null=True,
+        collation="NOCASE",
+        numeric_precision=12,
+        numeric_scale=2,
+        foreign_key_name="flavor_supplier_fk",
+        on_delete="cascade",
+        on_update="restrict",
+        deferrable=False,
+        initially_deferred=True,
+        sqlite_on_conflict_primary_key="REPLACE",
+        sqlite_on_conflict_not_null="FAIL",
+        sqlite_on_conflict_unique="IGNORE",
+    )
+
+    payload = column.to_dict()
+
+    assert payload["comment"] == "Synthetic identifier"
+    assert payload["server_default"] == "nextval('flavor_id_seq')"
+    assert payload["computed"] == "id + 1"
+    assert payload["computed_persisted"] is True
+    assert payload["autoincrement"] is True
+    assert payload["identity"] is True
+    assert payload["identity_always"] is True
+    assert payload["identity_start"] == 10
+    assert payload["identity_increment"] == 5
+    assert payload["identity_min_value"] == 1
+    assert payload["identity_max_value"] == 100
+    assert payload["identity_no_min_value"] is True
+    assert payload["identity_no_max_value"] is True
+    assert payload["identity_cycle"] is True
+    assert payload["identity_cache"] == 20
+    assert payload["identity_order"] is True
+    assert payload["identity_on_null"] is True
+    assert payload["collation"] == "NOCASE"
+    assert payload["numeric_precision"] == 12
+    assert payload["numeric_scale"] == 2
+    assert payload["foreign_key_name"] == "flavor_supplier_fk"
+    assert payload["on_delete"] == "cascade"
+    assert payload["on_update"] == "restrict"
+    assert payload["deferrable"] is False
+    assert payload["initially_deferred"] is True
+    assert payload["sqlite_on_conflict_primary_key"] == "REPLACE"
+    assert payload["sqlite_on_conflict_not_null"] == "FAIL"
+    assert payload["sqlite_on_conflict_unique"] == "IGNORE"
+    assert ColumnSnapshot.from_dict(payload) == column
 
 
 def test_index_snapshot_roundtrips_advanced_metadata() -> None:
@@ -795,6 +1003,168 @@ def test_unique_constraint_snapshot_roundtrips_runtime_and_dict() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("runtime_constraint", "expected"),
+    [
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                "constraintspace",
+                False,
+                "Legacy unique comment",
+                ["rating"],
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                mssql_filegroup="constraintspace",
+                mssql_clustered=False,
+                comment="Legacy unique comment",
+                postgres_include=["rating"],
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                "constraintspace",
+                False,
+                "oraclespace",
+                "COMPRESS",
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                mssql_filegroup="constraintspace",
+                mssql_clustered=False,
+                oracle_tablespace="oraclespace",
+                oracle_compress=True,
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                "constraintspace",
+                True,
+                "oraclespace",
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                mssql_filegroup="constraintspace",
+                mssql_clustered=True,
+                oracle_tablespace="oraclespace",
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                False,
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                mssql_clustered=False,
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                "Legacy unique comment",
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                comment="Legacy unique comment",
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                "constraintspace",
+                True,
+                "Legacy unique comment",
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                mssql_filegroup="constraintspace",
+                mssql_clustered=True,
+                oracle_tablespace="Legacy unique comment",
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                "constraintspace",
+                True,
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                mssql_filegroup="constraintspace",
+                mssql_clustered=True,
+            ),
+        ),
+        (
+            (
+                "flavor_name_unique",
+                ["name"],
+                None,
+                False,
+                False,
+                None,
+                None,
+                "Legacy unique comment",
+            ),
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                comment="Legacy unique comment",
+            ),
+        ),
+    ],
+)
+def test_unique_constraint_snapshot_decodes_legacy_runtime_shapes(
+    runtime_constraint: tuple[object, ...], expected: UniqueConstraintSnapshot
+) -> None:
+    assert UniqueConstraintSnapshot.from_runtime(runtime_constraint) == expected
+
+
 def test_foreign_key_constraint_snapshot_roundtrips_runtime_and_dict() -> None:
     constraint = ForeignKeyConstraintSnapshot(
         "flavor_supplier_pair_fk",
@@ -958,11 +1328,255 @@ def test_view_snapshot_roundtrips_runtime_and_dict() -> None:
     ) == ViewSnapshot("active_flavors", "SELECT id FROM flavor", schema="public")
 
 
+def test_relationship_snapshot_roundtrips_runtime_and_dict() -> None:
+    relationship = RelationshipSnapshot(
+        "supplier",
+        "supplier",
+        "id",
+        back_reference="flavors",
+    )
+
+    assert RelationshipSnapshot.from_runtime(relationship.to_runtime()) == relationship
+    assert RelationshipSnapshot.from_dict(relationship.to_dict()) == relationship
+    assert relationship.to_dict() == {
+        "field": "supplier",
+        "foreign_table": "supplier",
+        "foreign_column": "id",
+        "back_reference": "flavors",
+    }
+
+
+@pytest.mark.parametrize(
+    ("runtime_table", "expected"),
+    [
+        (
+            (
+                "Flavor",
+                "flavor",
+                "id",
+                [],
+                [],
+                [],
+                [("supplier", "supplier", "id", "flavor")],
+            ),
+            TableSnapshot(
+                "Flavor",
+                "flavor",
+                "id",
+                relationships=[
+                    RelationshipSnapshot("supplier", "supplier", "id", "flavor")
+                ],
+            ),
+        ),
+        (
+            (
+                "Flavor",
+                "flavor",
+                "id",
+                [],
+                [],
+                [],
+                [("flavor_name_check", "length(name) > 0")],
+                [("supplier", "supplier", "id", None)],
+            ),
+            TableSnapshot(
+                "Flavor",
+                "flavor",
+                "id",
+                check_constraints=[
+                    TableCheckSnapshot("flavor_name_check", "length(name) > 0")
+                ],
+                relationships=[RelationshipSnapshot("supplier", "supplier", "id")],
+            ),
+        ),
+        (
+            (
+                "Flavor",
+                "flavor",
+                "id",
+                [],
+                [],
+                [["name"]],
+                [],
+                [("flavor_name_check", "length(name) > 0", False, True)],
+                [("supplier", "supplier", "id", None)],
+            ),
+            TableSnapshot(
+                "Flavor",
+                "flavor",
+                "id",
+                unique_constraints=[["name"]],
+                check_constraints=[
+                    TableCheckSnapshot(
+                        "flavor_name_check",
+                        "length(name) > 0",
+                        validated=False,
+                        no_inherit=True,
+                    )
+                ],
+                relationships=[RelationshipSnapshot("supplier", "supplier", "id")],
+            ),
+        ),
+        (
+            (
+                "Flavor",
+                "flavor",
+                "id",
+                [],
+                [],
+                [],
+                [("flavor_name_unique", ["name"], None)],
+                [("flavor_name_check", "length(name) > 0")],
+                [("flavor_supplier_fk", ["supplier_id"], "supplier", ["id"])],
+                [("supplier", "supplier", "id", None)],
+            ),
+            TableSnapshot(
+                "Flavor",
+                "flavor",
+                "id",
+                named_unique_constraints=[
+                    UniqueConstraintSnapshot("flavor_name_unique", ["name"])
+                ],
+                check_constraints=[
+                    TableCheckSnapshot("flavor_name_check", "length(name) > 0")
+                ],
+                foreign_key_constraints=[
+                    ForeignKeyConstraintSnapshot(
+                        "flavor_supplier_fk", ["supplier_id"], "supplier", ["id"]
+                    )
+                ],
+                relationships=[RelationshipSnapshot("supplier", "supplier", "id")],
+            ),
+        ),
+        (
+            (
+                "Flavor",
+                "flavor",
+                "id",
+                [],
+                [],
+                [],
+                [("flavor_name_unique", ["name"], None)],
+                [("flavor_name_check", "length(name) > 0")],
+                [("flavor_supplier_fk", ["supplier_id"], "supplier", ["id"])],
+                [("flavor_name_excl", [("name", "=")], [], "gist")],
+                [("supplier", "supplier", "id", None)],
+            ),
+            TableSnapshot(
+                "Flavor",
+                "flavor",
+                "id",
+                named_unique_constraints=[
+                    UniqueConstraintSnapshot("flavor_name_unique", ["name"])
+                ],
+                check_constraints=[
+                    TableCheckSnapshot("flavor_name_check", "length(name) > 0")
+                ],
+                foreign_key_constraints=[
+                    ForeignKeyConstraintSnapshot(
+                        "flavor_supplier_fk", ["supplier_id"], "supplier", ["id"]
+                    )
+                ],
+                exclusion_constraints=[
+                    ExclusionConstraintSnapshot(
+                        "flavor_name_excl", columns=[("name", "=")]
+                    )
+                ],
+                relationships=[RelationshipSnapshot("supplier", "supplier", "id")],
+            ),
+        ),
+    ],
+)
+def test_table_snapshot_decodes_legacy_runtime_shapes(
+    runtime_table: tuple[object, ...], expected: TableSnapshot
+) -> None:
+    assert TableSnapshot.from_runtime(runtime_table) == expected
+
+
+def test_table_snapshot_decodes_legacy_scalar_comment_runtime_shape() -> None:
+    table = TableSnapshot.from_runtime(
+        (
+            "Flavor",
+            "flavor",
+            "id",
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            "Legacy table comment",
+            [("supplier", "supplier", "id", None)],
+        )
+    )
+
+    assert table.comment == "Legacy table comment"
+    assert table.relationships == [RelationshipSnapshot("supplier", "supplier", "id")]
+    assert table.schema is None
+    assert table.postgres_inherits == []
+    assert table.mysql_union == []
+    assert table.oracle_compress is None
+
+
 def test_migration_plan_destructive_detection_lives_with_model() -> None:
-    plan = MigrationPlan([MigrationOperation("DROP TABLE flavor")])
+    destructive = MigrationChange(
+        "drop",
+        "table",
+        "flavor",
+        "flavor",
+        "Removed table flavor",
+        destructive=True,
+    )
+    unsafe = MigrationChange(
+        "alter",
+        "column",
+        "flavor",
+        "name",
+        "Changed column flavor.name: kind",
+        unsafe=True,
+    )
+    diff = SchemaDiff(changes=[destructive, unsafe])
+    plan = MigrationPlan(
+        [MigrationOperation("DROP TABLE flavor")],
+        rollback_operations=[MigrationOperation("CREATE TABLE flavor (id TEXT)")],
+        diff=diff,
+    )
 
     assert plan.has_destructive_operations
+    assert plan.has_unsafe_operations
+    assert plan.rollback_available
     assert plan.dry_run() == ["DROP TABLE flavor"]
+    assert plan.rollback_sql() == ["CREATE TABLE flavor (id TEXT)"]
+    assert not diff.is_empty()
+    assert diff.destructive_changes == [destructive]
+    assert diff.unsafe_changes == [unsafe]
+    assert diff.has_destructive_operations
+    assert diff.has_unsafe_operations
+    assert diff.summary() == [
+        "Removed table flavor",
+        "Changed column flavor.name: kind",
+    ]
+
+
+def test_oracle_compression_helpers_normalize_runtime_values() -> None:
+    assert oracle_index_compress(None) is None
+    assert oracle_index_compress(False) is None
+    assert oracle_index_compress("disabled") is None
+    assert oracle_index_compress(True) is True
+    assert oracle_index_compress("COMPRESS") is True
+    assert oracle_index_compress("2") == 2
+    assert oracle_index_compress_runtime(True) == "true"
+    assert oracle_index_compress_runtime(3) == "3"
+    assert oracle_table_compress_runtime(True) == "true"
+    assert oracle_table_compress(4) == 4
+
+    with pytest.raises(ValueError, match="Oracle index compression"):
+        oracle_index_compress("bad")
+    with pytest.raises(ValueError, match="Oracle index compression"):
+        oracle_index_compress(0)
+    with pytest.raises(ValueError, match="Oracle table compression"):
+        oracle_table_compress("bad")
 
 
 def test_document_toml_helpers_reject_null_values() -> None:

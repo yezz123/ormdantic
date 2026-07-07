@@ -338,6 +338,67 @@ def test_generated_postgres_check_value_normalizes_reflected_casts() -> None:
     )
 
 
+def test_generated_check_helpers_cover_enum_fallbacks_and_normalizers() -> None:
+    assert (
+        reflection._generated_column_check_value(
+            "mysql",
+            "flavor",
+            "enum",
+            "in",
+            "`flavor` IN ('mocha', 'latte')",
+        )
+        == "'mocha', 'latte'"
+    )
+    assert (
+        reflection._generated_column_check_value(
+            "postgresql",
+            "flavor",
+            "enum",
+            "in",
+            "flavor = ANY (VALUES ('mocha'))",
+        )
+        is None
+    )
+    assert reflection._sqlite_decimal_check_literal("'don''t'") == "don't"
+    assert reflection._sqlite_decimal_check_literal("42.5") == "42.5"
+    assert (
+        reflection._normalize_reflected_foreign_key_action("postgresql", None) is None
+    )
+    assert (
+        reflection._normalize_reflected_foreign_key_action("mysql", "RESTRICT") is None
+    )
+    assert (
+        reflection._normalize_reflected_foreign_key_action(
+            "postgresql",
+            "SET DEFAULT",
+        )
+        == "set_default"
+    )
+    assert (
+        reflection._normalize_reflected_foreign_key_action("postgresql", "weird")
+        is None
+    )
+    assert reflection._normalize_reflected_foreign_key_match("FULL") == "full"
+    assert reflection._normalize_reflected_foreign_key_match("simple") is None
+    assert reflection._normalize_reflected_deferrable(None) is None
+    assert reflection._normalize_reflected_deferrable("DEFERRABLE") is True
+    assert reflection._normalize_reflected_deferrable("NOT DEFERRABLE") is False
+    assert reflection._normalize_reflected_deferrable("unknown") is None
+    assert reflection._normalize_reflected_initially_deferred(None) is False
+    assert reflection._normalize_reflected_initially_deferred("initially deferred")
+    assert reflection._normalize_reflected_validated(None) is True
+    assert reflection._normalize_reflected_validated("validated")
+    assert not reflection._normalize_reflected_validated("not validated")
+    assert reflection._postgres_storage_parameters_text(
+        "fillfactor=70, autovacuum_enabled=true, ignored, blank="
+    ) == [("fillfactor", "70"), ("autovacuum_enabled", "true")]
+    assert reflection._comma_separated_identifiers("id, name, , code") == [
+        "id",
+        "name",
+        "code",
+    ]
+
+
 def test_reflect_sqlite_snapshot_preserves_unique_constraints_and_index_columns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2231,6 +2292,15 @@ def test_reflect_server_namespaces_skips_unsupported_dialects(
         )
         == []
     )
+    assert (
+        reflection._reflect_server_namespaces(
+            object,
+            "sqlite:///:memory:",
+            "sqlite",
+            "inventory",
+        )
+        == []
+    )
 
 
 def test_reflect_server_sequences_preserves_sequence_options(
@@ -2595,6 +2665,16 @@ def test_reflect_server_sequences_returns_no_sequences_for_empty_scoped_tables(
         )
         == []
     )
+    assert (
+        reflection._reflect_server_sequences(
+            object,
+            "sqlite:///:memory:",
+            "sqlite",
+            "inventory",
+            None,
+        )
+        == []
+    )
 
 
 def test_reflect_server_sequences_filters_oracle_system_sequences(
@@ -2713,6 +2793,15 @@ def test_reflect_server_views_preserves_view_definitions(
             "sqlite:///:memory:",
             "sqlite",
             None,
+        )
+        == []
+    )
+    assert (
+        reflection._reflect_server_views(
+            object,
+            "sqlite:///:memory:",
+            "sqlite",
+            "inventory",
         )
         == []
     )
@@ -3332,6 +3421,8 @@ def test_oracle_identity_options_skip_disabled_flags() -> None:
         "identity_min_value": 1,
         "identity_max_value": 1000,
     }
+    assert reflection._reflected_oracle_identity_sequence_options(None) == {}
+    assert reflection._reflected_column_identity_options("sqlite", []) == {}
 
 
 def test_oracle_identity_options_preserve_no_bound_flags() -> None:
@@ -5173,6 +5264,184 @@ def test_reflected_max_length_normalizes_values() -> None:
     assert reflection._reflected_max_length("4000", "clob") is None
 
 
+def test_default_collation_and_tablespace_reflection_helpers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_sql: list[str] = []
+
+    def fake_query_rows_url(_rust: object, _url: str, sql: str) -> list[list[str]]:
+        captured_sql.append(sql)
+        if "DATABASEPROPERTYEX" in sql:
+            return [["SQL_Latin1_General_CP1_CI_AS"]]
+        if "all_users" in sql:
+            return [["APPDATA"]]
+        if "user_users" in sql:
+            return [["USERS"]]
+        return []
+
+    monkeypatch.setattr(reflection, "_query_rows_url", fake_query_rows_url)
+
+    assert (
+        reflection._reflect_server_mssql_database_collation(
+            object(), "mssql://localhost/db", "mssql"
+        )
+        == "SQL_Latin1_General_CP1_CI_AS"
+    )
+    assert (
+        reflection._reflect_server_oracle_default_tablespace(
+            object(), "oracle://localhost/db", "oracle", "app"
+        )
+        == "APPDATA"
+    )
+    assert (
+        reflection._reflect_server_oracle_default_tablespace(
+            object(), "oracle://localhost/db", "oracle", None
+        )
+        == "USERS"
+    )
+    assert "WHERE username = 'APP'" in captured_sql[1]
+    assert (
+        reflection._reflect_server_mssql_database_collation(
+            object(), "postgresql://localhost/db", "postgresql"
+        )
+        is None
+    )
+    assert (
+        reflection._reflect_server_oracle_default_tablespace(
+            object(), "postgresql://localhost/db", "postgresql", None
+        )
+        is None
+    )
+
+
+def test_reflection_parser_helpers_cover_create_options_and_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        reflection._mysql_create_option_string(
+            "DATA DIRECTORY='/var/lib/mysql/app''s data' INDEX DIRECTORY=/idx",
+            "DATA DIRECTORY",
+        )
+        == "/var/lib/mysql/app's data"
+    )
+    assert reflection._mysql_create_option_string(None, "DATA DIRECTORY") is None
+    assert reflection._mysql_create_option_union(
+        "UNION=(`archive`.`flavor``hot`, plain_table, ``)"
+    ) == ["archive.flavor`hot", "plain_table"]
+
+    grouped = {
+        "flavor": [
+            (
+                "flavor_pk",
+                ["id", "tenant_id"],
+                None,
+                False,
+                False,
+                None,
+                [],
+                None,
+                None,
+                None,
+                None,
+            )
+        ],
+        "empty": [],
+    }
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_named_key_columns",
+        lambda *_args, **_kwargs: grouped,
+    )
+
+    assert reflection._reflect_key_columns(
+        object(), "postgresql://localhost/db", "postgresql", "public", "PRIMARY KEY", []
+    ) == {"flavor": ["id", "tenant_id"], "empty": []}
+
+
+def test_reflected_identity_and_computed_option_helpers_cover_edge_flags() -> None:
+    assert (
+        reflection._reflected_column_identity_options("postgresql", [None] * 11) == {}
+    )
+    postgres_row = [None] * 23
+    postgres_row[11] = True
+    postgres_row[12] = "BY DEFAULT"
+    postgres_row[13] = "10"
+    postgres_row[14] = "5"
+    postgres_row[19] = "1"
+    postgres_row[20] = "100"
+    postgres_row[21] = "YES"
+    postgres_row[22] = "20"
+    assert reflection._reflected_column_identity_options(
+        "postgresql", postgres_row
+    ) == {
+        "identity": True,
+        "identity_always": False,
+        "identity_start": 10,
+        "identity_increment": 5,
+        "identity_min_value": 1,
+        "identity_max_value": 100,
+        "identity_cycle": True,
+        "identity_cache": 20,
+    }
+    assert reflection._reflected_column_identity_options(
+        "mysql", [None] * 10 + ["auto_increment"]
+    ) == {"autoincrement": True}
+    assert (
+        reflection._reflected_column_identity_options("mysql", [None] * 10 + [""]) == {}
+    )
+    assert reflection._reflected_column_identity_options("mssql", [None] * 10) == {}
+    assert reflection._reflected_identity_option_flag("CYCLE_FLAG Y", "CYCLE")
+    assert not reflection._reflected_identity_option_flag("NOCYCLE", "CYCLE")
+    assert not reflection._reflected_identity_option_flag("ORDER_FLAG N", "ORDER")
+    oracle_row = [None] * 13
+    oracle_row[10] = "BY DEFAULT ON NULL"
+    oracle_row[11] = True
+    oracle_row[12] = "START WITH 2 INCREMENT BY 3 CACHE 5 ORDER"
+    assert reflection._reflected_column_identity_options("oracle", oracle_row) == {
+        "identity": True,
+        "identity_always": False,
+        "identity_on_null": True,
+        "identity_start": 2,
+        "identity_increment": 3,
+        "identity_cache": 5,
+        "identity_order": True,
+    }
+    oracle_computed_row = [None] * 12
+    oracle_computed_row[11] = True
+    assert (
+        reflection._reflected_column_computed_options("oracle", oracle_computed_row)
+        == {}
+    )
+
+
+def test_sqlite_constraint_tail_and_identifier_parsers_cover_edge_cases() -> None:
+    sql = (
+        "CONSTRAINT \"ck\"\"name\" CHECK (note <> 'a,b' AND json_extract(data, '$.x')), "
+        "CONSTRAINT next UNIQUE (name) ON CONFLICT REPLACE"
+    )
+    assert reflection._sqlite_named_constraint_bodies(sql, ("CHECK",)) == [
+        ('ck"name', "note <> 'a,b' AND json_extract(data, '$.x')")
+    ]
+    assert (
+        reflection._sqlite_conflict_from_tail("ON CONFLICT REPLACE, CONSTRAINT next")
+        == "REPLACE"
+    )
+    assert reflection._sqlite_conflict_from_tail("ON CONSTRAINT ignored") is None
+    assert reflection._sqlite_conflict_from_tail("ON CONFLICT custom") is None
+    assert reflection._normalize_sqlite_conflict_policy(None) is None
+    assert reflection._sqlite_identifier_list(
+        ' "first", [second], "third""name", 9bad'
+    ) == [
+        "first",
+        "second",
+        'third"name',
+        "9bad",
+    ]
+    assert reflection._split_sql_top_level_commas(
+        'a, func(\'b,c\'), [d,e], "f""g", tail'
+    ) == ["a", "func('b,c')", "[d,e]", '"f""g"', "tail"]
+
+
 @pytest.mark.parametrize(
     ("dialect", "value", "scale", "expected"),
     [
@@ -5223,3 +5492,1034 @@ def test_sqlite_numeric_precision_scale_parser() -> None:
         2,
     )
     assert reflection._sqlite_numeric_precision_scale("TEXT") == (None, None)
+
+
+def test_generated_check_and_normalization_edge_branches() -> None:
+    normalized_columns, remaining_checks = (
+        reflection._normalize_generated_column_checks(
+            "sqlite",
+            "flavor",
+            [ColumnSnapshot("amount", "decimal", False, False)],
+            [
+                TableCheckSnapshot(
+                    "flavor_amount_gt_check",
+                    "ormdantic_decimal_cmp(amount, '1') > 0",
+                )
+            ],
+        )
+    )
+    assert normalized_columns[0].checks == [("comparison", ">", "1")]
+    assert remaining_checks == []
+    assert (
+        reflection._generated_column_check_value(
+            "sqlite",
+            "amount",
+            "comparison",
+            ">",
+            "ormdantic_decimal_cmp(amount, '1''2') > 0",
+        )
+        == "1'2"
+    )
+    assert (
+        reflection._generated_column_check(
+            "postgresql",
+            "flavor",
+            "amount",
+            TableCheckSnapshot("flavor_amount_gt_check", "amount + 1 > 0"),
+        )
+        is None
+    )
+    assert (
+        reflection._generated_column_check(
+            "postgresql",
+            "flavor",
+            "amount",
+            TableCheckSnapshot("flavor_amount_custom_check", "amount > 0"),
+        )
+        is None
+    )
+    assert (
+        reflection._generated_column_check_value(
+            "postgresql",
+            "status",
+            "enum",
+            "in",
+            "status <> 'active'",
+        )
+        is None
+    )
+    assert (
+        reflection._generated_column_check_value(
+            "unknown",
+            "code",
+            "pattern",
+            "matches",
+            "code ~ '^[A-Z]+$'",
+        )
+        is None
+    )
+    assert (
+        reflection._generated_column_check_value(
+            "unknown",
+            "amount",
+            "unsupported",
+            "=",
+            "amount = 1",
+        )
+        is None
+    )
+    assert reflection._reflected_column_computed_options("sqlite", []) == {}
+
+    assert (
+        reflection._normalize_reflected_foreign_key_action("mysql", "RESTRICT") is None
+    )
+    assert (
+        reflection._normalize_reflected_foreign_key_action("postgresql", "NO ACTION")
+        is None
+    )
+    assert (
+        reflection._normalize_reflected_foreign_key_action("postgresql", "do nothing")
+        is None
+    )
+    assert reflection._normalize_reflected_deferrable("maybe") is None
+    assert reflection._normalize_reflected_initially_deferred(None) is False
+    assert reflection._normalize_reflected_validated(None) is True
+    assert reflection._postgres_storage_parameters_text(
+        "fillfactor=70, empty=, =skip, autovacuum_enabled=false"
+    ) == [("fillfactor", "70"), ("autovacuum_enabled", "false")]
+    assert reflection._comma_separated_identifiers(" id, , tenant_id ") == [
+        "id",
+        "tenant_id",
+    ]
+
+
+def test_mysql_default_and_create_option_helpers_cover_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reflection, "_query_rows_url", lambda *_args: [])
+
+    assert (
+        reflection._reflect_server_mysql_defaults(
+            object(), "postgresql://localhost/db", "postgresql"
+        )
+        == {}
+    )
+    assert (
+        reflection._reflect_server_mysql_defaults(
+            object(), "mysql://localhost/db", "mysql"
+        )
+        == {}
+    )
+    assert reflection._mysql_defaulted_option(None, "default") is None
+    assert reflection._mysql_defaulted_option("InnoDB", "innodb") is None
+    assert reflection._mysql_defaulted_option("MyISAM", "innodb") == "MyISAM"
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_mysql_defaults",
+        lambda *_args: {"default_storage_engine": "InnoDB"},
+    )
+    assert (
+        reflection._reflect_server_mysql_table_options(
+            object(),
+            "mysql://localhost/db",
+            "mysql",
+            "inventory",
+            ["flavor"],
+        )
+        == {}
+    )
+
+    columns = {
+        "flavor": [
+            {"name": "name", "collation": "utf8mb4_unicode_ci"},
+            {"name": "code", "collation": "utf8mb4_bin"},
+        ]
+    }
+    reflection._normalize_mysql_default_column_collations(
+        "mysql",
+        columns,
+        {"flavor": {"collation": "utf8mb4_unicode_ci"}},
+        {"collation_database": "utf8mb4_general_ci"},
+    )
+    assert columns["flavor"] == [
+        {"name": "name"},
+        {"name": "code", "collation": "utf8mb4_bin"},
+    ]
+
+    assert reflection._mysql_option_str_list({"union": "not-list"}, "union") == []
+    assert reflection._mysql_option_str_list({"union": [1, "archive"]}, "union") == [
+        "1",
+        "archive",
+    ]
+    assert reflection._mysql_create_option_int(None, "max_rows") is None
+    assert reflection._mysql_create_option_int("max_rows=x", "max_rows") is None
+    assert reflection._mysql_create_option_bool(None, "checksum") is None
+    assert reflection._mysql_create_option_bool("checksum=maybe", "checksum") is None
+    assert reflection._mysql_create_option_token(None, "insert_method") is None
+    assert (
+        reflection._mysql_create_option_token("insert_method=", "insert_method") is None
+    )
+    assert (
+        reflection._mysql_create_option_string(
+            "DATA DIRECTORY=/var/lib/mysql/data", "DATA DIRECTORY"
+        )
+        == "/var/lib/mysql/data"
+    )
+    assert (
+        reflection._mysql_create_option_string("ROW_FORMAT=DYNAMIC", "DATA DIRECTORY")
+        is None
+    )
+
+
+def test_reflect_server_tables_and_comment_error_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_sql: list[str] = []
+
+    def fake_query_rows_url(_rust: object, _url: str, sql: str) -> list[list[str]]:
+        captured_sql.append(sql)
+        return [["flavor"], ["supplier"]]
+
+    monkeypatch.setattr(reflection, "_query_rows_url", fake_query_rows_url)
+
+    assert reflection._reflect_server_tables(
+        object(), "postgresql://localhost/db", "postgresql", "public"
+    ) == ["flavor", "supplier"]
+    assert reflection._reflect_server_tables(
+        object(), "mysql://localhost/db", "mysql", "inventory"
+    ) == ["flavor", "supplier"]
+    assert reflection._reflect_server_tables(
+        object(), "mssql://localhost/db", "mssql", "dbo"
+    ) == ["flavor", "supplier"]
+    assert any("information_schema.tables" in sql for sql in captured_sql)
+    assert any("INFORMATION_SCHEMA.TABLES" in sql for sql in captured_sql)
+
+    def fake_oracle_comment_rows(
+        _rust: object,
+        _url: str,
+        sql: str,
+    ) -> list[list[str]]:
+        captured_sql.append(sql)
+        if "column_name" in sql:
+            return [["FLAVOR", "NAME", "Flavor name"]]
+        return [["FLAVOR", "Flavor table"]]
+
+    monkeypatch.setattr(reflection, "_query_rows_url", fake_oracle_comment_rows)
+
+    assert reflection._reflect_server_table_comments(
+        object(), "oracle://localhost/db", "oracle", "inventory", ["FLAVOR"]
+    ) == {"FLAVOR": "Flavor table"}
+    assert reflection._reflect_server_column_comments(
+        object(), "oracle://localhost/db", "oracle", "inventory", ["FLAVOR"]
+    ) == {("FLAVOR", "NAME"): "Flavor name"}
+    assert any("owner = 'INVENTORY'" in sql for sql in captured_sql)
+
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_tables(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main"
+        )
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_table_comments(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", ["flavor"]
+        )
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_column_comments(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", ["flavor"]
+        )
+
+
+def test_mysql_partition_options_group_reflected_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        ["flavor", "hash", "id", "p0", "key", "tenant_id", "sp0"],
+        ["flavor", None, None, "p0", "key", "tenant_id", "sp1"],
+        ["flavor", None, None, "p1", "key", "tenant_id", "sp0"],
+    ]
+    monkeypatch.setattr(reflection, "_query_rows_url", lambda *_args: rows)
+
+    assert reflection._reflect_server_mysql_partition_options(
+        object(), "mysql://localhost/db", "mysql", "inventory", ["flavor"]
+    ) == {
+        "flavor": {
+            "partition_by": "HASH (id)",
+            "partitions": 2,
+            "subpartition_by": "KEY (tenant_id)",
+            "subpartitions": 2,
+        }
+    }
+    assert (
+        reflection._reflect_server_mysql_partition_options(
+            object(), "mysql://localhost/db", "mysql", "inventory", []
+        )
+        == {}
+    )
+    assert reflection._mysql_partition_clause(None, "id") is None
+    assert reflection._mysql_partition_clause("linear  hash", " id ") == (
+        "LINEAR HASH (id)"
+    )
+
+
+def test_enum_sequence_and_column_reflection_empty_and_legacy_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        reflection,
+        "_query_rows_url",
+        lambda *_args: [["mood", "happy"], ["mood", "sad"]],
+    )
+    assert reflection._reflect_server_enum_types(
+        object(), "postgresql://localhost/db", "postgresql", "public"
+    ) == [EnumTypeSnapshot("mood", ["happy", "sad"], schema="public")]
+    assert reflection._reflected_sequence_data_type(None) is None
+    assert reflection._reflected_sequence_data_type("   ") is None
+
+    assert (
+        reflection._reflect_server_columns(
+            object(), "postgresql://localhost/db", "postgresql", "public", []
+        )
+        == {}
+    )
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_columns(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", ["flavor"]
+        )
+
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_key_columns",
+        lambda *_args: {"flavor": ["id"]},
+    )
+    assert reflection._reflect_server_primary_keys(
+        object(), "postgresql://localhost/db", "postgresql", "public", ["flavor"]
+    ) == {"flavor": ["id"]}
+
+
+def test_key_and_foreign_key_reflection_edge_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        reflection._reflect_named_key_columns(
+            object(), "postgresql://localhost/db", "postgresql", "public", "UNIQUE", []
+        )
+        == {}
+    )
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_named_key_columns(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", "UNIQUE", ["flavor"]
+        )
+    assert reflection._reflected_oracle_compress(None, None) is None
+    assert reflection._reflected_oracle_compress("DISABLED", 2) is None
+    assert reflection._reflected_oracle_compress("ENABLED", 2) == 2
+    assert reflection._reflected_oracle_compress("ENABLED", None) is True
+    monkeypatch.setattr(
+        reflection,
+        "_query_rows_url",
+        lambda *_args: [
+            ["FLAVOR", "ENABLED", " 2 "],
+            ["ARCHIVE", "ENABLED", "0"],
+            ["SKIP", "DISABLED", "5"],
+        ],
+    )
+    assert reflection._reflect_server_oracle_table_compressions(
+        object(), "oracle://localhost/db", "oracle", "inventory", ["FLAVOR", "ARCHIVE"]
+    ) == {"FLAVOR": 2, "ARCHIVE": True}
+    assert (
+        reflection._reflect_server_foreign_key_rows(
+            object(), "postgresql://localhost/db", "postgresql", "public", []
+        )
+        == []
+    )
+
+    rows = [
+        [
+            "flavor",
+            "supplier_id",
+            "supplier",
+            "id",
+            None,
+            "SET NULL",
+            "CASCADE",
+            1,
+            "NOT DEFERRABLE",
+            "NO",
+            "NOT VALIDATED",
+            "FULL",
+            "warehouse",
+            "Supplier link",
+            "inventory",
+        ]
+    ]
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_foreign_key_rows",
+        lambda *_args: rows,
+    )
+    assert reflection._reflect_server_foreign_key_constraints(
+        object(),
+        "postgresql://localhost/db",
+        "postgresql",
+        "inventory",
+        ["flavor"],
+        include_single_column=True,
+    ) == {
+        "flavor": [
+            ForeignKeyConstraintSnapshot(
+                "flavor_supplier_id_foreign_key",
+                ["supplier_id"],
+                "warehouse.supplier",
+                ["id"],
+                on_delete="set_null",
+                on_update="cascade",
+                validated=False,
+                match="full",
+                comment="Supplier link",
+            )
+        ]
+    }
+    assert (
+        reflection._reflected_foreign_table_name(
+            "oracle", "SUPPLIER", "inventory", "INVENTORY"
+        )
+        == "SUPPLIER"
+    )
+    assert (
+        reflection._reflected_foreign_table_name(
+            "mysql", "supplier", "Inventory", "inventory"
+        )
+        == "supplier"
+    )
+    assert (
+        reflection._reflected_foreign_table_name(
+            "postgresql", "supplier", "warehouse", "inventory"
+        )
+        == "warehouse.supplier"
+    )
+
+
+def test_sqlite_reflection_parser_edge_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_query_rows_url(_rust: object, _url: str, sql: str) -> list[list[Any]]:
+        if "type = 'view'" in sql:
+            return [
+                ["broken"],
+                ["null_view", None],
+                ["skip_view", "CREATE VIEW skip_view AS SELECT 1"],
+                ["keep_view", "CREATE VIEW keep_view AS SELECT 2"],
+            ]
+        if "type = 'table'" in sql:
+            return []
+        return [
+            ["broken"],
+            [None, "CREATE INDEX broken ON flavor (name)"],
+            ["null_sql", None],
+            ["flavor_name_idx", "CREATE INDEX flavor_name_idx ON flavor (name)"],
+        ]
+
+    monkeypatch.setattr(reflection, "_query_rows_url", fake_query_rows_url)
+
+    assert reflection._reflect_sqlite_views(
+        object(), "sqlite:///db.sqlite3", ["keep_*"], None
+    ) == [ViewSnapshot("keep_view", "SELECT 2")]
+    assert (
+        reflection._reflect_sqlite_table_sql(object(), "sqlite:///db.sqlite3", "flavor")
+        == ""
+    )
+    assert reflection._reflect_sqlite_index_sql(
+        object(), "sqlite:///db.sqlite3", "flavor"
+    ) == {"flavor_name_idx": "CREATE INDEX flavor_name_idx ON flavor (name)"}
+    assert reflection._sqlite_view_definition("SELECT 1") == "SELECT 1"
+    assert reflection._sqlite_table_options("") == (False, False)
+    assert reflection._sqlite_table_options("CREATE TABLE flavor id INTEGER") == (
+        False,
+        False,
+    )
+    assert reflection._sqlite_table_options("CREATE TABLE flavor (id INTEGER") == (
+        False,
+        False,
+    )
+    assert (
+        reflection._sqlite_column_generated(
+            'CREATE TABLE flavor ("name" TEXT GENERATED ALWAYS AS LOWER(name))'
+        )
+        == {}
+    )
+    assert (
+        reflection._sqlite_column_generated(
+            'CREATE TABLE flavor ("name" TEXT GENERATED ALWAYS AS (LOWER(name))'
+        )
+        == {}
+    )
+    assert reflection._sqlite_column_definition_segments("") == []
+    assert reflection._sqlite_column_definition_segments("CREATE TABLE flavor id") == []
+    assert (
+        reflection._sqlite_column_definition_segments("CREATE TABLE flavor (id INTEGER")
+        == []
+    )
+    assert reflection._sqlite_index_elements("CREATE INDEX ix") == ([], "")
+    assert reflection._sqlite_index_elements("CREATE INDEX ix ON") == ([], "")
+    assert reflection._sqlite_index_elements("CREATE INDEX ix ON main.") == ([], "")
+    assert reflection._sqlite_index_elements("CREATE INDEX ix ON flavor name") == (
+        [],
+        "",
+    )
+    assert reflection._sqlite_index_elements("CREATE INDEX ix ON flavor (name") == (
+        [],
+        "",
+    )
+    assert reflection._sqlite_plain_index_column("LOWER(name)") is None
+    assert reflection._sqlite_plain_index_column("name DESC") is None
+    assert reflection._sqlite_foreign_key_reference("") == (None, [])
+    assert reflection._sqlite_foreign_key_reference("REFERENCES") == (None, [])
+    assert reflection._sqlite_foreign_key_reference("REFERENCES supplier") == (
+        "supplier",
+        [],
+    )
+    assert reflection._sqlite_foreign_key_reference("REFERENCES supplier (id") == (
+        "supplier",
+        [],
+    )
+    assert (
+        reflection._sqlite_foreign_key_action("ON DELETE DO NOTHING", ("ON", "DELETE"))
+        is None
+    )
+    assert reflection._sqlite_foreign_key_match("") is None
+    assert reflection._sqlite_foreign_key_match("MATCH FULL") == "full"
+    assert reflection._sqlite_foreign_key_timing("INITIALLY DEFERRED") == (True, True)
+    assert reflection._sqlite_named_constraint_segments("", ("CHECK",)) == []
+    assert reflection._sqlite_named_constraint_segments("CONSTRAINT", ("CHECK",)) == []
+    assert (
+        reflection._sqlite_named_constraint_segments(
+            "CONSTRAINT ck UNIQUE (name)", ("CHECK",)
+        )
+        == []
+    )
+    assert (
+        reflection._sqlite_named_constraint_segments(
+            "CONSTRAINT ck CHECK value > 0", ("CHECK",)
+        )
+        == []
+    )
+    assert reflection._sqlite_constraint_tail(
+        " '[a,''b]', [tail,ignored], next", 0
+    ) == ("'[a,''b]'")
+    assert reflection._sqlite_identifier_list(", first, second trailing") == [
+        "first",
+        "second",
+    ]
+
+
+def test_sqlite_low_level_sql_scanners_cover_quoted_and_bracketed_paths() -> None:
+    sql = 'before [\'not )\'] "A""S" (inner, [x)]) AS tail'
+
+    assert reflection._find_sql_top_level_keyword_sequence(sql, ("AS",), 0) == (
+        37,
+        40,
+    )
+    assert (
+        reflection._find_sql_top_level_keyword_sequence(
+            "func(AS), [AS], 'AS'", ("AS",), 0
+        )
+        is None
+    )
+    assert reflection._find_sql_char("['('] \"(\" target(", "(", 0) == 16
+    assert reflection._find_sql_keyword("[where] 'where' WHERE", "WHERE", 0) == 16
+    assert reflection._find_sql_keyword("somewhere", "WHERE", 0) == -1
+    assert reflection._read_sql_identifier("", 0) == (None, 0)
+    assert reflection._read_sql_identifier("()", 0) == (None, 0)
+    assert reflection._read_sql_identifier("[weird]]", 0) == ("weird", 7)
+    assert reflection._read_quoted_sql_identifier('"unterminated', 0, '"', '"') == (
+        None,
+        0,
+    )
+    assert reflection._read_parenthesized_sql("('a''b', [c]) tail", 0) == (
+        "'a''b', [c]",
+        13,
+    )
+    assert reflection._read_parenthesized_sql("('unterminated", 0) == (None, 0)
+
+    assert reflection._normalize_sqlite_type("GEOGRAPHY") == "geography"
+    assert reflection._sqlite_numeric_precision_scale("DECIMAL") == (None, None)
+    assert reflection._sqlite_numeric_precision_scale("DECIMAL(") == (None, None)
+    assert reflection._sqlite_numeric_precision_scale("DECIMAL(12)") == (None, None)
+    with pytest.raises(ValueError):
+        reflection._sqlite_numeric_precision_scale("DECIMAL(x, 2)")
+
+
+def test_server_snapshot_collects_extra_schemas_from_global_objects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_extra_schemas: list[str | None] = []
+
+    monkeypatch.setattr(reflection, "_require_migration_symbol", lambda _name: object())
+    monkeypatch.setattr(reflection, "_reflect_server_tables", lambda *_args: [])
+    for name in (
+        "_reflect_server_table_comments",
+        "_reflect_server_column_comments",
+        "_reflect_server_table_tablespaces",
+        "_reflect_server_oracle_table_compressions",
+        "_reflect_server_postgres_inherits",
+        "_reflect_server_postgres_with",
+        "_reflect_server_postgres_using",
+        "_reflect_server_postgres_unlogged",
+        "_reflect_server_postgres_partition_by",
+        "_reflect_server_postgres_partitions",
+        "_reflect_server_mysql_defaults",
+        "_reflect_server_mysql_table_options",
+        "_reflect_server_columns",
+        "_reflect_server_primary_keys",
+        "_reflect_server_unique_constraints",
+        "_reflect_server_foreign_key_constraints",
+        "_reflect_server_exclusion_constraints",
+        "_reflect_server_indexes",
+        "_reflect_server_check_constraints",
+    ):
+        monkeypatch.setattr(reflection, name, lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_mssql_database_collation",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_enum_types",
+        lambda *_args: [EnumTypeSnapshot("mood", ["happy"], schema="types")],
+    )
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_sequences",
+        lambda *_args: [SequenceSnapshot("order_seq", schema="billing")],
+    )
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_views",
+        lambda *_args, **_kwargs: [
+            ViewSnapshot("active_orders", "SELECT 1", schema="reporting")
+        ],
+    )
+
+    def fake_namespaces(
+        _rust: object,
+        _url: str,
+        _dialect: str,
+        _schema: str | None,
+        *,
+        extra_schemas: list[str] | None = None,
+    ) -> list[NamespaceSnapshot]:
+        captured_extra_schemas.extend(extra_schemas or [])
+        return [NamespaceSnapshot("public"), NamespaceSnapshot("types")]
+
+    monkeypatch.setattr(reflection, "_reflect_server_namespaces", fake_namespaces)
+
+    snapshot = reflection._reflect_server_snapshot(
+        "postgresql://localhost/db",
+        dialect="postgresql",
+        include_tables=None,
+        exclude_tables=None,
+        schema="public",
+    )
+
+    assert captured_extra_schemas == ["types", "billing", "reporting"]
+    assert snapshot.tables == []
+    assert snapshot.namespaces == [
+        NamespaceSnapshot("public"),
+        NamespaceSnapshot("types"),
+    ]
+    assert snapshot.enum_types == [EnumTypeSnapshot("mood", ["happy"], schema="types")]
+    assert snapshot.sequences == [SequenceSnapshot("order_seq", schema="billing")]
+    assert snapshot.views == [
+        ViewSnapshot("active_orders", "SELECT 1", schema="reporting")
+    ]
+
+
+def test_live_reflection_empty_and_unsupported_server_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reflection, "_query_rows_url", lambda *_args: [])
+
+    assert (
+        reflection._generated_column_check_value(
+            "mysql",
+            "flavor",
+            "enum",
+            "in",
+            "flavor = ANY (ARRAY['mocha'])",
+        )
+        is None
+    )
+    assert (
+        reflection._reflect_server_mssql_database_collation(
+            object(), "mssql://localhost/db", "mssql"
+        )
+        is None
+    )
+    assert (
+        reflection._reflect_server_oracle_default_tablespace(
+            object(), "oracle://localhost/db", "oracle", "inventory"
+        )
+        is None
+    )
+    assert (
+        reflection._reflect_server_namespaces(
+            object(),
+            "sqlite:///db.sqlite3",
+            "sqlite",
+            "main",
+            extra_schemas=["archive"],
+        )
+        == []
+    )
+    assert (
+        reflection._reflect_server_sequences(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main"
+        )
+        == []
+    )
+    assert (
+        reflection._reflect_server_views(
+            object(),
+            "sqlite:///db.sqlite3",
+            "sqlite",
+            "main",
+            include_tables=None,
+            exclude_tables=None,
+        )
+        == []
+    )
+    assert not reflection._same_reflected_schema("mysql", "inventory", None)
+    assert (
+        reflection._reflect_server_check_constraints(
+            object(), "postgresql://localhost/db", "postgresql", "public", []
+        )
+        == {}
+    )
+    assert (
+        reflection._reflect_server_foreign_key_rows(
+            object(), "postgresql://localhost/db", "postgresql", "public", []
+        )
+        == []
+    )
+    assert (
+        reflection._reflect_server_indexes(
+            object(), "postgresql://localhost/db", "postgresql", "public", []
+        )
+        == {}
+    )
+
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_check_constraints(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", ["flavor"]
+        )
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_foreign_key_rows(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", ["flavor"]
+        )
+    with pytest.raises(ValueError, match="does not support dialect 'sqlite'"):
+        reflection._reflect_server_indexes(
+            object(), "sqlite:///db.sqlite3", "sqlite", "main", ["flavor"]
+        )
+
+
+def test_server_constraint_and_index_rows_preserve_dialect_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows: list[list[Any]] = []
+    monkeypatch.setattr(reflection, "_query_rows_url", lambda *_args: rows)
+    monkeypatch.setattr(
+        reflection,
+        "_reflect_server_oracle_default_tablespace",
+        lambda *_args: "USERS",
+    )
+
+    rows = [
+        ["flavor", "ck_skip", None, None, None, None],
+        ["flavor", "ck_quantity_positive", "quantity > 0", 0, 1, "Quantity check"],
+    ]
+    assert reflection._reflect_server_check_constraints(
+        object(), "postgresql://localhost/db", "postgresql", "public", ["flavor"]
+    ) == {
+        "flavor": [
+            TableCheckSnapshot(
+                "ck_quantity_positive",
+                "quantity > 0",
+                validated=False,
+                no_inherit=True,
+                comment="Quantity check",
+            )
+        ]
+    }
+
+    rows = [
+        ["flavor", "ex_skip", None, None, None, None],
+        ["flavor", "ex_fallback", "custom expression WITH &&", "yes", "no", "fallback"],
+        [
+            "flavor",
+            "ex_named",
+            'EXCLUDE USING gist ("room" gist_text_ops WITH =, lower(name) WITH &&) '
+            "WHERE (active)",
+            "no",
+            "yes",
+            "named",
+        ],
+    ]
+    exclusions = reflection._reflect_server_exclusion_constraints(
+        object(), "postgresql://localhost/db", "postgresql", "public", ["flavor"]
+    )["flavor"]
+    assert exclusions[0] == ExclusionConstraintSnapshot(
+        "ex_fallback",
+        expressions=[("custom expression WITH &&", "")],
+        deferrable=True,
+        comment="fallback",
+    )
+    assert exclusions[1] == ExclusionConstraintSnapshot(
+        "ex_named",
+        columns=[("room", "=")],
+        expressions=[("lower(name)", "&&")],
+        using="gist",
+        where="active",
+        deferrable=False,
+        initially_deferred=True,
+        ops={"room": "gist_text_ops"},
+        comment="named",
+    )
+
+    rows = [
+        [
+            "flavor",
+            "ix_flavor_search",
+            0,
+            None,
+            1,
+            "name <> ''",
+            "gin",
+            "lower(name)",
+            1,
+            "fillfactor=70",
+            "Search index",
+            "fastspace",
+            "gin_trgm_ops",
+            1,
+        ],
+        [
+            "flavor",
+            "ix_flavor_search",
+            0,
+            "name",
+            2,
+            None,
+            "btree",
+            "name",
+            0,
+            None,
+            None,
+            None,
+            None,
+            0,
+        ],
+    ]
+    postgres_index = reflection._reflect_server_indexes(
+        object(), "postgresql://localhost/db", "postgresql", "public", ["flavor"]
+    )["flavor"][0]
+    assert postgres_index == IndexSnapshot(
+        "ix_flavor_search",
+        columns=[],
+        expressions=["lower(name)"],
+        include_columns=["name"],
+        where="name <> ''",
+        method="gin",
+        postgres_with=[("fillfactor", "70")],
+        comment="Search index",
+        postgres_tablespace="fastspace",
+        postgres_ops={"lower(name)": "gin_trgm_ops"},
+        postgres_nulls_not_distinct=True,
+    )
+
+    rows = [
+        [
+            "flavor",
+            "ix_flavor_name",
+            1,
+            "name",
+            1,
+            0,
+            "[name] IS NOT NULL",
+            "Name index",
+            "FG_FAST",
+            1,
+        ],
+        [
+            "flavor",
+            "ix_flavor_name",
+            1,
+            "code",
+            2,
+            1,
+            None,
+            "ignored",
+            "FG_FAST",
+            0,
+        ],
+    ]
+    mssql_index = reflection._reflect_server_indexes(
+        object(), "mssql://localhost/db", "mssql", "dbo", ["flavor"]
+    )["flavor"][0]
+    assert mssql_index == IndexSnapshot(
+        "ix_flavor_name",
+        columns=["name"],
+        unique=True,
+        where="[name] IS NOT NULL",
+        include_columns=["code"],
+        comment="Name index",
+        mssql_filegroup="FG_FAST",
+        mssql_clustered=True,
+    )
+
+    rows = [
+        ["flavor", "ix_flavor_geo", 0, "geom", 1, "Geo index", 32, "SPATIAL", 0],
+        ["flavor", "ix_flavor_body", 0, "body", 1, None, None, "FULLTEXT", 1],
+        ["flavor", "ix_flavor_hash", 0, "code", 1, None, None, "HASH", 1],
+    ]
+    mysql_indexes = {
+        index.name: index
+        for index in reflection._reflect_server_indexes(
+            object(), "mysql://localhost/db", "mysql", "inventory", ["flavor"]
+        )["flavor"]
+    }
+    assert mysql_indexes["ix_flavor_geo"] == IndexSnapshot(
+        "ix_flavor_geo",
+        columns=["geom"],
+        mysql_prefix="SPATIAL",
+        mysql_length={"geom": 32},
+        mysql_visible=False,
+        comment="Geo index",
+    )
+    assert mysql_indexes["ix_flavor_body"].mysql_prefix == "FULLTEXT"
+    assert mysql_indexes["ix_flavor_hash"].mysql_using == "HASH"
+
+    rows = [
+        [
+            "FLAVOR",
+            "IX_FLAVOR_BITMAP",
+            0,
+            "KIND",
+            1,
+            "USERS",
+            "BITMAP",
+            "ADVANCED LOW",
+            2,
+        ],
+        [
+            "FLAVOR",
+            "IX_FLAVOR_COMPRESS",
+            0,
+            "CODE",
+            1,
+            "ARCHIVE",
+            "NORMAL",
+            "ENABLED",
+            0,
+        ],
+        [
+            "FLAVOR",
+            "IX_FLAVOR_DISABLED",
+            0,
+            "NAME",
+            1,
+            "USERS",
+            "NORMAL",
+            "DISABLED",
+            None,
+        ],
+    ]
+    oracle_indexes = {
+        index.name: index
+        for index in reflection._reflect_server_indexes(
+            object(), "oracle://localhost/db", "oracle", "inventory", ["FLAVOR"]
+        )["FLAVOR"]
+    }
+    assert oracle_indexes["IX_FLAVOR_BITMAP"] == IndexSnapshot(
+        "IX_FLAVOR_BITMAP",
+        columns=["KIND"],
+        oracle_bitmap=True,
+        oracle_compress=2,
+    )
+    assert oracle_indexes["IX_FLAVOR_COMPRESS"] == IndexSnapshot(
+        "IX_FLAVOR_COMPRESS",
+        columns=["CODE"],
+        oracle_tablespace="ARCHIVE",
+        oracle_compress=True,
+    )
+    assert oracle_indexes["IX_FLAVOR_DISABLED"] == IndexSnapshot(
+        "IX_FLAVOR_DISABLED",
+        columns=["NAME"],
+    )
+
+
+def test_low_level_sql_scanners_cover_nested_quote_and_bracket_edges() -> None:
+    assert reflection._sqlite_constraint_tail("[tail,ignored], next", 0) == (
+        "[tail,ignored]"
+    )
+    assert reflection._sqlite_constraint_tail('"a""b", next', 0) == '"a""b"'
+    assert (
+        reflection._sqlite_constraint_tail(
+            "func([a,b], 'c,d'), next",
+            0,
+        )
+        == "func([a,b], 'c,d')"
+    )
+    assert reflection._sqlite_identifier_list(" , ") == []
+    assert reflection._split_sql_top_level_commas(
+        'func(a, b), , [c,d], "e""f", tail'
+    ) == ["func(a, b)", "[c,d]", '"e""f"', "tail"]
+    assert reflection._find_sql_top_level_keyword_sequence(
+        "func(WHERE) [WHERE] (nested) WHERE ok",
+        ("WHERE",),
+        0,
+    ) == (28, 34)
+    assert reflection._find_sql_char('"a""b" [ignored(] target(', "(", 0) == 24
+    assert reflection._find_sql_keyword('"where""x" [WHERE] WHERE', "WHERE", 0) == 19
+    assert reflection._read_quoted_sql_identifier('"a""b" tail', 0, '"', '"') == (
+        'a"b',
+        6,
+    )
+    expression, end = reflection._read_parenthesized_sql(
+        "('a''b', [c,d], func(1)) tail",
+        0,
+    )
+    assert expression == "'a''b', [c,d], func(1)"
+    assert end == 24
+
+
+def test_postgres_exclusion_parser_helpers_cover_opclass_edges() -> None:
+    assert reflection._take_parenthesized("plain") == ("plain", "")
+    assert reflection._take_parenthesized('("a)") tail') == ('"a)"', "tail")
+    assert reflection._take_parenthesized("(unterminated") == ("unterminated", "")
+    assert reflection._split_top_level('a, func(b,c), "d,e"', ",") == [
+        "a",
+        "func(b,c)",
+        '"d,e"',
+    ]
+    assert reflection._split_exclusion_element("func(a WITH b) WITH &&") == (
+        "func(a WITH b)",
+        "&&",
+    )
+    assert reflection._split_exclusion_element("plain") == ("plain", "")
+    assert reflection._split_exclusion_value_opclass("") == ("", None)
+    assert reflection._split_exclusion_value_opclass('"weird""name" gist_ops') == (
+        '"weird""name"',
+        "gist_ops",
+    )
+    assert reflection._split_exclusion_value_opclass('"unterminated') == (
+        '"unterminated',
+        None,
+    )
+    assert reflection._split_exclusion_value_opclass("(lower(name)) text_ops") == (
+        "lower(name)",
+        "text_ops",
+    )
+    assert reflection._split_exclusion_value_opclass("@@") == ("@@", None)
+    assert not reflection._looks_like_postgres_opclass("too.many.parts")
+    assert not reflection._looks_like_postgres_opclass("bad-name")
+    assert reflection._reflected_exclusion_column("") is None
+    assert reflection._parse_exclusion_where("NO WHERE clause") is None
