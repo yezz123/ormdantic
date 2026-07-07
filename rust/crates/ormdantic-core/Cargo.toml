@@ -12,3 +12,10 @@ readme = "README.md"
 [lib]
 name = "ormdantic_core"
 path = "src/lib.rs"
+
+[dev-dependencies]
+criterion = { version = "4.7.0", package = "codspeed-criterion-compat" }
+
+[[bench]]
+name = "core_primitives"
+harness = false

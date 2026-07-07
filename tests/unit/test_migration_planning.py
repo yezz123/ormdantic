@@ -11,6 +11,7 @@ from ormdantic._migrations.models import (
     ForeignKeyConstraintSnapshot,
     IndexSnapshot,
     MigrationOperation,
+    MigrationPlan,
     NamespaceSnapshot,
     SchemaSnapshot,
     SequenceSnapshot,
@@ -909,6 +910,258 @@ def test_diff_snapshots_reports_sqlite_conflict_clause_changes() -> None:
     assert "Changed unique constraint flavor_code_unique on flavor" in summary
     assert constraints["flavor_unique_0"]["sqlite_on_conflict"] == "IGNORE"
     assert constraints["flavor_code_unique"]["sqlite_on_conflict"] == "ABORT"
+
+
+def test_diff_snapshots_reports_namespace_enum_index_and_constraint_metadata_edges() -> (
+    None
+):
+    before_index = IndexSnapshot(
+        "flavor_meta_idx",
+        ["name"],
+        method="btree",
+        comment="old comment",
+        postgres_tablespace="old_pg_space",
+        mssql_filegroup="old_fg",
+        mssql_clustered=False,
+        oracle_tablespace="old_ora_space",
+        mysql_prefix="old_prefix",
+        mysql_length={"name": 12},
+        mysql_using="BTREE",
+        postgres_ops={"name": "text_pattern_ops"},
+        mysql_visible=True,
+        oracle_bitmap=False,
+        oracle_compress=None,
+        postgres_nulls_not_distinct=False,
+    )
+    after_index = IndexSnapshot(
+        "flavor_meta_idx",
+        ["name"],
+        method="BTREE",
+        comment="new comment",
+        postgres_tablespace="new_pg_space",
+        mssql_filegroup="new_fg",
+        mssql_clustered=True,
+        oracle_tablespace="new_ora_space",
+        mysql_prefix="new_prefix",
+        mysql_length={"name": 24},
+        mysql_using="HASH",
+        postgres_ops={"name": "varchar_pattern_ops"},
+        mysql_visible=False,
+        oracle_bitmap=True,
+        oracle_compress=2,
+        postgres_nulls_not_distinct=True,
+    )
+    before = SchemaSnapshot(
+        namespaces=[
+            NamespaceSnapshot("legacy", "old namespace"),
+            NamespaceSnapshot("shared", "old shared"),
+        ],
+        enum_types=[EnumTypeSnapshot("flavor_state", ["draft"], schema="app")],
+        tables=[
+            table(
+                "flavor",
+                [column("id", "int", primary_key=True), column("name")],
+                indexes=[before_index],
+                named_unique_constraints=[
+                    UniqueConstraintSnapshot(
+                        "flavor_name_unique",
+                        ["name"],
+                        comment="old unique",
+                    )
+                ],
+            )
+        ],
+    )
+    after = SchemaSnapshot(
+        namespaces=[
+            NamespaceSnapshot("shared", "new shared"),
+            NamespaceSnapshot("analytics", "new namespace"),
+        ],
+        enum_types=[
+            EnumTypeSnapshot(
+                "flavor_state",
+                ["draft", "active"],
+                schema="app",
+                comment="state values",
+            ),
+            EnumTypeSnapshot("flavor_label", ["seasonal"]),
+        ],
+        tables=[
+            table(
+                "flavor",
+                [column("id", "int", primary_key=True), column("name")],
+                indexes=[after_index],
+                named_unique_constraints=[
+                    UniqueConstraintSnapshot(
+                        "flavor_name_unique",
+                        ["name"],
+                        comment="new unique",
+                    )
+                ],
+            )
+        ],
+    )
+
+    diff = planning.diff_snapshots(before, after, dialect="postgresql")
+    summary = "\n".join(diff.summary())
+
+    assert "Added namespace analytics" in summary
+    assert "Removed namespace legacy" in summary
+    assert "Changed namespace shared: comment" in summary
+    assert "Added enum type flavor_label" in summary
+    assert "Changed enum type app.flavor_state" in summary
+    assert "Changed index flavor_meta_idx on flavor:" in summary
+    for field in (
+        "comment",
+        "postgres_tablespace",
+        "mssql_filegroup",
+        "mssql_clustered",
+        "oracle_tablespace",
+        "oracle_bitmap",
+        "oracle_compress",
+        "postgres_ops",
+        "postgres_nulls_not_distinct",
+        "mysql_prefix",
+        "mysql_length",
+        "mysql_using",
+        "mysql_visible",
+    ):
+        assert field in summary
+    assert "Changed unique constraint flavor_name_unique on flavor: comment" in summary
+    assert planning._normalized_default_index_method(None) is None
+    assert planning._normalized_default_index_method("HASH") == "hash"
+
+
+def test_identity_bounds_and_sqlite_rebuild_markers_cover_edge_branches() -> None:
+    integer_column = ColumnSnapshot(
+        "id",
+        "int",
+        False,
+        True,
+        identity_increment=-5,
+        identity_min_value=-(2**31),
+        identity_no_min_value=True,
+    )
+    defaulted_integer = ColumnSnapshot(
+        "id",
+        "int",
+        False,
+        True,
+        identity_increment=-5,
+        identity_no_min_value=True,
+    )
+    oracle_column = ColumnSnapshot(
+        "id",
+        "int",
+        False,
+        True,
+        identity_increment=-1,
+        identity_max_value=-1,
+    )
+    custom_bound = ColumnSnapshot(
+        "id",
+        "int",
+        False,
+        True,
+        identity_increment=1,
+        identity_min_value=10,
+    )
+
+    assert not planning._identity_bound_changed(
+        integer_column,
+        defaulted_integer,
+        "identity_min_value",
+        "identity_no_min_value",
+        dialect="postgresql",
+    )
+    assert not planning._identity_bound_changed(
+        defaulted_integer,
+        integer_column,
+        "identity_min_value",
+        "identity_no_min_value",
+        dialect="postgresql",
+    )
+    assert planning._identity_bound_changed(
+        integer_column,
+        ColumnSnapshot("id", "int", False, True, identity_min_value=5),
+        "identity_min_value",
+        "identity_no_min_value",
+        dialect="postgresql",
+    )
+    assert planning._identity_bound_changed(
+        integer_column,
+        ColumnSnapshot("id", "int", False, True, identity_min_value=-(2**31)),
+        "identity_min_value",
+        "identity_no_min_value",
+        dialect="postgresql",
+    )
+    assert planning._identity_bound_matches_default(
+        oracle_column,
+        "identity_max_value",
+        -1,
+        dialect="oracle",
+    )
+    assert not planning._identity_bound_matches_default(
+        custom_bound,
+        "identity_min_value",
+        10,
+        dialect=None,
+    )
+    assert planning._default_identity_bound("sqlite", custom_bound, bound="min") is None
+    assert planning._is_destructive_column_change(["comment", "foreign_column"])
+
+    operations = [
+        MigrationOperation(
+            'DROP TABLE "other"',
+            kind="drop_table",
+            table="other",
+            metadata={},
+        ),
+        MigrationOperation(
+            'DROP TABLE "flavor"',
+            kind="drop_table",
+            table="flavor",
+            metadata={},
+        ),
+        MigrationOperation(
+            'CREATE TABLE "flavor" ("id" INTEGER)',
+            kind="create_table",
+            table="flavor",
+            metadata={},
+        ),
+        MigrationOperation(
+            'ALTER TABLE "flavor" ADD COLUMN "name" TEXT',
+            kind="add_column",
+            table="flavor",
+            metadata={},
+        ),
+    ]
+    schema_diff = planning.diff_snapshots(
+        SchemaSnapshot(
+            tables=[
+                table("flavor", [column("id", "int", primary_key=True)]),
+                table("other", [column("id", "int", primary_key=True)]),
+            ]
+        ),
+        SchemaSnapshot(
+            tables=[
+                table(
+                    "flavor",
+                    [column("id", "int", primary_key=True)],
+                    sqlite_strict=True,
+                ),
+                table("other", [column("id", "int", primary_key=True)]),
+            ]
+        ),
+    )
+
+    planning._mark_sqlite_table_option_rebuilds(operations, schema_diff)
+
+    assert operations[0].requires_rebuild is False
+    assert operations[1].requires_rebuild is True
+    assert operations[2].requires_rebuild is True
+    assert operations[3].requires_rebuild is False
+    assert operations[1].metadata["sqlite_table_options_rebuild"] is True
 
 
 def test_build_plan_recreates_postgres_partition_key_changes() -> None:
@@ -4464,6 +4717,245 @@ def test_sql_operation_classification_extracts_metadata() -> None:
     assert drop_view["kind"] == "drop_materialized_view"
     assert drop_view["object_name"] == "active_flavors"
     assert drop_view["destructive"]
+    insert = planning._classify_sql_operation("INSERT INTO flavor (id) VALUES (1)")
+    assert insert["kind"] == "insert"
+    assert insert["table"] == "flavor"
+    assert not insert["reversible"]
+    assert insert["unsafe"]
+    update = planning._classify_sql_operation("UPDATE flavor SET name = 'Mocha'")
+    assert update["kind"] == "update"
+    assert update["table"] == "flavor"
+    assert not update["reversible"]
+    assert update["unsafe"]
+
+
+def test_sqlite_rebuild_guard_reports_first_three_operations() -> None:
+    operations = [
+        MigrationOperation(
+            f'ALTER TABLE "flavor_{index}" DROP COLUMN "legacy"',
+            requires_rebuild=True,
+        )
+        for index in range(4)
+    ]
+
+    with pytest.raises(ValueError, match=r"flavor_0.*flavor_1.*flavor_2.*, \.\.\."):
+        planning._raise_if_unsupported_sqlite_plan("sqlite", operations)
+
+    planning._raise_if_unsupported_sqlite_plan("postgresql", operations)
+    planning._raise_if_unsupported_sqlite_plan(
+        "sqlite", [MigrationOperation('CREATE TABLE "flavor" (id TEXT)')]
+    )
+
+
+def test_index_sql_annotation_helpers_cover_parser_failures_and_quotes() -> None:
+    assert planning._postgres_index_ops_sql(
+        'CREATE INDEX flavor_name_idx ON flavor ("name" DESC, lower("code"))',
+        {"name": "text_pattern_ops", 'lower("code")': "text_pattern_ops"},
+    ) == (
+        "CREATE INDEX flavor_name_idx ON flavor "
+        '("name" text_pattern_ops DESC, lower("code") text_pattern_ops)'
+    )
+    with pytest.raises(ValueError, match="operator classes"):
+        planning._postgres_index_ops_sql(
+            "CREATE INDEX flavor_name_idx ON flavor",
+            {"name": "text_pattern_ops"},
+        )
+    with pytest.raises(ValueError, match="not present"):
+        planning._postgres_index_ops_sql(
+            "CREATE INDEX flavor_name_idx ON flavor (name)",
+            {"missing": "text_pattern_ops"},
+        )
+    with pytest.raises(ValueError, match="non-unique"):
+        planning._postgres_index_nulls_not_distinct_sql(
+            "CREATE INDEX flavor_name_idx ON flavor (name)"
+        )
+    with pytest.raises(ValueError, match="after INCLUDE"):
+        planning._postgres_index_nulls_not_distinct_sql(
+            "CREATE UNIQUE INDEX flavor_name_idx ON flavor (name) INCLUDE broken"
+        )
+    with pytest.raises(ValueError, match="prefixes can only"):
+        planning._mysql_index_prefix_sql(
+            "CREATE UNIQUE INDEX flavor_name_idx ON flavor (name)",
+            "FULLTEXT",
+        )
+    with pytest.raises(ValueError, match="combined with USING"):
+        planning._mysql_index_using_sql(
+            "CREATE FULLTEXT INDEX flavor_name_idx ON flavor (name)",
+            "HASH",
+        )
+    with pytest.raises(ValueError, match="prefix lengths"):
+        planning._mysql_index_length_sql(
+            "CREATE INDEX flavor_name_idx ON flavor (name)",
+            {"missing": 12},
+        )
+    with pytest.raises(ValueError, match="index visibility"):
+        planning._mysql_index_visibility_sql("not an index", False)
+
+    assert planning._split_top_level_sql_list(
+        "LOWER('a,b'), [weird]]name], func(`x,y`, 2)"
+    ) == ["LOWER('a,b')", "[weird]]name]", "func(`x,y`, 2)"]
+    assert planning._index_column_list_bounds("CREATE INDEX idx ON flavor") is None
+    assert planning._index_column_list_bounds("CREATE INDEX idx flavor (name)") is None
+    assert planning._find_matching_sql_paren("func('unclosed'", 4) is None
+    assert planning._leading_sql_identifier_bounds("  1bad") is None
+    assert planning._leading_sql_identifier_bounds("   ") is None
+    assert planning._leading_sql_identifier_bounds(' "unterminated') is None
+
+
+@pytest.mark.parametrize(
+    ("dialect", "sequence", "message"),
+    [
+        (
+            "postgresql",
+            SequenceSnapshot("flavor_id_seq", data_type="numeric"),
+            "smallint, integer, or bigint",
+        ),
+        (
+            "mariadb",
+            SequenceSnapshot("flavor_id_seq", data_type="decimal(10, 0)"),
+            "integer type",
+        ),
+        (
+            "mariadb",
+            SequenceSnapshot("flavor_id_seq", data_type="bigint unsigned extra"),
+            "safe SQL type",
+        ),
+        (
+            "mssql",
+            SequenceSnapshot("flavor_id_seq", data_type="bigint unsigned"),
+            "signed or unsigned",
+        ),
+        (
+            "oracle",
+            SequenceSnapshot("flavor_id_seq", data_type="bigint"),
+            "sequence data types",
+        ),
+    ],
+)
+def test_sequence_type_validation_rejects_dialect_specific_invalid_types(
+    dialect: str, sequence: SequenceSnapshot, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        planning._create_sequence_sql(dialect, sequence)
+
+
+def test_sequence_helpers_cover_dialect_defaults_and_invalid_bounds() -> None:
+    assert planning._create_sequence_sql(
+        "mariadb",
+        SequenceSnapshot(
+            "flavor_id_seq",
+            schema="inventory",
+            data_type="INT UNSIGNED",
+            start=10,
+            increment=5,
+            no_min_value=True,
+            no_max_value=True,
+            cache=20,
+        ),
+    ) == (
+        "CREATE SEQUENCE IF NOT EXISTS `inventory`.`flavor_id_seq` AS int unsigned "
+        "START WITH 10 INCREMENT BY 5 NO MINVALUE NO MAXVALUE CACHE 20"
+    )
+    assert (
+        planning._drop_sequence_sql(
+            "oracle", SequenceSnapshot("flavor_id_seq", schema="inventory")
+        )
+        == 'DROP SEQUENCE "inventory"."flavor_id_seq"'
+    )
+    with pytest.raises(ValueError, match="data_type cannot be empty"):
+        planning._create_sequence_sql(
+            "postgresql", SequenceSnapshot("flavor_id_seq", data_type=" ")
+        )
+    with pytest.raises(ValueError, match="safe SQL type"):
+        planning._create_sequence_sql(
+            "postgresql", SequenceSnapshot("flavor_id_seq", data_type="int; drop")
+        )
+    assert (
+        planning._sequence_bound_requires_recreate(
+            SequenceSnapshot(
+                "flavor_id_seq",
+                data_type="integer",
+                increment=-1,
+                min_value=-2147483648,
+            ),
+            SequenceSnapshot("flavor_id_seq", data_type="integer", increment=-1),
+            "min_value",
+            "no_min_value",
+            dialect="postgresql",
+        )
+        is False
+    )
+    assert (
+        planning._sequence_bound_requires_recreate(
+            SequenceSnapshot(
+                "flavor_id_seq", data_type="tinyint unsigned", max_value=255
+            ),
+            SequenceSnapshot("flavor_id_seq", data_type="tinyint unsigned"),
+            "max_value",
+            "no_max_value",
+            dialect="mariadb",
+        )
+        is False
+    )
+    assert (
+        planning._sequence_bound_requires_recreate(
+            SequenceSnapshot("flavor_id_seq", max_value=10, no_max_value=False),
+            SequenceSnapshot("flavor_id_seq", max_value=10, no_max_value=True),
+            "max_value",
+            "no_max_value",
+            dialect=None,
+        )
+        is True
+    )
+
+
+def test_simple_view_signature_helpers_cover_quoted_identifier_edges() -> None:
+    assert planning._mysql_simple_view_signature(
+        "SELECT `Flavor`.`Name` AS `Label`, id FROM `Inventory`.`Flavor`"
+    ) == ("flavor", (("name", "label"), ("id", None)))
+    assert (
+        planning._mysql_simple_view_signature("SELECT lower(name) FROM flavor") is None
+    )
+    assert planning._mysql_view_identifier_parts("`inventory`.`odd_name`") == [
+        "inventory",
+        "odd_name",
+    ]
+    assert planning._mysql_view_identifier_parts("`inventory`.`odd``name`") is None
+    assert planning._mysql_view_identifier_parts("`unterminated") is None
+    assert planning._mysql_view_identifier_parts("inventory . flavor") is None
+    assert planning._mysql_view_identifier_parts("9bad") is None
+
+    assert planning._postgres_simple_view_signature(
+        'SELECT "Flavor"."Name" AS "Label", id FROM "Inventory"."Flavor"'
+    ) == (("Inventory", "Flavor"), (("Name", "Label"), ("id", None)))
+    assert (
+        planning._postgres_simple_view_signature("SELECT lower(name) FROM flavor")
+        is None
+    )
+    assert planning._postgres_view_identifier_parts('"Inventory"."odd""name"') == [
+        "Inventory",
+        'odd"name',
+    ]
+    assert planning._postgres_view_identifier_parts('"unterminated') is None
+    assert planning._postgres_view_identifier_parts("inventory . flavor") is None
+    assert planning._postgres_view_identifier_parts("9bad") is None
+
+    assert planning._mssql_simple_view_signature(
+        "CREATE OR ALTER VIEW [dbo].[active_flavors] AS "
+        "SELECT [Flavor].[Name] AS [Label], id FROM [Inventory].[Flavor]"
+    ) == ("flavor", (("name", "label"), ("id", None)))
+    assert (
+        planning._mssql_simple_view_signature("SELECT lower(name) FROM flavor") is None
+    )
+    assert planning._mssql_view_identifier_parts("[Inventory].[odd_name]") == [
+        "Inventory",
+        "odd_name",
+    ]
+    assert planning._mssql_view_identifier_parts("[Inventory].[odd]]name]") is None
+    assert planning._mssql_view_identifier_parts('"Inventory"."odd""name"') is None
+    assert planning._mssql_view_identifier_parts("[unterminated") is None
+    assert planning._mssql_view_identifier_parts("inventory . flavor") is None
+    assert planning._mssql_view_identifier_parts("9bad") is None
 
 
 def test_check_constraint_helpers_render_supported_checks() -> None:
@@ -4751,3 +5243,1032 @@ def test_sqlite_unresolved_rebuild_operations_raise() -> None:
                 )
             ],
         )
+
+
+def test_planning_helper_edge_branches_cover_metadata_and_parser_fallbacks() -> None:
+    identity_default = ColumnSnapshot(
+        "id",
+        "int",
+        False,
+        True,
+        identity=True,
+        identity_min_value=1,
+        identity_max_value=2147483647,
+    )
+    identity_implicit = ColumnSnapshot("id", "int", False, True, identity=True)
+    assert not planning._identity_bound_changed(
+        identity_default,
+        identity_implicit,
+        "identity_min_value",
+        "identity_no_min_value",
+        dialect="postgresql",
+    )
+    assert not planning._identity_bound_changed(
+        identity_implicit,
+        identity_default,
+        "identity_max_value",
+        "identity_no_max_value",
+        dialect="postgresql",
+    )
+    assert planning._identity_bound_changed(
+        ColumnSnapshot("id", "int", False, True, identity_min_value=1),
+        ColumnSnapshot(
+            "id",
+            "int",
+            False,
+            True,
+            identity_min_value=1,
+            identity_no_min_value=True,
+        ),
+        "identity_min_value",
+        "identity_no_min_value",
+    )
+    assert planning._default_identity_bound(None, identity_default, bound="min") is None
+    assert (
+        planning._default_identity_bound(
+            "oracle",
+            ColumnSnapshot("id", "int", False, True, identity_increment=-1),
+            bound="max",
+        )
+        == -1
+    )
+
+    operation = MigrationOperation('CREATE TABLE "flavor" ("id" TEXT)')
+    assert planning._rewrite_sqlite_rebuild_operations(
+        [operation],
+        SchemaSnapshot.empty(),
+        SchemaSnapshot.empty(),
+        destructive=False,
+        unsafe=False,
+    ) == [operation]
+    with pytest.raises(ValueError, match="cannot rebuild unknown sqlite table"):
+        planning._sqlite_rebuild_table_operations(
+            "missing",
+            SchemaSnapshot.empty(),
+            SchemaSnapshot.empty(),
+            destructive=True,
+            unsafe=True,
+        )
+    rebuild_ops = planning._sqlite_rebuild_table_operations(
+        "flavor",
+        SchemaSnapshot(
+            tables=[
+                table(
+                    "flavor",
+                    [column("id", primary_key=True), column("legacy")],
+                )
+            ]
+        ),
+        SchemaSnapshot(
+            tables=[
+                table(
+                    "flavor",
+                    [column("id", primary_key=True), column("name")],
+                    indexes=[IndexSnapshot("flavor_name_idx", ["name"])],
+                )
+            ]
+        ),
+        destructive=True,
+        unsafe=True,
+    )
+    copy_rows = next(
+        operation
+        for operation in rebuild_ops
+        if operation.metadata.get("phase") == "copy_rows"
+    )
+    assert copy_rows.sql == (
+        'INSERT INTO "__ormdantic_rebuild_flavor" ("id") SELECT "id" FROM "flavor"'
+    )
+
+    assert (
+        planning._classify_sql_operation(
+            "IF SCHEMA_ID(N'app') IS NULL EXEC(N'CREATE SCHEMA app')"
+        )["kind"]
+        == "create_schema"
+    )
+    assert (
+        planning._classify_sql_operation("CREATE TYPE flavor_kind AS ENUM ('mocha')")[
+            "kind"
+        ]
+        == "create_enum_type"
+    )
+    assert planning._classify_sql_operation("ALTER INDEX ix REBUILD")["kind"] == (
+        "alter_index"
+    )
+    assert not planning._classify_sql_operation("ALTER INDEX ix SET TABLESPACE fast")[
+        "unsafe"
+    ]
+    assert planning._sql_identifier_after("CREATE TABLE", "CREATE TABLE") is None
+    assert planning._sql_identifier_after_keyword("ALTER TABLE flavor", "ADD") is None
+    assert planning._sql_identifier_after_keyword("CREATE INDEX ix", " ON ") is None
+    assert planning._table_from_column_identifier(None) is None
+    assert planning._table_from_column_identifier("id") == "id"
+    assert planning._sql_identifier_after_keyword("ADD", "ADD") is None
+
+    with pytest.raises(ValueError, match="at least one migration artifact"):
+        planning.squash_migrations("squashed", [])
+    no_dialect = migrations.MigrationArtifact.from_plan(
+        "001",
+        MigrationPlan(),
+        SchemaSnapshot.empty(),
+        SchemaSnapshot.empty(),
+        dialect=None,
+    )
+    with pytest.raises(ValueError, match="dialect is required"):
+        planning.squash_migrations("squashed", [no_dialect])
+
+    assert planning._has_wrapping_parentheses("('it''s ok')")
+    assert planning._has_wrapping_parentheses('("identifier")')
+    assert planning._has_wrapping_parentheses("([identifier])")
+    assert not planning._has_wrapping_parentheses("(value) + 1")
+    assert not planning._has_wrapping_parentheses(")value(")
+
+    with pytest.raises(ValueError, match="bitmap indexes cannot be unique"):
+        planning._append_oracle_index_options(
+            "oracle",
+            'CREATE UNIQUE INDEX "flavor_name_idx" ON "flavor" ("name")',
+            {"bitmap": True},
+        )
+    assert (
+        planning._append_oracle_index_options(
+            "oracle",
+            'CREATE INDEX "flavor_name_idx" ON "flavor" ("name")',
+            {"bitmap": True, "compress": True, "tablespace": "fastspace"},
+        )
+        == 'CREATE BITMAP INDEX "flavor_name_idx" ON "flavor" ("name") '
+        'COMPRESS TABLESPACE "fastspace"'
+    )
+
+    assert planning._create_namespace_sql(
+        "mssql",
+        NamespaceSnapshot("app"),
+    ).startswith("IF SCHEMA_ID(N'app') IS NULL EXEC")
+    with pytest.raises(ValueError, match="namespace migrations"):
+        planning._drop_namespace_sql("sqlite", NamespaceSnapshot("app"))
+
+    descending = SequenceSnapshot(
+        "flavor_seq",
+        increment=-1,
+        data_type="smallint",
+    )
+    assert (
+        planning._default_sequence_bound("postgresql", descending, bound="min")
+        == -32768
+    )
+    assert planning._default_sequence_bound("postgresql", descending, bound="max") == -1
+    assert planning._default_sequence_bound("oracle", descending, bound="max") == -1
+    assert planning._default_sequence_bound(None, descending, bound="min") is None
+
+    assert planning._annotate_postgres_unique_include_sql(
+        "postgresql",
+        ["CREATE TABLE flavor (id TEXT)"],
+        [],
+    ) == ["CREATE TABLE flavor (id TEXT)"]
+    with pytest.raises(ValueError, match="INCLUDE columns"):
+        planning._postgres_unique_include_constraint_sql(
+            "CONSTRAINT flavor_name_unique CHECK (name <> '')",
+            ["code"],
+        )
+    with pytest.raises(ValueError, match="INCLUDE columns"):
+        planning._postgres_unique_include_constraint_sql(
+            "CONSTRAINT flavor_name_unique UNIQUE name",
+            ["code"],
+        )
+    with pytest.raises(ValueError, match="INCLUDE columns"):
+        planning._postgres_unique_include_constraint_sql(
+            "CONSTRAINT flavor_name_unique UNIQUE (name",
+            ["code"],
+        )
+    assert (
+        planning._postgres_unique_include_create_table_sql(
+            "CREATE TABLE flavor id TEXT",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "CREATE TABLE flavor id TEXT"
+    )
+    assert (
+        planning._postgres_unique_include_create_table_sql(
+            "CREATE TABLE flavor (CONSTRAINT flavor_name_unique UNIQUE (name)",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "CREATE TABLE flavor (CONSTRAINT flavor_name_unique UNIQUE (name)"
+    )
+    assert (
+        planning._postgres_unique_include_alter_table_sql(
+            "ALTER TABLE flavor ADD CHECK (name <> '')",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "ALTER TABLE flavor ADD CHECK (name <> '')"
+    )
+
+    with pytest.raises(ValueError, match="NULLS NOT DISTINCT"):
+        planning._annotate_postgres_index_nulls_not_distinct_sql(
+            "sqlite",
+            ["CREATE UNIQUE INDEX flavor_name_idx ON flavor (name)"],
+            [
+                table(
+                    "flavor",
+                    [column("id", primary_key=True), column("name")],
+                    indexes=[
+                        IndexSnapshot(
+                            "flavor_name_idx",
+                            ["name"],
+                            unique=True,
+                            postgres_nulls_not_distinct=True,
+                        )
+                    ],
+                )
+            ],
+        )
+    with pytest.raises(ValueError, match="non-unique"):
+        planning._postgres_index_nulls_not_distinct_sql(
+            "CREATE INDEX flavor_name_idx ON flavor (name)"
+        )
+    with pytest.raises(ValueError, match="CREATE INDEX SQL"):
+        planning._postgres_index_nulls_not_distinct_sql(
+            "CREATE UNIQUE INDEX flavor_name_idx ON flavor"
+        )
+    with pytest.raises(ValueError, match="after INCLUDE"):
+        planning._postgres_index_nulls_not_distinct_sql(
+            "CREATE UNIQUE INDEX flavor_name_idx ON flavor (name) INCLUDE code"
+        )
+    with pytest.raises(ValueError, match="after INCLUDE"):
+        planning._postgres_index_nulls_not_distinct_sql(
+            "CREATE UNIQUE INDEX flavor_name_idx ON flavor (name) INCLUDE (code"
+        )
+
+    with pytest.raises(ValueError, match="index prefix"):
+        planning._mysql_index_prefix_sql("CREATE INDEX ix", "FULLTEXT")
+    with pytest.raises(ValueError, match="non-unique"):
+        planning._mysql_index_prefix_sql(
+            "CREATE UNIQUE INDEX ix ON flavor (name)",
+            "FULLTEXT",
+        )
+    assert planning._annotate_mysql_index_using_sql(
+        "mysql",
+        ["CREATE INDEX ix ON flavor (name)"],
+        [],
+    ) == ["CREATE INDEX ix ON flavor (name)"]
+    with pytest.raises(ValueError, match="USING method"):
+        planning._mysql_index_using_sql("CREATE INDEX ix", "HASH")
+    with pytest.raises(ValueError, match="cannot be combined"):
+        planning._mysql_index_using_sql(
+            "CREATE FULLTEXT INDEX ix ON flavor (name)",
+            "HASH",
+        )
+    assert (
+        planning._mysql_index_length_sql(
+            "CREATE INDEX ix ON flavor (LOWER(name), code)",
+            {"code": 12},
+        )
+        == "CREATE INDEX ix ON flavor (LOWER(name), code(12))"
+    )
+    with pytest.raises(ValueError, match="prefix lengths"):
+        planning._mysql_index_length_sql("CREATE INDEX ix ON flavor", {"name": 8})
+    with pytest.raises(ValueError, match="reference columns"):
+        planning._mysql_index_length_sql(
+            "CREATE INDEX ix ON flavor (name)",
+            {"code": 8},
+        )
+    assert planning._annotate_mysql_index_visibility_sql(
+        "mysql",
+        ["CREATE INDEX ix ON flavor (name)"],
+        [],
+    ) == ["CREATE INDEX ix ON flavor (name)"]
+    with pytest.raises(ValueError, match="index visibility"):
+        planning._mysql_index_visibility_sql("CREATE INDEX ix", False)
+
+    assert planning._leading_sql_identifier_bounds("   ") is None
+    assert planning._leading_sql_identifier_bounds(" 9bad") is None
+    assert planning._leading_sql_identifier_bounds('"unterminated') is None
+    assert planning._leading_sql_identifier_bounds("[unterminated") is None
+    assert planning._leading_index_column_identifier_bounds(" 9bad") is None
+    assert planning._leading_index_column_identifier_bounds("lower(name)") is None
+    assert planning._quoted_identifier_end('"a""b" tail', 0, '"') == 6
+    assert planning._find_sql_char("['('] \"(\" (target)", "(", 0) == 10
+    assert planning._find_matching_sql_paren("(name, '[)]', [x]) tail", 0) == 17
+    assert planning._find_matching_sql_paren("(name", 0) is None
+    assert planning._create_index_statement_key("CREATE INDEX ix flavor (name)") is None
+    assert planning._create_index_statement_prefix("CREATE UNKNOWN INDEX") is None
+    assert planning._mssql_clustered_index_sql("CREATE SPATIAL INDEX ix ON t (g)") == (
+        "CREATE SPATIAL INDEX ix ON t (g)"
+    )
+    with pytest.raises(ValueError, match="multiple SQL Server clustered"):
+        planning._mssql_clustered_indexes_by_key(
+            [
+                table(
+                    "flavor",
+                    [column("id", primary_key=True), column("name"), column("code")],
+                    indexes=[
+                        IndexSnapshot(
+                            "flavor_name_idx",
+                            ["name"],
+                            mssql_clustered=True,
+                        ),
+                        IndexSnapshot(
+                            "flavor_code_idx",
+                            ["code"],
+                            mssql_clustered=True,
+                        ),
+                    ],
+                )
+            ]
+        )
+
+
+def test_remaining_planning_helper_edges_cover_schema_objects_and_sql_fallbacks() -> (
+    None
+):
+    before = SchemaSnapshot(
+        enum_types=[
+            EnumTypeSnapshot("flavor_kind", ["mocha"], schema="inventory"),
+        ],
+        sequences=[
+            SequenceSnapshot("flavor_id_seq", schema="inventory"),
+        ],
+        views=[
+            ViewSnapshot("flavor_view", "SELECT id FROM flavor", schema="inventory"),
+        ],
+    )
+    diff = planning.diff_snapshots(before, SchemaSnapshot.empty(), dialect="postgresql")
+    assert any(change.object_type == "enum_type" for change in diff.changes)
+    assert any(change.object_type == "sequence" for change in diff.changes)
+    assert any(change.object_type == "view" for change in diff.changes)
+
+    assert "identity_min_value" in planning._changed_column_fields(
+        ColumnSnapshot("id", "int", False, True, identity_min_value=5),
+        ColumnSnapshot("id", "int", False, True, identity_min_value=6),
+        dialect="postgresql",
+    )
+    payload = planning._operation_payload(
+        MigrationPlan([MigrationOperation("SELECT ?", values=(1,))])
+    )
+    assert payload == [("SELECT ?", (1,))]
+
+    changed_tables = [
+        table(f"flavor_{index}", [column("id", primary_key=True)], tablespace="old")
+        for index in range(4)
+    ]
+    moved_tables = [
+        table(f"flavor_{index}", [column("id", primary_key=True)], tablespace="new")
+        for index in range(4)
+    ]
+    with pytest.raises(ValueError, match=r"flavor_0, flavor_1, flavor_2, \.\.\."):
+        planning._raise_if_unsupported_mssql_table_filegroup_changes(
+            "mssql",
+            SchemaSnapshot(tables=changed_tables),
+            SchemaSnapshot(tables=moved_tables),
+        )
+    assert planning._compile_mariadb_table_tablespace_diff(
+        "mariadb",
+        SchemaSnapshot(tables=[changed_tables[0]]),
+        SchemaSnapshot(tables=[moved_tables[0]]),
+    )[0]["sql"].startswith("ALTER TABLE")
+    assert (
+        planning._snapshot_without_mariadb_table_tablespace_changes(
+            SchemaSnapshot(tables=[changed_tables[0]]),
+            SchemaSnapshot(tables=[moved_tables[0]]),
+        )
+        .tables[0]
+        .tablespace
+        == "old"
+    )
+    assert (
+        planning._snapshot_without_unmanaged_mysql_auto_increment(
+            SchemaSnapshot(
+                tables=[
+                    table(
+                        "flavor",
+                        [column("id", primary_key=True)],
+                        mysql_auto_increment=42,
+                    )
+                ]
+            ),
+            SchemaSnapshot(tables=[table("flavor", [column("id", primary_key=True)])]),
+        )
+        .tables[0]
+        .mysql_auto_increment
+        is None
+    )
+
+    assert (
+        planning._postgres_unique_include_statement_sql(
+            "SELECT 1",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "SELECT 1"
+    )
+    assert (
+        planning._postgres_unique_include_create_table_sql(
+            "CREATE TABLE",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "CREATE TABLE"
+    )
+    assert (
+        planning._postgres_unique_include_create_table_sql(
+            "CREATE TABLE flavor (CONSTRAINT other UNIQUE (name))",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "CREATE TABLE flavor (CONSTRAINT other UNIQUE (name))"
+    )
+    assert (
+        planning._postgres_unique_include_alter_table_sql(
+            "ALTER TABLE flavor ADD CONSTRAINT other UNIQUE (name)",
+            {("flavor", "flavor_name_unique"): ["code"]},
+        )
+        == "ALTER TABLE flavor ADD CONSTRAINT other UNIQUE (name)"
+    )
+    assert (
+        planning._postgres_index_ops_sql(
+            "CREATE INDEX ix ON flavor (lower(name))",
+            {"lower(name)": "text_pattern_ops"},
+        )
+        == "CREATE INDEX ix ON flavor (lower(name) text_pattern_ops)"
+    )
+    assert planning._leading_index_column_identifier_bounds("lower(name)") is None
+    with pytest.raises(ValueError, match="requires unique indexes"):
+        planning._postgres_nulls_not_distinct_indexes_by_key(
+            [
+                table(
+                    "flavor",
+                    [column("id", primary_key=True), column("name")],
+                    indexes=[
+                        IndexSnapshot(
+                            "flavor_name_idx",
+                            ["name"],
+                            unique=False,
+                            postgres_nulls_not_distinct=True,
+                        )
+                    ],
+                )
+            ]
+        )
+
+    assert planning._index_column_list_bounds("CREATE INDEX ix ON flavor (name") is None
+    assert planning._find_sql_char("'a''b' target", "t", 0) == 7
+    assert planning._find_matching_sql_paren("('a''b')", 0) == 7
+    assert planning._split_top_level_sql_list("'a'',b', c") == ["'a'',b'", "c"]
+    assert planning._mysql_index_column_length_item_sql("1bad", {"bad": 4}, set()) == (
+        "1bad"
+    )
+    with pytest.raises(ValueError, match="inline index comments"):
+        planning._append_inline_index_comment_sql("sqlite", "CREATE INDEX ix", "note")
+
+    unsupported_index_table = table(
+        "flavor",
+        [column("id", primary_key=True), column("name")],
+        indexes=[IndexSnapshot("flavor_name_idx", ["name"], mssql_clustered=True)],
+    )
+    with pytest.raises(ValueError, match="clustered indexes"):
+        planning._annotate_mssql_clustered_index_sql(
+            "sqlite",
+            ["CREATE INDEX flavor_name_idx ON flavor (name)"],
+            [unsupported_index_table],
+        )
+    unsupported_filegroup_table = table(
+        "flavor",
+        [column("id", primary_key=True), column("name")],
+        indexes=[
+            IndexSnapshot("flavor_name_idx", ["name"], mssql_filegroup="fastdata")
+        ],
+    )
+    with pytest.raises(ValueError, match="index filegroups"):
+        planning._annotate_mssql_index_filegroup_sql(
+            "sqlite",
+            ["CREATE INDEX flavor_name_idx ON flavor (name)"],
+            [unsupported_filegroup_table],
+        )
+    oracle_table = table(
+        "flavor",
+        [column("id", primary_key=True), column("name")],
+        indexes=[
+            IndexSnapshot(
+                "flavor_name_idx",
+                ["name"],
+                oracle_tablespace="fastspace",
+                oracle_compress=2,
+            )
+        ],
+    )
+    assert planning._annotate_oracle_index_tablespace_operations(
+        "oracle",
+        [{"sql": 'CREATE INDEX "flavor_name_idx" ON "flavor" ("name")'}],
+        [oracle_table],
+    )[0]["sql"].endswith('COMPRESS 2 TABLESPACE "fastspace"')
+    assert planning._annotate_oracle_index_tablespace_sql(
+        "oracle",
+        ['CREATE INDEX "flavor_name_idx" ON "flavor" ("name")'],
+        [oracle_table],
+    )[0].endswith('COMPRESS 2 TABLESPACE "fastspace"')
+    assert planning._oracle_index_tablespaces_by_key([oracle_table]) == {
+        ("flavor", "flavor_name_idx"): "fastspace"
+    }
+
+    metadata_table = table(
+        "flavor",
+        [column("id", primary_key=True), column("name")],
+        indexes=[
+            IndexSnapshot(
+                "flavor_name_idx",
+                ["name"],
+                comment="Name lookup",
+                postgres_tablespace="fastspace",
+                postgres_ops={"name": "text_pattern_ops"},
+                postgres_nulls_not_distinct=True,
+                mssql_filegroup="fastdata",
+                oracle_tablespace="fastspace",
+                oracle_bitmap=True,
+                oracle_compress=True,
+                mysql_prefix="FULLTEXT",
+                mysql_length={"name": 12},
+                mysql_using="BTREE",
+                mysql_visible=False,
+            )
+        ],
+        named_unique_constraints=[
+            UniqueConstraintSnapshot(
+                "flavor_name_unique",
+                ["name"],
+                comment="unique name",
+                postgres_include=["id"],
+            )
+        ],
+        check_constraints=[
+            TableCheckSnapshot("flavor_name_check", "name <> ''", comment="check")
+        ],
+        foreign_key_constraints=[
+            ForeignKeyConstraintSnapshot(
+                "flavor_parent_fk",
+                ["id"],
+                "flavor",
+                ["id"],
+                comment="parent",
+            )
+        ],
+        exclusion_constraints=[
+            ExclusionConstraintSnapshot(
+                "flavor_name_excl",
+                columns=[("name", "=")],
+                comment="exclude",
+            )
+        ],
+    )
+    normalized = planning._snapshot_without_python_metadata(
+        SchemaSnapshot(tables=[metadata_table])
+    ).tables[0]
+    assert normalized.indexes[0].comment is None
+    assert normalized.indexes[0].postgres_ops == {}
+    assert normalized.named_unique_constraints[0].postgres_include == []
+    assert normalized.check_constraints[0].comment is None
+    assert normalized.foreign_key_constraints[0].comment is None
+    assert normalized.exclusion_constraints[0].comment is None
+
+    unmatched_check = table(
+        "flavor",
+        [column("id", primary_key=True)],
+        check_constraints=[TableCheckSnapshot("missing_in_target", "id > 0")],
+    )
+    planning._snapshots_with_normalized_matching_table_checks(
+        SchemaSnapshot(tables=[unmatched_check]),
+        SchemaSnapshot(tables=[table("flavor", [column("id", primary_key=True)])]),
+    )
+    assert (
+        planning._snapshot_with_table_check_expressions(
+            SchemaSnapshot(tables=[unmatched_check]),
+            {},
+        ).tables[0]
+        is unmatched_check
+    )
+    assert (
+        planning._snapshot_with_table_check_expressions(
+            SchemaSnapshot(
+                tables=[
+                    unmatched_check,
+                    table("other", [column("id", primary_key=True)]),
+                ]
+            ),
+            {("public", "missing"): {"missing": "id > 0"}},
+        ).tables[0]
+        is unmatched_check
+    )
+    assert not planning._has_wrapping_parentheses("(value) + 1")
+
+    namespace_before, namespace_after = planning._compile_namespace_diff(
+        "mssql",
+        SchemaSnapshot(namespaces=[NamespaceSnapshot("app", comment="old")]),
+        SchemaSnapshot(
+            namespaces=[
+                NamespaceSnapshot("app", comment=None),
+                NamespaceSnapshot("archive", comment="Archive"),
+            ]
+        ),
+    )
+    assert any("sp_dropextendedproperty" in item["sql"] for item in namespace_before)
+    assert any("CREATE SCHEMA" in item["sql"] for item in namespace_before)
+    assert namespace_after == []
+    namespace_comment_before, _namespace_comment_after = (
+        planning._compile_namespace_diff(
+            "postgresql",
+            SchemaSnapshot(namespaces=[NamespaceSnapshot("app")]),
+            SchemaSnapshot(
+                namespaces=[NamespaceSnapshot("app", comment="Application")]
+            ),
+        )
+    )
+    assert namespace_comment_before == [
+        {"sql": "COMMENT ON SCHEMA \"app\" IS 'Application'"}
+    ]
+    enum_before, enum_after = planning._compile_enum_type_diff(
+        "postgresql",
+        SchemaSnapshot(enum_types=[EnumTypeSnapshot("kind", ["a"], comment="old")]),
+        SchemaSnapshot(
+            enum_types=[EnumTypeSnapshot("kind", ["a", "b"], comment="new")]
+        ),
+    )
+    assert enum_before == []
+    assert any("COMMENT ON TYPE" in item["sql"] for item in enum_after)
+    sequence_before, sequence_after = planning._compile_sequence_diff(
+        "postgresql",
+        SchemaSnapshot(sequences=[SequenceSnapshot("seq", start=1, comment="old")]),
+        SchemaSnapshot(sequences=[SequenceSnapshot("seq", start=2, comment="new")]),
+    )
+    assert sequence_before == []
+    assert any("COMMENT ON SEQUENCE" in item["sql"] for item in sequence_after)
+    sequence_comment_before, sequence_comment_after = planning._compile_sequence_diff(
+        "postgresql",
+        SchemaSnapshot(sequences=[SequenceSnapshot("seq", comment="old")]),
+        SchemaSnapshot(sequences=[SequenceSnapshot("seq", comment="new")]),
+    )
+    assert sequence_comment_after == []
+    assert sequence_comment_before == [{"sql": "COMMENT ON SEQUENCE \"seq\" IS 'new'"}]
+
+    index_error_cases = [
+        (
+            "sqlite",
+            IndexSnapshot("ix", ["name"], mssql_filegroup="fg"),
+            "SQL Server index",
+        ),
+        (
+            "sqlite",
+            IndexSnapshot("ix", ["name"], oracle_tablespace="fast"),
+            "Oracle index",
+        ),
+        (
+            "sqlite",
+            IndexSnapshot("ix", ["name"], postgres_ops={"name": "text_ops"}),
+            "operator classes",
+        ),
+        (
+            "sqlite",
+            IndexSnapshot(
+                "ix", ["name"], unique=True, postgres_nulls_not_distinct=True
+            ),
+            "NULLS NOT DISTINCT",
+        ),
+        (
+            "mariadb",
+            IndexSnapshot("ix", ["name"], mysql_visible=False),
+            "index visibility",
+        ),
+        (
+            "sqlite",
+            IndexSnapshot("ix", ["name"], mysql_prefix="FULLTEXT"),
+            "prefixes",
+        ),
+    ]
+    for dialect, index, message in index_error_cases:
+        with pytest.raises(ValueError, match=message):
+            planning._compile_index_metadata_diff(
+                dialect,
+                SchemaSnapshot.empty(),
+                SchemaSnapshot(
+                    tables=[
+                        table(
+                            "flavor",
+                            [column("id", primary_key=True), column("name")],
+                            indexes=[index],
+                        )
+                    ]
+                ),
+            )
+    with pytest.raises(ValueError, match="requires unique indexes"):
+        planning._compile_index_metadata_diff(
+            "postgresql",
+            SchemaSnapshot.empty(),
+            SchemaSnapshot(
+                tables=[
+                    table(
+                        "flavor",
+                        [column("id", primary_key=True), column("name")],
+                        indexes=[
+                            IndexSnapshot(
+                                "ix",
+                                ["name"],
+                                unique=False,
+                                postgres_nulls_not_distinct=True,
+                            )
+                        ],
+                    )
+                ]
+            ),
+        )
+    with pytest.raises(ValueError, match="INCLUDE columns"):
+        planning._compile_unique_constraint_metadata_diff(
+            "sqlite",
+            SchemaSnapshot.empty(),
+            SchemaSnapshot(
+                tables=[
+                    table(
+                        "flavor",
+                        [column("id", primary_key=True), column("name")],
+                        named_unique_constraints=[
+                            UniqueConstraintSnapshot(
+                                "uq_name",
+                                ["name"],
+                                postgres_include=["id"],
+                            )
+                        ],
+                    )
+                ]
+            ),
+        )
+    assert planning._explicit_constraint_definition(None, "missing") is None
+    assert (
+        planning._explicit_constraint_definition(
+            table("flavor", [column("id", primary_key=True)]),
+            "missing",
+        )
+        is None
+    )
+
+    basic_table = table("flavor", [column("id", primary_key=True)])
+    basic_index = IndexSnapshot("ix", ["id"])
+    with pytest.raises(ValueError, match="enum type comments"):
+        planning._set_enum_type_comment_sql(
+            "sqlite", EnumTypeSnapshot("kind", ["a"], comment=None)
+        )
+    assert (
+        planning._set_index_tablespace_sql(
+            "postgresql",
+            basic_table,
+            basic_index,
+            for_create=True,
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="standalone index comments"):
+        planning._set_index_comment_sql("sqlite", basic_table, basic_index)
+    with pytest.raises(ValueError, match="index tablespaces"):
+        planning._set_index_tablespace_sql("sqlite", basic_table, basic_index)
+    with pytest.raises(ValueError, match="table tablespaces"):
+        planning._set_mysql_table_tablespace_sql("sqlite", basic_table)
+    with pytest.raises(ValueError, match="constraint comments"):
+        planning._set_constraint_comment_sql("sqlite", basic_table, "pk", "comment")
+    assert "sp_dropextendedproperty" in planning._mssql_constraint_comment_sql(
+        basic_table,
+        "pk_flavor",
+        None,
+    )
+    assert planning._quote_table_name("postgresql", basic_table) == '"flavor"'
+    assert planning._quote_index_name("postgresql", basic_table, basic_index) == '"ix"'
+
+    with pytest.raises(ValueError, match="namespace migrations"):
+        planning._create_namespace_sql("sqlite", NamespaceSnapshot("app"))
+    assert (
+        planning._set_namespace_comment_sql(
+            "postgresql",
+            "app",
+            None,
+            for_create=True,
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="namespace comments"):
+        planning._set_namespace_comment_sql("mysql", "app", "comment")
+    assert "sp_dropextendedproperty" in planning._mssql_namespace_comment_sql(
+        "app",
+        None,
+    )
+    assert "sp_dropextendedproperty" in planning._mssql_index_comment_sql(
+        basic_table,
+        basic_index,
+    )
+
+    with pytest.raises(ValueError, match="sequence migrations"):
+        planning._create_sequence_sql("sqlite", SequenceSnapshot("seq"))
+    with pytest.raises(ValueError, match="no_min_value"):
+        planning._create_sequence_sql(
+            "postgresql", SequenceSnapshot("seq", no_min_value=True, min_value=1)
+        )
+    with pytest.raises(ValueError, match="no_max_value"):
+        planning._create_sequence_sql(
+            "postgresql", SequenceSnapshot("seq", no_max_value=True, max_value=10)
+        )
+    with pytest.raises(ValueError, match="sequence ordering"):
+        planning._create_sequence_sql("mssql", SequenceSnapshot("seq", order=True))
+    assert (
+        planning._set_sequence_comment_sql(
+            "postgresql",
+            SequenceSnapshot("seq"),
+            for_create=True,
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="sequence comments"):
+        planning._set_sequence_comment_sql(
+            "oracle", SequenceSnapshot("seq", comment="x")
+        )
+    assert "sp_dropextendedproperty" in planning._mssql_sequence_comment_sql(
+        SequenceSnapshot("seq")
+    )
+    assert (
+        planning._quote_sequence_name("postgresql", SequenceSnapshot("seq")) == '"seq"'
+    )
+    assert planning._sequence_qualified_name(SequenceSnapshot("seq")) == "seq"
+    assert (
+        planning._default_sequence_bound(
+            "mssql",
+            SequenceSnapshot("seq", data_type="tinyint"),
+            bound="min",
+        )
+        == 0
+    )
+    assert planning._default_sequence_bound(
+        "oracle",
+        SequenceSnapshot("seq", increment=-1),
+        bound="min",
+    ) == -(10**27 - 1)
+    assert (
+        planning._default_sequence_bound(
+            "mariadb",
+            SequenceSnapshot("seq", increment=-1, data_type="tinyint unsigned"),
+            bound="min",
+        )
+        == 0
+    )
+    assert (
+        planning._default_sequence_bound(
+            "mariadb",
+            SequenceSnapshot("seq", data_type="smallint"),
+            bound="max",
+        )
+        == 32767
+    )
+    assert planning._normalized_integer_type_name(None) is None
+
+    with pytest.raises(ValueError, match="view migrations"):
+        planning._create_view_sql("unknown", ViewSnapshot("v", "SELECT 1"))
+    with pytest.raises(ValueError, match="materialized view migrations"):
+        planning._create_view_sql(
+            "sqlite", ViewSnapshot("v", "SELECT 1", materialized=True)
+        )
+    assert (
+        planning._set_view_comment_sql(
+            "postgresql",
+            ViewSnapshot("v", "SELECT 1"),
+            for_create=True,
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="view comments"):
+        planning._set_view_comment_sql(
+            "sqlite", ViewSnapshot("v", "SELECT 1", comment="x")
+        )
+    assert "sp_dropextendedproperty" in planning._mssql_view_comment_sql(
+        "app.v",
+        None,
+    )
+    assert (
+        planning._compiled_view_comment_sql(
+            "postgresql",
+            ViewSnapshot("v", "SELECT 1"),
+            for_create=True,
+        )
+        is None
+    )
+    view_comment_before, view_comment_after = planning._compile_view_diff(
+        "postgresql",
+        SchemaSnapshot(views=[ViewSnapshot("v", "SELECT 1", comment="old")]),
+        SchemaSnapshot(views=[ViewSnapshot("v", "SELECT 1", comment="new")]),
+    )
+    assert view_comment_after == []
+    assert [item["sql"] for item in view_comment_before] == [
+        "COMMENT ON VIEW \"v\" IS 'new'"
+    ]
+
+    assert planning._mysql_simple_view_signature("not select") is None
+    assert planning._mysql_simple_view_signature("SELECT id FROM bad table") is None
+    assert planning._mysql_simple_view_column_signature("name AS bad alias") is None
+    assert planning._mysql_view_identifier_name(None) is None
+    assert planning._mysql_view_identifier_parts("") is None
+    assert planning._mysql_view_identifier_part("9bad") is None
+
+    assert planning._postgres_simple_view_signature("not select") is None
+    assert planning._postgres_simple_view_signature("SELECT id FROM bad table") is None
+    assert planning._postgres_simple_view_column_signature("name AS bad alias") is None
+    assert planning._postgres_view_identifier_name(None) is None
+    assert planning._postgres_view_identifier_parts("") is None
+    assert planning._postgres_view_identifier_part('""') is None
+    assert planning._postgres_simple_view_column_signature("id AS id") == (
+        "id",
+        None,
+    )
+
+    assert planning._mssql_simple_view_signature("not select") is None
+    assert planning._mssql_simple_view_signature("SELECT id FROM bad table") is None
+    assert planning._mssql_simple_view_column_signature("name AS bad alias") is None
+    assert planning._mssql_view_identifier_name(None) is None
+    assert planning._mssql_view_identifier_parts("") is None
+    assert planning._mssql_view_identifier_part("9bad") is None
+    assert planning._mssql_simple_view_column_signature("[id] AS [id]") == (
+        "id",
+        None,
+    )
+    assert planning._split_qualified_name("flavor") == (None, "flavor")
+    assert planning._split_qualified_name("inventory.flavor") == (
+        "inventory",
+        "flavor",
+    )
+    assert (
+        planning._check_expression(
+            "name",
+            ("length", ">=", "2"),
+            dialect="mssql",
+        )
+        == "LEN(name) >= 2"
+    )
+    assert planning._check_expression("kind", ("enum", "in", "'a', 'b'")) == (
+        "kind IN ('a', 'b')"
+    )
+    assert planning._check_expression("code", ("pattern", "matches", "'^[A-Z]+$'")) == (
+        "ormdantic_regex_match(code, '^[A-Z]+$')"
+    )
+    assert planning._check_expression("quantity", ("multiple_of", "=", "5")) == (
+        "ormdantic_multiple_of(quantity, 5)"
+    )
+    with pytest.raises(ValueError, match="unsupported check constraint"):
+        planning._check_expression("quantity", ("custom", "=", "5"))
+
+
+def test_compile_index_metadata_diff_recreates_mysql_structural_option_changes() -> (
+    None
+):
+    before = SchemaSnapshot(
+        tables=[
+            table(
+                "flavor",
+                [
+                    column("id", primary_key=True),
+                    column("name"),
+                    column("code"),
+                ],
+                indexes=[
+                    IndexSnapshot(
+                        "flavor_lookup_idx",
+                        ["name"],
+                        mysql_visible=True,
+                    ),
+                    IndexSnapshot(
+                        "flavor_prefix_idx",
+                        ["name"],
+                        mysql_length={"name": 12},
+                        mysql_using="BTREE",
+                    ),
+                ],
+            )
+        ]
+    )
+    after = SchemaSnapshot(
+        tables=[
+            table(
+                "flavor",
+                [
+                    column("id", primary_key=True),
+                    column("name"),
+                    column("code"),
+                ],
+                indexes=[
+                    IndexSnapshot(
+                        "flavor_lookup_idx",
+                        ["code"],
+                        mysql_visible=False,
+                    ),
+                    IndexSnapshot(
+                        "flavor_prefix_idx",
+                        ["code"],
+                        mysql_prefix="FULLTEXT",
+                        mysql_length={"code": 8},
+                    ),
+                ],
+            )
+        ]
+    )
+
+    statements = planning._compile_index_metadata_diff("mysql", before, after)
+    sql = [statement["sql"] for statement in statements]
+
+    assert "DROP INDEX `flavor_lookup_idx` ON `flavor`" in sql
+    assert "CREATE INDEX `flavor_lookup_idx` ON `flavor` (`code`) INVISIBLE" in sql
+    assert "DROP INDEX `flavor_prefix_idx` ON `flavor`" in sql
+    assert "CREATE FULLTEXT INDEX `flavor_prefix_idx` ON `flavor` (`code`(8))" in sql

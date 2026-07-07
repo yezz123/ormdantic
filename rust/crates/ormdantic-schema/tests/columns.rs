@@ -25,7 +25,11 @@ fn column_builder_exposes_all_options() {
         .autoincrement(true)
         .with_collation("NOCASE")
         .with_comment("computed total")
-        .numeric(12, 2);
+        .numeric(12, 2)
+        .with_max_length(255)
+        .with_sqlite_on_conflict_primary_key("REPLACE")
+        .with_sqlite_on_conflict_not_null("FAIL")
+        .with_sqlite_on_conflict_unique("IGNORE");
 
     assert_eq!(column.name(), "total");
     assert_eq!(column.kind(), &FieldKind::Decimal);
@@ -51,6 +55,10 @@ fn column_builder_exposes_all_options() {
     assert_eq!(column.comment(), Some("computed total"));
     assert_eq!(column.precision(), Some(12));
     assert_eq!(column.scale(), Some(2));
+    assert_eq!(column.max_length(), Some(255));
+    assert_eq!(column.sqlite_on_conflict_primary_key(), Some("REPLACE"));
+    assert_eq!(column.sqlite_on_conflict_not_null(), Some("FAIL"));
+    assert_eq!(column.sqlite_on_conflict_unique(), Some("IGNORE"));
 }
 
 #[test]
@@ -81,4 +89,25 @@ fn identity_builder_exposes_no_bound_flags() {
     assert!(identity.is_no_max_value());
     assert_eq!(identity.minimum_value(), None);
     assert_eq!(identity.maximum_value(), None);
+}
+
+#[test]
+fn column_builder_accepts_sqlite_conflict_options() {
+    let column = ColumnDef::new("name", FieldKind::String)
+        .with_sqlite_on_conflict_primary_key_option(Some("ROLLBACK".to_string()))
+        .with_sqlite_on_conflict_not_null_option(Some("ABORT".to_string()))
+        .with_sqlite_on_conflict_unique_option(Some("FAIL".to_string()));
+
+    assert_eq!(column.sqlite_on_conflict_primary_key(), Some("ROLLBACK"));
+    assert_eq!(column.sqlite_on_conflict_not_null(), Some("ABORT"));
+    assert_eq!(column.sqlite_on_conflict_unique(), Some("FAIL"));
+
+    let cleared = column
+        .with_sqlite_on_conflict_primary_key_option(None)
+        .with_sqlite_on_conflict_not_null_option(None)
+        .with_sqlite_on_conflict_unique_option(None);
+
+    assert_eq!(cleared.sqlite_on_conflict_primary_key(), None);
+    assert_eq!(cleared.sqlite_on_conflict_not_null(), None);
+    assert_eq!(cleared.sqlite_on_conflict_unique(), None);
 }

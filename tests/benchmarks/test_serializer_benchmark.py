@@ -10,7 +10,14 @@ import pytest
 from pydantic import BaseModel, Field
 
 from ormdantic import Ormdantic, column, joinedload, selectinload
-from ormdantic.migrations import MigrationOperation, MigrationPlan
+from ormdantic.migrations import (
+    ColumnSnapshot,
+    MigrationOperation,
+    MigrationPlan,
+    SchemaSnapshot,
+    TableSnapshot,
+    diff_snapshots,
+)
 from ormdantic.models import Map, OrmTable, Relationship
 from ormdantic.serializer import OrmSerializer
 
@@ -667,3 +674,44 @@ def test_reflection_migration_benchmark(benchmark: Any) -> None:
         )
 
     assert result >= 2
+
+
+def _migration_snapshot(table_count: int, expanded: bool) -> SchemaSnapshot:
+    tables = []
+    for index in range(table_count):
+        columns = [
+            ColumnSnapshot("id", "str", nullable=False, primary_key=True),
+            ColumnSnapshot("name", "str", nullable=False, primary_key=False),
+        ]
+        if expanded:
+            columns.append(
+                ColumnSnapshot("score", "int", nullable=True, primary_key=False)
+            )
+        tables.append(
+            TableSnapshot(
+                model_key=f"BenchMigrationModel{index}",
+                name=f"bench_migration_table_{index}",
+                primary_key="id",
+                columns=columns,
+            )
+        )
+    return SchemaSnapshot(tables=tables)
+
+
+def _diff_migration_snapshots(
+    before: SchemaSnapshot, after: SchemaSnapshot
+) -> tuple[int, bool]:
+    diff = diff_snapshots(before, after)
+    return len(diff.changes), diff.has_unsafe_operations
+
+
+def test_migration_diff_planning_benchmark(benchmark: Any) -> None:
+    before = _migration_snapshot(table_count=150, expanded=False)
+    after = _migration_snapshot(table_count=150, expanded=True)
+
+    change_count, has_unsafe_operations = benchmark(
+        _diff_migration_snapshots, before, after
+    )
+
+    assert change_count == 150
+    assert has_unsafe_operations is False

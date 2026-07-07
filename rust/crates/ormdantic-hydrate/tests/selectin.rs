@@ -19,6 +19,10 @@ fn plan(cardinality: RelationshipCardinality) -> SelectInHydrationPlan {
 #[test]
 fn parent_keys_are_deduplicated_and_skip_incomplete_rows() {
     let plan = plan(RelationshipCardinality::Many);
+    assert_eq!(plan.parent_key_columns(), &["id".to_string()]);
+    assert_eq!(plan.child_key_columns(), &["coffee_id".to_string()]);
+    assert_eq!(plan.relationship().field(), "flavors");
+    assert_eq!(plan.child_collection_key(), "flavors");
     let keys = plan.parent_keys(&[
         row(&[("id", "1")]),
         row(&[("id", "1")]),
@@ -72,5 +76,24 @@ fn merges_selectin_scalar_results_into_collection_key() {
     assert_eq!(
         merged[0].get("profile").unwrap(),
         "coffee_id=1,id=10,tier=gold"
+    );
+}
+
+#[test]
+fn merge_selectin_results_skips_children_and_parents_with_missing_keys() {
+    let plan = plan(RelationshipCardinality::Many);
+    let merged = merge_selectin_results(
+        vec![row(&[("name", "missing")]), row(&[("id", "1")])],
+        vec![
+            row(&[("id", "10"), ("name", "orphan")]),
+            row(&[("coffee_id", "1"), ("id", "11"), ("name", "mocha")]),
+        ],
+        &plan,
+    );
+
+    assert!(!merged[0].contains_key("flavors"));
+    assert_eq!(
+        merged[1].get("flavors").unwrap(),
+        "coffee_id=1,id=11,name=mocha"
     );
 }

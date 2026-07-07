@@ -256,3 +256,24 @@ pub fn unavailable() -> OrmdanticError {
         dialect: "mssql runtime requires the optional mssql engine feature".to_string(),
     }
 }
+
+#[cfg(all(test, not(feature = "mssql")))]
+mod fallback_tests {
+    use super::*;
+
+    #[test]
+    fn mssql_fallback_methods_report_optional_feature_requirement() {
+        let error = unavailable().to_string();
+        assert!(error.contains("optional mssql engine feature"));
+        assert!(MsSqlConnection::open("mssql://localhost").is_err());
+        assert!(execute_url("mssql://localhost", "SELECT 1", &[]).is_err());
+
+        let mut connection = MsSqlConnection;
+        assert!(connection.execute("SELECT 1", &[]).is_err());
+        assert!(connection.begin().is_err());
+        assert!(connection.commit().is_err());
+        assert!(connection.rollback().is_err());
+        assert!(connection.savepoint("sp").is_err());
+        assert!(connection.rollback_to_savepoint("sp").is_err());
+    }
+}

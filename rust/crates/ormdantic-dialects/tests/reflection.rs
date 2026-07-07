@@ -1,7 +1,39 @@
 use ormdantic_dialects::{
-    Dialect, MariaDbDialect, MySqlDialect, OracleDialect, PostgresDialect, ReflectionQuery,
-    ReflectionQueryKind, ReflectionScope, SqliteDialect,
+    Dialect, DialectKind, MariaDbDialect, MsSqlDialect, MySqlDialect, OracleDialect,
+    PostgresDialect, ReflectionQuery, ReflectionQueryKind, ReflectionScope, SqliteDialect,
 };
+
+struct DefaultReflectionDialect;
+
+impl Dialect for DefaultReflectionDialect {
+    fn kind(&self) -> DialectKind {
+        DialectKind::Sqlite
+    }
+
+    fn name(&self) -> &'static str {
+        "default-reflection"
+    }
+
+    fn quote_ident(&self, ident: &str) -> String {
+        format!("\"{ident}\"")
+    }
+
+    fn placeholder(&self, _index: usize) -> String {
+        "?".to_string()
+    }
+
+    fn supports_returning(&self) -> bool {
+        false
+    }
+
+    fn supports_native_uuid(&self) -> bool {
+        false
+    }
+
+    fn supports_json(&self) -> bool {
+        false
+    }
+}
 
 #[test]
 fn renders_postgres_catalog_queries_without_scope() {
@@ -79,6 +111,33 @@ fn renders_mysql_and_mariadb_catalog_queries_with_default_database_scope() {
 }
 
 #[test]
+fn renders_mssql_catalog_queries_with_scoped_filters() {
+    let queries = MsSqlDialect.reflection_queries(
+        &ReflectionScope::new()
+            .schema("dbo")
+            .tables(vec!["flavor".to_string(), "supplier".to_string()]),
+    );
+
+    assert_eq!(
+        queries.iter().map(|query| query.kind()).collect::<Vec<_>>(),
+        vec![
+            ReflectionQueryKind::Tables,
+            ReflectionQueryKind::Columns,
+            ReflectionQueryKind::Indexes,
+            ReflectionQueryKind::ForeignKeys,
+            ReflectionQueryKind::Constraints,
+        ]
+    );
+    assert!(queries[0].sql().contains("INFORMATION_SCHEMA.TABLES"));
+    assert!(queries[0].sql().contains("TABLE_SCHEMA = 'dbo'"));
+    assert!(queries[0]
+        .sql()
+        .contains("TABLE_NAME IN ('flavor', 'supplier')"));
+    assert!(queries[2].sql().contains("sys.indexes"));
+    assert!(queries[3].sql().contains("REFERENTIAL_CONSTRAINTS"));
+}
+
+#[test]
 fn renders_oracle_catalog_queries_without_scope() {
     let queries = OracleDialect.reflection_queries(&ReflectionScope::new());
 
@@ -115,4 +174,31 @@ fn reflection_query_exposes_kind_and_sql() {
 
     assert_eq!(query.kind(), ReflectionQueryKind::ForeignKeys);
     assert_eq!(query.sql(), "SELECT 1");
+}
+
+#[test]
+fn default_reflection_queries_escape_scoped_schema_and_tables() {
+    let scope = ReflectionScope::new()
+        .schema("app's")
+        .tables(vec!["flavor".to_string(), "sup'plier".to_string()]);
+    let queries = DefaultReflectionDialect.reflection_queries(&scope);
+    let unscoped = DefaultReflectionDialect.reflection_queries(&ReflectionScope::new());
+
+    assert_eq!(
+        queries.iter().map(|query| query.kind()).collect::<Vec<_>>(),
+        vec![
+            ReflectionQueryKind::Tables,
+            ReflectionQueryKind::Columns,
+            ReflectionQueryKind::Constraints,
+        ]
+    );
+    assert!(queries[0].sql().contains("table_schema = 'app''s'"));
+    assert!(queries[0]
+        .sql()
+        .contains("table_name IN ('flavor', 'sup''plier')"));
+    assert!(queries[1].sql().contains("information_schema.columns"));
+    assert!(queries[2]
+        .sql()
+        .contains("information_schema.table_constraints"));
+    assert!(!unscoped[0].sql().contains(" WHERE "));
 }

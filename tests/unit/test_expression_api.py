@@ -32,6 +32,12 @@ from ormdantic import (
     tuple_,
     update_query,
 )
+from ormdantic.expressions import (
+    SerializationContext,
+    SqlExpression,
+    expression_payload,
+    relation,
+)
 
 
 def test_expression_helpers_preserve_legacy_filter_payloads() -> None:
@@ -58,6 +64,10 @@ def test_expression_helpers_preserve_legacy_filter_payloads() -> None:
     assert column("deleted_at").is_not_null().to_where() == {
         "deleted_at__is_not_null": True
     }
+    assert (column("kind").eq("bean") & column("size").ge(2)).to_where() == {
+        "kind": "bean",
+        "size__ge": 2,
+    }
     assert (column("deleted_at") == None).to_where() == {  # noqa: E711
         "deleted_at__is_null": True
     }
@@ -66,6 +76,85 @@ def test_expression_helpers_preserve_legacy_filter_payloads() -> None:
     }
     with pytest.raises(ValueError, match="expression-only predicates"):
         column("left").eq(column("right")).to_filter_tree()
+
+
+def test_expression_error_paths_and_operator_helpers() -> None:
+    strength = column("strength")
+
+    assert strength.not_between(1, 3).to_expression_payload()["op"] == "not"
+    assert (strength - 2).to_expression_payload()["op"] == "sub"
+    assert (strength * 2).to_expression_payload()["op"] == "mul"
+    assert (strength / 2).to_expression_payload()["op"] == "div"
+    assert (10 - strength).to_expression_payload()["op"] == "sub"
+    assert (10 * strength).to_expression_payload()["op"] == "mul"
+    assert (10 / strength).to_expression_payload()["op"] == "div"
+    assert strength.cast("TEXT").to_expression_payload()["kind"] == "cast"
+
+    assert strength.is_(None).to_where() == {"strength__is_null": True}
+    assert strength.is_not(None).to_where() == {"strength__is_not_null": True}
+    with pytest.raises(ValueError, match="only None"):
+        strength.is_("value")
+    with pytest.raises(ValueError, match="only None"):
+        strength.is_not("value")
+    with pytest.raises(ValueError, match="only column expressions"):
+        (strength + 1).set(2)
+    with pytest.raises(ValueError, match="OR expressions"):
+        (strength.eq(1) | strength.eq(2)).to_where()
+    with pytest.raises(ValueError, match="typed SQL expression"):
+        group(QueryExpressionForTest()).to_expression_payload()
+    with pytest.raises(ValueError, match="unsupported expression kind"):
+        SqlExpression("unknown", {}).to_expression_payload()
+
+
+class QueryExpressionForTest:
+    expr = None
+
+
+def test_expression_query_serialization_edges_and_relation_errors() -> None:
+    base = select_query("numbers", column("id"))
+    named_cte = cte("ids", base, columns=["id"], recursive=True)
+    query = select_query(
+        "ids",
+        projection(select_query("other", column("value")), "scalar_value"),
+        over(count(), partition_by=[column("id")], order_by=[column("id")]).as_(
+            "partition_count"
+        ),
+        with_=[named_cte],
+        offset=5,
+    )
+
+    payload = query.to_query_payload()
+
+    assert query.to_expression_payload()["kind"] == "subquery"
+    assert query.with_cte(named_cte).ctes == (named_cte, named_cte)
+    assert payload["ctes"][0]["columns"] == ["id"]
+    assert payload["ctes"][0]["recursive"] is True
+    assert payload["projections"][0]["alias"] == "scalar_value"
+    assert payload["projections"][0]["expr"]["kind"] == "subquery"
+    assert payload["projections"][1]["expr"]["order_by"][0]["direction"] == "asc"
+    assert payload["offset"] == 5
+
+    class Model:
+        pass
+
+    class RegisteredModel:
+        pass
+
+    class TableData:
+        def __init__(self) -> None:
+            self.model = RegisteredModel
+            self.tablename = "registered"
+            self.pk = "id"
+            self.relationships: dict[str, object] = {}
+
+    class TableMap:
+        model_to_data = {RegisteredModel: TableData()}
+        name_to_data: dict[str, object] = {}
+
+    with pytest.raises(ValueError, match="is not registered"):
+        relation(TableMap, Model, "missing")
+    with pytest.raises(ValueError, match="available relationships: none"):
+        relation(TableMap, RegisteredModel, "missing")
 
 
 def test_typed_expression_query_serializes_and_compiles_with_stable_params() -> None:
@@ -350,3 +439,45 @@ def test_select_query_table_alias_compiles_through_typed_bridge() -> None:
         "operation": "select",
         "values": {},
     }
+
+
+def test_expression_payload_remaining_helper_edges() -> None:
+    sub = select_query("orders", column("id"))
+    window_payload = (
+        count()
+        .over(
+            partition_by=[column("customer_id")],
+            order_by=[column("id").desc()],
+        )
+        .to_expression_payload()
+    )
+    assert window_payload["kind"] == "window"
+    assert window_payload["partition_by"][0]["name"] == "customer_id"
+    assert window_payload["order_by"][0]["direction"] == "desc"
+
+    assert column("id").not_in_query(sub).to_expression_payload()["negated"] is True
+    assert (
+        column("status").eq("paid") | column("status").eq("refunded")
+    ).to_filter_tree() == {
+        "connector": "or",
+        "children": [
+            {"connector": "leaf", "filters": {"status": "paid"}},
+            {"connector": "leaf", "filters": {"status": "refunded"}},
+        ],
+    }
+
+    update_payload = update_query(
+        "orders",
+        assignment("status", "archived"),
+    ).to_query_payload()
+    assert "where" not in update_payload
+    assert update_payload["values"] == {"expr_param_0": "archived"}
+
+    case_payload = case(
+        (column("status") == "paid", literal("ok"))
+    ).to_expression_payload()
+    assert case_payload["else"] is None
+
+    ctx = SerializationContext()
+    assert expression_payload("plain", ctx) == {"kind": "param", "name": "expr_param_0"}
+    assert ctx.values == {"expr_param_0": "plain"}

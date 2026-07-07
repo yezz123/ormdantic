@@ -422,10 +422,16 @@ mod runtime {
     #[cfg(test)]
     mod tests {
         use super::{
-            classify_detailless_oracle_close, classify_oracle_code, decode_oracle_binary_double,
-            decode_oracle_binary_float, looks_like_incomplete_select, lossy_oracle_binary_bytes,
+            classify_detailless_oracle_close, classify_oracle_code, config_from_url,
+            decode_oracle_binary_double, decode_oracle_binary_float,
+            infer_positive_oracle_binary_first_byte, is_truthy_query, looks_like_incomplete_select,
+            lossy_oracle_binary_bytes, oracle_params, parse_oracle_number, query_value,
+            service_name,
         };
-        use ormdantic_core::ExecutionErrorKind;
+        use crate::DbValue;
+        use oracle_rs::Value;
+        use ormdantic_core::{ExecutionErrorKind, OrmdanticError};
+        use url::Url;
 
         #[test]
         fn classifies_oracle_error_codes() {
@@ -514,6 +520,85 @@ mod runtime {
                 Some([0xc0, 0x60, 0, 0]),
             );
         }
+
+        #[test]
+        fn parses_oracle_urls_and_query_options() {
+            let service_url =
+                Url::parse("oracle://system:oracle@localhost:1521/FREEPDB1?TLS=yes").unwrap();
+            let sid_url = Url::parse("oracle://system:oracle@localhost:1521/?sid=FREE").unwrap();
+            let missing_service = Url::parse("oracle://system:oracle@localhost:1521/").unwrap();
+
+            assert_eq!(query_value(&service_url, "tls"), Some("yes".to_string()));
+            assert!(is_truthy_query(&service_url, "tls"));
+            assert_eq!(service_name(&service_url).unwrap(), "FREEPDB1");
+            assert!(matches!(
+                service_name(&sid_url).unwrap_err(),
+                OrmdanticError::SqlCompile { .. }
+            ));
+            assert!(config_from_url("oracle://system:oracle@localhost:1521/FREEPDB1").is_ok());
+            assert!(
+                config_from_url("oracle://system:oracle@localhost:1521/FREEPDB1?sid=FREE").is_ok()
+            );
+            assert!(matches!(
+                config_from_url("oracle:///FREEPDB1").unwrap_err(),
+                OrmdanticError::SqlCompile { .. }
+            ));
+            assert!(matches!(
+                service_name(&missing_service).unwrap_err(),
+                OrmdanticError::SqlCompile { .. }
+            ));
+        }
+
+        #[test]
+        fn converts_oracle_params_and_numbers_across_edges() {
+            let params = oracle_params(&[
+                DbValue::Null,
+                DbValue::Integer(-7),
+                DbValue::UnsignedInteger(i64::MAX as u64),
+                DbValue::UnsignedInteger(i64::MAX as u64 + 1),
+                DbValue::Decimal("12.50".to_string()),
+                DbValue::Real(3.5),
+                DbValue::Text("mocha".to_string()),
+                DbValue::Bool(true),
+            ]);
+
+            assert!(matches!(params[0], Value::Null));
+            assert!(matches!(params[1], Value::Integer(-7)));
+            assert!(matches!(params[2], Value::Integer(value) if value == i64::MAX));
+            assert!(
+                matches!(params[3], Value::String(ref value) if value == "9223372036854775808")
+            );
+            assert!(matches!(params[4], Value::String(ref value) if value == "12.50"));
+            assert!(matches!(params[5], Value::Float(value) if value == 3.5));
+            assert!(matches!(params[6], Value::String(ref value) if value == "mocha"));
+            assert!(matches!(params[7], Value::Integer(1)));
+
+            assert_eq!(
+                parse_oracle_number("12.50"),
+                Some(DbValue::Decimal("12.50".to_string()))
+            );
+            assert_eq!(parse_oracle_number("-7"), Some(DbValue::Integer(-7)));
+            assert_eq!(
+                parse_oracle_number("9223372036854775808"),
+                Some(DbValue::UnsignedInteger(9_223_372_036_854_775_808)),
+            );
+            assert_eq!(
+                parse_oracle_number("999999999999999999999999999999999"),
+                Some(DbValue::Decimal(
+                    "999999999999999999999999999999999".to_string()
+                )),
+            );
+        }
+
+        #[test]
+        fn decodes_oracle_binary_edge_cases() {
+            assert_eq!(decode_oracle_binary_float(&[]), 0.0);
+            assert_eq!(decode_oracle_binary_double(&[]), 0.0);
+            assert!(decode_oracle_binary_float(&[0x3f, 0xff, 0xff, 0xff]).is_finite());
+            assert_eq!(lossy_oracle_binary_bytes::<4>("abc"), None);
+            assert_eq!(lossy_oracle_binary_bytes::<4>("\u{fffd}\0\0"), None);
+            assert_eq!(infer_positive_oracle_binary_first_byte::<2>(0), None);
+        }
     }
 }
 
@@ -559,5 +644,25 @@ pub fn execute_url(_url: &str, _sql: &str, _params: &[DbValue]) -> OrmdanticResu
 pub fn unavailable() -> OrmdanticError {
     OrmdanticError::UnsupportedDialect {
         dialect: "oracle runtime requires the optional oracle engine feature".to_string(),
+    }
+}
+
+#[cfg(all(test, not(feature = "oracle")))]
+mod fallback_tests {
+    use super::*;
+
+    #[test]
+    fn oracle_fallback_methods_report_optional_feature_requirement() {
+        let error = unavailable().to_string();
+        assert!(error.contains("optional oracle engine feature"));
+        assert!(OracleConnection::open("oracle://localhost/service").is_err());
+        assert!(execute_url("oracle://localhost/service", "SELECT 1", &[]).is_err());
+
+        let mut connection = OracleConnection;
+        assert!(connection.execute("SELECT 1", &[]).is_err());
+        assert!(connection.begin().is_err());
+        assert!(connection.commit().is_err());
+        assert!(connection.rollback().is_err());
+        assert!(connection.savepoint("sp").is_err());
     }
 }

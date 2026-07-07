@@ -15,6 +15,7 @@ fn unique_and_check_constraints_expose_names_and_expressions() {
     .with_mssql_filegroup("constraintspace")
     .with_mssql_clustered(false)
     .with_oracle_tablespace("constraintspace")
+    .with_oracle_compress()
     .with_oracle_compress_prefix(2);
     let check = CheckConstraintDef::new("rating >= 0")
         .named("rating_check")
@@ -51,6 +52,48 @@ fn unique_and_check_constraints_expose_names_and_expressions() {
         ConstraintDef::Check(check),
         ConstraintDef::Check(_)
     ));
+}
+
+#[test]
+fn unique_constraint_option_builders_can_set_and_clear_values() {
+    let unique = UniqueConstraintDef::new("flavor_name_unique", vec!["name".to_string()])
+        .with_nulls_not_distinct(false)
+        .with_sqlite_on_conflict("IGNORE")
+        .with_mssql_filegroup_option(Some("fg_constraints".to_string()))
+        .with_mssql_clustered_option(Some(true))
+        .with_oracle_tablespace_option(Some("ts_constraints".to_string()))
+        .with_oracle_compress_option(Some(OracleIndexCompression::Enabled));
+
+    assert!(!unique.is_nulls_not_distinct());
+    assert_eq!(unique.sqlite_on_conflict(), Some("IGNORE"));
+    assert_eq!(unique.mssql_filegroup(), Some("fg_constraints"));
+    assert_eq!(unique.mssql_clustered(), Some(true));
+    assert_eq!(unique.oracle_tablespace(), Some("ts_constraints"));
+    assert_eq!(
+        unique.oracle_compress(),
+        Some(&OracleIndexCompression::Enabled)
+    );
+
+    let cleared = unique
+        .with_sqlite_on_conflict_option(None)
+        .with_mssql_filegroup_option(None)
+        .with_mssql_clustered_option(None)
+        .with_oracle_tablespace_option(None)
+        .with_oracle_compress_option(None);
+
+    assert_eq!(cleared.sqlite_on_conflict(), None);
+    assert_eq!(cleared.mssql_filegroup(), None);
+    assert_eq!(cleared.mssql_clustered(), None);
+    assert_eq!(cleared.oracle_tablespace(), None);
+    assert_eq!(cleared.oracle_compress(), None);
+}
+
+#[test]
+fn constraint_timing_initially_deferred_implies_deferrable() {
+    let timing = ConstraintTiming::new(None, true);
+
+    assert_eq!(timing.deferrable(), Some(true));
+    assert!(timing.initially_deferred());
 }
 
 #[test]

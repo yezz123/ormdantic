@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from ormdantic import cli as root_cli
+from ormdantic import migrations
 from ormdantic._migrations import cli as migration_cli
+from ormdantic.errors import SchemaError
 
 runner = CliRunner()
 
@@ -185,6 +190,67 @@ def test_init_command_prints_history_table_context(
     assert "postgres:postgres" not in result.stdout
 
 
+def test_snapshot_command_loads_database_writes_snapshot_and_echoes_path(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[migration_cli.Path, str | None]] = []
+    out = tmp_path / "snapshot.json"
+
+    class FakeSnapshot:
+        def write(self, path: migration_cli.Path, *, format: str | None = None) -> None:
+            calls.append((path, format))
+            path.write_text("{}")
+
+    class FakeMigrations:
+        def snapshot(self) -> FakeSnapshot:
+            return FakeSnapshot()
+
+    fake_database = SimpleNamespace(migrations=FakeMigrations())
+    monkeypatch.setattr(migration_cli, "_load_database", lambda target: fake_database)
+
+    result = runner.invoke(
+        migration_cli.migrations_app,
+        ["snapshot", "module:db", "--out", str(out), "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(out, "json")]
+    assert str(out) in result.stdout
+
+
+def test_autogenerate_command_prints_noop_without_writing(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeMigrations:
+        def autogenerate(self, *args: object, **kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        migration_cli,
+        "_load_database",
+        lambda target: SimpleNamespace(migrations=FakeMigrations()),
+    )
+
+    out = tmp_path / "noop.json"
+    migration_cli.autogenerate_command(
+        "module:db",
+        "001_noop",
+        out,
+        message=None,
+        include_table=None,
+        exclude_table=None,
+        schema=None,
+        format=None,
+        interactive=False,
+    )
+
+    assert "no-op" in capsys.readouterr().out
+    assert not out.exists()
+
+
 def test_apply_dir_uses_env_url_and_summarizes_applied_revisions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -220,6 +286,115 @@ def test_apply_dir_uses_env_url_and_summarizes_applied_revisions(
     assert "- 002_tasks" in result.stdout
 
 
+def test_apply_and_apply_dir_commands_report_skipped_and_empty_results(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resolved = migration_cli.ResolvedDatabaseUrl("sqlite:///db.sqlite3", "argument")
+    migration = SimpleNamespace(
+        revision="001_initial",
+        warnings=[],
+        to_plan=lambda: SimpleNamespace(has_destructive_operations=False),
+    )
+
+    class FakeMigrations:
+        async def apply_artifact(
+            self, artifact: object, *, allow_destructive: bool = False
+        ) -> bool:
+            assert artifact is migration
+            assert allow_destructive is False
+            return False
+
+        async def apply_directory(
+            self,
+            directory: migration_cli.Path,
+            *,
+            pattern: str | None = None,
+            allow_destructive: bool = False,
+        ) -> list[str]:
+            assert directory == migration_cli.Path("migrations")
+            assert pattern == "*.json"
+            assert allow_destructive is True
+            return []
+
+    class FakeOrmdantic:
+        def __init__(self, url: str) -> None:
+            assert url == resolved.value
+            self.migrations = FakeMigrations()
+
+    monkeypatch.setattr(migration_cli, "Ormdantic", FakeOrmdantic)
+    monkeypatch.setattr(
+        migration_cli,
+        "_resolve_database_url_and_path",
+        lambda *args, **kwargs: (resolved, migration_cli.Path("001.json")),
+    )
+    monkeypatch.setattr(
+        migration_cli,
+        "_read_artifact_for_cli",
+        lambda path: migration,
+    )
+
+    migration_cli.apply_command(
+        targets=[],
+        url_option=None,
+        url_env="DATABASE_URL",
+        env_file=None,
+        allow_destructive=False,
+        interactive=False,
+    )
+    assert (
+        "Skipped migration: 001_initial is already applied." in capsys.readouterr().out
+    )
+
+    monkeypatch.setattr(
+        migration_cli,
+        "_resolve_database_url_and_path",
+        lambda *args, **kwargs: (resolved, migration_cli.Path("migrations")),
+    )
+    migration_cli.apply_dir_command(
+        targets=[],
+        url_option=None,
+        url_env="DATABASE_URL",
+        env_file=None,
+        pattern="*.json",
+        allow_destructive=True,
+    )
+    assert "No pending migrations in migrations." in capsys.readouterr().out
+
+
+def test_preview_command_prints_warnings_and_rollback_sql(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakePlan:
+        has_unsafe_operations = True
+        has_destructive_operations = True
+
+    fake_artifact = SimpleNamespace(
+        revision="002_down",
+        dialect="postgresql",
+        operations=[SimpleNamespace(sql="SELECT 1")],
+        rollback_operations=[SimpleNamespace(sql="DROP TABLE flavor")],
+        warnings=[SimpleNamespace(message="drops flavor")],
+        safety={"requires_rebuild": True},
+        to_plan=lambda: FakePlan(),
+    )
+    monkeypatch.setattr(
+        migration_cli.MigrationArtifact,
+        "read",
+        lambda artifact: fake_artifact,
+    )
+
+    migration_cli.preview_command(migration_cli.Path("002_down.json"), rollback=True)
+
+    output = capsys.readouterr().out
+    assert "# revision: 002_down" in output
+    assert "# dialect: postgresql" in output
+    assert "# warning: drops flavor" in output
+    assert "DROP TABLE flavor" in output
+    assert "SELECT 1" not in output
+
+
 def test_apply_dir_reports_missing_database_url_without_traceback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -236,6 +411,76 @@ def test_apply_dir_reports_missing_database_url_without_traceback(
     assert "Traceback" not in result.stdout
 
 
+def test_history_and_rollback_commands_cover_empty_and_skipped_outputs(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resolved = migration_cli.ResolvedDatabaseUrl("sqlite:///db.sqlite3", "argument")
+    migration = SimpleNamespace(
+        revision="001_initial",
+        rollback_operations=[],
+        warnings=[],
+    )
+
+    class FakeMigrations:
+        async def history(self) -> list[object]:
+            return []
+
+        async def rollback_artifact(
+            self, artifact: object, *, allow_destructive: bool = False
+        ) -> bool:
+            assert artifact is migration
+            assert allow_destructive is False
+            return False
+
+    class FakeOrmdantic:
+        def __init__(self, url: str) -> None:
+            assert url == resolved.value
+            self.migrations = FakeMigrations()
+
+    monkeypatch.setattr(migration_cli, "Ormdantic", FakeOrmdantic)
+    monkeypatch.setattr(
+        migration_cli,
+        "_resolve_database_url",
+        lambda *args, **kwargs: resolved,
+    )
+    migration_cli.history_command(
+        url=None,
+        url_option=None,
+        url_env="DATABASE_URL",
+        env_file=None,
+    )
+    assert "No migration history rows found." in capsys.readouterr().out
+
+    monkeypatch.setattr(
+        migration_cli,
+        "_resolve_rollback_targets",
+        lambda *args, **kwargs: (resolved, None),
+    )
+    monkeypatch.setattr(
+        migration_cli,
+        "_artifact_for_revision",
+        lambda directory, revision: tmp_path / "001.json",
+    )
+    monkeypatch.setattr(
+        migration_cli,
+        "_read_artifact_for_cli",
+        lambda path: migration,
+    )
+    migration_cli.rollback_command(
+        targets=[],
+        url_option=None,
+        url_env="DATABASE_URL",
+        env_file=None,
+        revision="001_initial",
+        directory=tmp_path,
+        allow_destructive=False,
+        interactive=False,
+    )
+    assert "Skipped rollback: 001_initial is not applied." in capsys.readouterr().out
+
+
 def test_root_main_returns_nested_migration_error_exit_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -246,3 +491,281 @@ def test_root_main_returns_nested_migration_error_exit_code(
     )
 
     assert exit_code == 1
+
+
+def test_env_file_parser_handles_exports_comments_quotes_and_invalid_lines(
+    tmp_path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "",
+                "# comment",
+                "export DATABASE_URL='postgresql://user:pass@localhost/db'",
+                "PLAIN=value # trailing comment",
+                'QUOTED="literal # not a comment"',
+                "NO_SEPARATOR",
+                "=missing_key",
+            ]
+        )
+    )
+
+    assert migration_cli._read_env_file(None) == {}
+    assert migration_cli._read_env_file(tmp_path / "missing.env") == {}
+    values = migration_cli._read_env_file(env_file)
+    assert values == {
+        "DATABASE_URL": "postgresql://user:pass@localhost/db",
+        "PLAIN": "value",
+        "QUOTED": "literal # not a comment",
+    }
+
+
+def test_database_url_and_path_resolution_reports_ambiguous_inputs(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///env.sqlite3")
+
+    with pytest.raises(
+        migration_cli.MigrationCliError, match="Artifact path is required"
+    ):
+        migration_cli._resolve_database_url_and_path(
+            [],
+            path_label="artifact",
+            url_option=None,
+            url_env="DATABASE_URL",
+            env_file=None,
+        )
+
+    with pytest.raises(migration_cli.MigrationCliError, match="--url already provides"):
+        migration_cli._resolve_database_url_and_path(
+            ["sqlite:///legacy.sqlite3", "001.json"],
+            path_label="artifact",
+            url_option="sqlite:///option.sqlite3",
+            url_env="DATABASE_URL",
+            env_file=None,
+        )
+
+    with pytest.raises(migration_cli.MigrationCliError, match="got 3 arguments"):
+        migration_cli._resolve_database_url_and_path(
+            ["one", "two", "three"],
+            path_label="directory",
+            url_option=None,
+            url_env="DATABASE_URL",
+            env_file=tmp_path / ".env",
+        )
+
+
+def test_rollback_target_resolution_covers_revision_and_artifact_modes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///env.sqlite3")
+
+    resolved, artifact = migration_cli._resolve_rollback_targets(
+        ["sqlite:///legacy.sqlite3"],
+        revision="001",
+        directory=migration_cli.Path("migrations"),
+        url_option=None,
+        url_env="DATABASE_URL",
+        env_file=None,
+    )
+    assert resolved.value == "sqlite:///legacy.sqlite3"
+    assert artifact is None
+
+    with pytest.raises(migration_cli.MigrationCliError, match="at most one"):
+        migration_cli._resolve_rollback_targets(
+            ["sqlite:///one.sqlite3", "sqlite:///two.sqlite3"],
+            revision="001",
+            directory=migration_cli.Path("migrations"),
+            url_option=None,
+            url_env="DATABASE_URL",
+            env_file=None,
+        )
+
+    with pytest.raises(
+        migration_cli.MigrationCliError, match="artifact path is required"
+    ):
+        migration_cli._resolve_rollback_targets(
+            [],
+            revision=None,
+            directory=None,
+            url_option=None,
+            url_env="DATABASE_URL",
+            env_file=None,
+        )
+
+
+def test_rollback_command_requires_revision_directory_when_no_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        migration_cli,
+        "_resolve_rollback_targets",
+        lambda *args, **kwargs: (
+            migration_cli.ResolvedDatabaseUrl("sqlite:///db.sqlite3", "argument"),
+            None,
+        ),
+    )
+
+    with pytest.raises(typer.BadParameter, match="--revision with --dir"):
+        migration_cli.rollback_command(
+            targets=[],
+            url_option=None,
+            url_env="DATABASE_URL",
+            env_file=None,
+            revision=None,
+            directory=None,
+        )
+
+
+def test_cli_formatting_redaction_loading_and_action_error_branches(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert migration_cli._format_cli_error(FileNotFoundError("missing")) == (
+        "File not found: missing"
+    )
+    assert migration_cli._format_cli_error(OSError("bad disk")) == "bad disk"
+    assert migration_cli._format_cli_error(SchemaError("bad schema")) == "bad schema"
+    assert migration_cli._format_cli_error(RuntimeError("boom")) == "boom"
+    assert (
+        migration_cli._redact_database_url("sqlite:///db.sqlite3")
+        == "sqlite:///db.sqlite3"
+    )
+    assert (
+        migration_cli._redact_database_url("user@localhost/db") == "user@localhost/db"
+    )
+    assert (
+        migration_cli._redact_database_url("postgresql://user@localhost/db")
+        == "postgresql:<redacted>@localhost/db"
+    )
+    assert (
+        migration_cli._redact_database_url("postgresql://user:secret@localhost/db")
+        == "postgresql://user:<redacted>@localhost/db"
+    )
+
+    monkeypatch.setattr(migration_cli, "_load_object", lambda _: object())
+    with pytest.raises(TypeError, match="does not resolve"):
+        migration_cli._load_database("module:db")
+
+    for action in [
+        lambda: (_ for _ in ()).throw(migration_cli.MigrationCliError("bad input")),
+        lambda: (_ for _ in ()).throw(ValueError("plain bad input")),
+    ]:
+        with pytest.raises(typer.Exit):
+            migration_cli._run_cli_action(action)
+    assert "Error: bad input" in capsys.readouterr().out
+
+
+def test_confirm_destructive_and_overwrite_helpers(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePlan:
+        has_destructive_operations = True
+
+    class FakeArtifact:
+        warnings: list[object] = []
+
+        def to_plan(self) -> FakePlan:
+            return FakePlan()
+
+    artifact = FakeArtifact()
+    assert migration_cli._confirm_destructive(artifact, True, False) is True
+    assert migration_cli._confirm_destructive(artifact, False, False) is False
+
+    monkeypatch.setattr(migration_cli.typer, "confirm", lambda *_args, **_kwargs: True)
+    assert migration_cli._confirm_destructive(artifact, False, True) is True
+
+    rollback_artifact = SimpleNamespace(
+        rollback_operations=[migrations.MigrationOperation("DROP TABLE flavor")]
+    )
+    assert (
+        migration_cli._confirm_rollback_destructive(rollback_artifact, True, False)
+        is True
+    )
+    assert (
+        migration_cli._confirm_rollback_destructive(rollback_artifact, False, True)
+        is True
+    )
+
+    existing = tmp_path / "snapshot.json"
+    existing.write_text("{}")
+    migration_cli._confirm_overwrite(existing, interactive=True)
+    monkeypatch.setattr(migration_cli.typer, "confirm", lambda *_args, **_kwargs: False)
+    with pytest.raises(typer.Abort):
+        migration_cli._confirm_overwrite(existing, interactive=True)
+
+
+def test_read_artifact_and_find_revision_error_branches(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing = tmp_path / "missing.json"
+    with pytest.raises(migration_cli.MigrationCliError, match="not found"):
+        migration_cli._read_artifact_for_cli(missing)
+
+    def raise_value_error(_path: migration_cli.Path) -> object:
+        raise ValueError("bad artifact")
+
+    monkeypatch.setattr(migration_cli.MigrationArtifact, "read", raise_value_error)
+    with pytest.raises(migration_cli.MigrationCliError, match="bad artifact"):
+        migration_cli._read_artifact_for_cli(tmp_path / "bad.json")
+
+    class FakeArtifact:
+        def __init__(self, revision: str) -> None:
+            self.revision = revision
+
+    files = [tmp_path / "alpha.json", tmp_path / "other.toml"]
+    for path in files:
+        path.write_text("{}")
+    assert migration_cli._artifact_for_revision(tmp_path, "alpha") == files[0]
+
+    def read_revision(path: migration_cli.Path) -> FakeArtifact:
+        return FakeArtifact("target" if path.name == "other.toml" else "other")
+
+    monkeypatch.setattr(migration_cli.MigrationArtifact, "read", read_revision)
+    assert migration_cli._artifact_for_revision(tmp_path, "target") == files[1]
+
+    with pytest.raises(FileNotFoundError):
+        migration_cli._artifact_for_revision(tmp_path, "missing")
+
+
+def test_squash_command_writes_artifact_and_echoes_warnings(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "001.json"
+    source.write_text("{}")
+    out = tmp_path / "squashed.json"
+    writes: list[tuple[migration_cli.Path, str | None]] = []
+
+    class FakeSquashed:
+        warnings = [SimpleNamespace(message="squash warning")]
+
+        def write(self, path: migration_cli.Path, *, format: str | None = None) -> None:
+            writes.append((path, format))
+            path.write_text("{}")
+
+    monkeypatch.setattr(migration_cli.MigrationArtifact, "read", lambda path: object())
+    monkeypatch.setattr(
+        migration_cli,
+        "squash_migrations",
+        lambda revision, artifacts, dialect=None: FakeSquashed(),
+    )
+
+    migration_cli.squash_command(
+        "010_squashed",
+        [source],
+        out,
+        dialect="sqlite",
+        format="json",
+        interactive=False,
+    )
+
+    output = capsys.readouterr().out
+    assert "warning: squash warning" in output
+    assert str(out) in output
+    assert writes == [(out, "json")]

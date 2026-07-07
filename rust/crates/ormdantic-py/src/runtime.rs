@@ -261,7 +261,10 @@ pub(crate) fn py_to_db_value(py: Python<'_>, value: Py<PyAny>) -> PyResult<DbVal
     }
     let decimal_type = py.import("decimal")?.getattr("Decimal")?;
     if value.is_instance(&decimal_type)? {
-        return Ok(DbValue::Decimal(value.str()?.to_string()));
+        let formatted = value
+            .call_method1("__format__", ("f",))?
+            .extract::<String>()?;
+        return Ok(DbValue::Decimal(formatted));
     }
     let int_type = py.import("builtins")?.getattr("int")?;
     if value.is_instance(&int_type)? {

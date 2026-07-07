@@ -5,7 +5,7 @@ from typing import Any
 
 from ormdantic import migrations
 from ormdantic._migrations import history
-from ormdantic._migrations.models import MigrationHistoryEntry
+from ormdantic._migrations.models import MigrationHistoryEntry, MigrationOperation
 
 
 class RecordingConnection:
@@ -69,6 +69,85 @@ class RowsConnection:
         if sql.startswith("SELECT"):
             return {"rows": self.rows}
         return {"rows": []}
+
+
+class RaisingConnection(RecordingConnection):
+    def __init__(self, *, table_exists: bool, failures: dict[str, Exception]) -> None:
+        super().__init__(table_exists=table_exists)
+        self.failures = failures
+
+    def execute(self, sql: str, params: Sequence[Any]) -> dict[str, Any]:
+        for marker, error in self.failures.items():
+            if marker in sql:
+                self.statements.append(sql)
+                raise error
+        return super().execute(sql, params)
+
+
+class OperationConnection:
+    def __init__(
+        self,
+        *,
+        fail_operation: str | None = None,
+        fail_rollback: bool = False,
+        fail_release: bool = False,
+        fail_commit_after: int | None = None,
+    ) -> None:
+        self.fail_operation = fail_operation
+        self.fail_rollback = fail_rollback
+        self.fail_release = fail_release
+        self.fail_commit_after = fail_commit_after
+        self.statements: list[str] = []
+        self.begins = 0
+        self.commits = 0
+        self.rollbacks = 0
+
+    def execute(self, sql: str, params: Sequence[Any]) -> dict[str, Any]:
+        del params
+        self.statements.append(sql)
+        normalized = sql.lower()
+        if any(
+            marker in normalized
+            for marker in (
+                "sqlite_master",
+                "information_schema.tables",
+                "sys.tables",
+                "user_tables",
+            )
+        ):
+            return {"rows": [[1]]}
+        if any(
+            marker in normalized
+            for marker in (
+                "pragma_table_info",
+                "information_schema.columns",
+                "sys.columns",
+                "user_tab_columns",
+            )
+        ):
+            return {"rows": [[1]]}
+        if "get_lock" in normalized:
+            return {"rows": [[1]]}
+        if "pg_try_advisory_lock" in normalized:
+            return {"rows": [[1]]}
+        if "release_lock" in normalized and self.fail_release:
+            raise RuntimeError("release failed")
+        if self.fail_operation is not None and self.fail_operation in sql:
+            raise RuntimeError("operation failed")
+        return {"rows": []}
+
+    def begin(self) -> None:
+        self.begins += 1
+
+    def commit(self) -> None:
+        self.commits += 1
+        if self.fail_commit_after is not None and self.commits > self.fail_commit_after:
+            raise RuntimeError("commit failed")
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+        if self.fail_rollback:
+            raise RuntimeError("rollback failed")
 
 
 def test_public_migration_facade_re_exports_history_helpers() -> None:
@@ -168,6 +247,102 @@ def test_history_table_upgrade_uses_oracle_add_syntax() -> None:
     assert all(" ADD (" in statement for statement in add_statements)
 
 
+def test_history_table_ensure_tolerates_duplicate_create_and_add_races() -> None:
+    create_race = RaisingConnection(
+        table_exists=False,
+        failures={"CREATE TABLE": RuntimeError("table already exists")},
+    )
+    migrations._ensure_migration_history_table(create_race, "sqlite")
+
+    assert any(
+        statement.startswith("CREATE TABLE") for statement in create_race.statements
+    )
+    assert any("ALTER TABLE" in statement for statement in create_race.statements)
+
+    add_race = RaisingConnection(
+        table_exists=True,
+        failures={"ADD COLUMN": RuntimeError("duplicate column name: checksum")},
+    )
+    migrations._ensure_migration_history_table(add_race, "sqlite")
+
+    assert any("ADD COLUMN" in statement for statement in add_race.statements)
+
+
+def test_history_table_ensure_reraises_nonduplicate_ddl_errors() -> None:
+    connection = RaisingConnection(
+        table_exists=False,
+        failures={"CREATE TABLE": RuntimeError("permission denied")},
+    )
+
+    try:
+        migrations._ensure_migration_history_table(connection, "sqlite")
+    except RuntimeError as exc:
+        assert "permission denied" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("non-duplicate create errors should propagate")
+
+
+def test_history_table_ensure_reraises_nonduplicate_add_column_errors() -> None:
+    connection = RaisingConnection(
+        table_exists=True,
+        failures={"ADD COLUMN": RuntimeError("permission denied")},
+    )
+
+    try:
+        migrations._ensure_migration_history_table(connection, "sqlite")
+    except RuntimeError as exc:
+        assert "permission denied" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("non-duplicate add column errors should propagate")
+
+
+def test_history_existence_queries_cover_truthy_and_unknown_dialects() -> None:
+    truthy = RowsConnection(rows=[["yes"]])
+
+    assert history._migration_history_table_exists(truthy, "sqlite")
+    assert history._migration_history_column_exists(truthy, "mysql", "checksum")
+    assert any("sqlite_master" in statement for statement in truthy.statements)
+    assert any(
+        "information_schema.columns" in statement for statement in truthy.statements
+    )
+
+    unknown = RowsConnection(rows=[[1]])
+    assert not history._migration_history_table_exists(unknown, "unknown")
+    assert not history._migration_history_column_exists(unknown, "unknown", "checksum")
+    assert unknown.statements == []
+
+    mysql_table = RowsConnection(rows=[["true"]])
+    assert history._migration_history_table_exists(mysql_table, "mysql")
+    assert "information_schema.tables" in mysql_table.statements[0]
+
+
+def test_history_duplicate_error_predicates_and_column_sql_edges() -> None:
+    assert history._is_duplicate_table_error(
+        RuntimeError("ORA-00955: name is already used by an existing object")
+    )
+    assert history._is_duplicate_table_error(
+        RuntimeError("there is already an object named flavors")
+    )
+    assert not history._is_duplicate_table_error(RuntimeError("permission denied"))
+    assert history._is_duplicate_column_error(
+        RuntimeError("column names in each table must be unique")
+    )
+    assert history._is_duplicate_column_error(
+        RuntimeError("column flavor specified more than once")
+    )
+    assert not history._is_duplicate_column_error(RuntimeError("syntax error"))
+    assert (
+        history._add_migration_history_column_sql(
+            "sqlite",
+            '"ormdantic_migrations"',
+            "status",
+            "TEXT",
+            "'applied'",
+        )
+        == 'ALTER TABLE "ormdantic_migrations" ADD COLUMN "status" TEXT DEFAULT \'applied\''
+    )
+
+
 def test_history_entries_parse_metadata_and_dirty_state() -> None:
     connection = RowsConnection(
         rows=[
@@ -241,6 +416,27 @@ def test_history_entries_reads_oracle_columns_separately() -> None:
     assert entries[0].metadata == {"phase": "completed"}
     assert entries[0].artifact_version == 2
     assert entries[0].ormdantic_version == "2.0.0"
+
+
+def test_oracle_history_entries_cover_empty_and_invalid_metadata_defaults() -> None:
+    assert history._history_entries(RowsConnection(), "oracle") == []
+
+    class OracleInvalidMetadataConnection:
+        def execute(self, sql: str, params: Sequence[Any]) -> dict[str, Any]:
+            del params
+            if sql.startswith('SELECT "revision" FROM'):
+                return {"rows": [["001"]]}
+            if '"metadata"' in sql:
+                return {"rows": [["001", "not-json"]]}
+            if '"dirty"' in sql:
+                return {"rows": [["001", "0"]]}
+            return {"rows": []}
+
+    entries = history._history_entries(OracleInvalidMetadataConnection(), "oracle")
+
+    assert entries[0].metadata == {"raw": "not-json"}
+    assert entries[0].status == "applied"
+    assert entries[0].dirty is False
 
 
 def test_history_entries_paginates_oracle_revisions_before_column_reads() -> None:
@@ -336,6 +532,38 @@ def test_repair_history_skips_unchanged_entries() -> None:
     assert "002" in delete_statements[0]
 
 
+def test_current_entry_and_repair_revision_filters_cover_empty_results() -> None:
+    connection = RowsConnection(
+        rows=[
+            [
+                "001",
+                None,
+                None,
+                None,
+                None,
+                "failed",
+                1,
+                None,
+                None,
+                None,
+            ]
+        ]
+    )
+
+    assert history._current_entry(connection, "sqlite") is None
+    assert (
+        history._repair_history(
+            connection,
+            "sqlite",
+            revision="missing",
+            status="applied",
+            clear_dirty=True,
+            checksum="fixed",
+        )
+        == 0
+    )
+
+
 def test_write_history_entry_serializes_metadata() -> None:
     connection = RowsConnection()
 
@@ -358,3 +586,138 @@ def test_write_history_entry_serializes_metadata() -> None:
     assert connection.statements[1].startswith('INSERT INTO "ormdantic_migrations"')
     assert '"metadata"' in connection.statements[1]
     assert '"phase": "completed"' in connection.statements[1]
+
+
+def test_acquire_migration_lock_success_and_failure_paths() -> None:
+    postgres = RowsConnection(rows=[[1]])
+    assert history._acquire_migration_lock(postgres, "postgresql") == (
+        "SELECT pg_advisory_unlock(hashtext('ormdantic_migration_lock'))"
+    )
+    assert "pg_try_advisory_lock" in postgres.statements[0]
+
+    mysql = RowsConnection(rows=[[0]])
+    try:
+        history._acquire_migration_lock(mysql, "mysql")
+    except ValueError as exc:
+        assert "failed to acquire mysql migration lock" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("failed mysql locks should raise")
+
+    postgres_failed = RowsConnection(rows=[[0]])
+    try:
+        history._acquire_migration_lock(postgres_failed, "postgresql")
+    except ValueError as exc:
+        assert "failed to acquire postgres" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("failed postgres locks should raise")
+
+    mysql_success = RowsConnection(rows=[[1]])
+    assert history._acquire_migration_lock(mysql_success, "mysql") == (
+        "SELECT RELEASE_LOCK('ormdantic:migration:lock')"
+    )
+
+    mssql = RowsConnection()
+    assert history._acquire_migration_lock(mssql, "mssql") == (
+        "EXEC sp_releaseapplock @Resource = 'ormdantic_migration_lock', "
+        "@LockOwner = 'Session'"
+    )
+    assert mssql.statements[0].startswith("EXEC sp_getapplock")
+    assert history._acquire_migration_lock(RowsConnection(), "sqlite") is None
+
+
+def test_run_migration_operations_commits_success_and_records_failed_sqlite() -> None:
+    success = OperationConnection()
+    history._run_migration_operations(
+        connection=success,
+        dialect="sqlite",
+        revision="001",
+        operations=[MigrationOperation("CREATE TABLE flavor (id TEXT)")],
+        status="applied",
+        description="create flavor",
+        checksum="abc123",
+        artifact_version=2,
+        metadata={"source": "test"},
+    )
+
+    assert "BEGIN IMMEDIATE" in success.statements
+    assert success.commits == 1
+    assert any("CREATE TABLE flavor" in statement for statement in success.statements)
+    assert any('"phase": "completed"' in statement for statement in success.statements)
+
+    postgres_success = OperationConnection()
+    history._run_migration_operations(
+        connection=postgres_success,
+        dialect="postgresql",
+        revision="001_pg",
+        operations=[MigrationOperation("ALTER TABLE flavor ADD name TEXT")],
+        status="applied",
+        description="alter flavor",
+        checksum=None,
+        artifact_version=2,
+        metadata={},
+    )
+    assert postgres_success.begins == 1
+    assert postgres_success.commits == 1
+
+    failure = OperationConnection(
+        fail_operation="ALTER TABLE flavor",
+        fail_rollback=True,
+    )
+    try:
+        history._run_migration_operations(
+            connection=failure,
+            dialect="sqlite",
+            revision="002",
+            operations=[MigrationOperation("ALTER TABLE flavor ADD bad TEXT")],
+            status="applied",
+            description=None,
+            checksum=None,
+            artifact_version=2,
+            metadata={},
+        )
+    except RuntimeError as exc:
+        assert "operation failed" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("failing migration operation should propagate")
+
+    assert failure.rollbacks == 1
+    assert any('"phase": "failed"' in statement for statement in failure.statements)
+
+
+def test_run_migration_operations_ignores_release_and_failed_history_commit() -> None:
+    release_failure = OperationConnection(fail_release=True)
+    history._run_migration_operations(
+        connection=release_failure,
+        dialect="mysql",
+        revision="003",
+        operations=[MigrationOperation("ALTER TABLE flavor ADD name TEXT")],
+        status="applied",
+        description=None,
+        checksum=None,
+        artifact_version=2,
+        metadata={},
+    )
+    assert any("RELEASE_LOCK" in statement for statement in release_failure.statements)
+
+    commit_failure = OperationConnection(
+        fail_operation="ALTER TABLE flavor",
+        fail_commit_after=1,
+    )
+    try:
+        history._run_migration_operations(
+            connection=commit_failure,
+            dialect="oracle",
+            revision="004",
+            operations=[MigrationOperation("ALTER TABLE flavor ADD bad VARCHAR2(20)")],
+            status="applied",
+            description=None,
+            checksum=None,
+            artifact_version=2,
+            metadata={},
+        )
+    except RuntimeError as exc:
+        assert "operation failed" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("failing oracle migration should propagate")
+
+    assert commit_failure.commits == 2

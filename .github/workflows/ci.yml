@@ -33,6 +33,8 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
         os: [ubuntu, macos, windows]
+    env:
+      DATABASE_URL: sqlite:///db.sqlite3
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,11 +51,11 @@ jobs:
       - run: uv sync --group dev
       - run: uv run --group dev maturin develop
       - run: bash scripts/test.sh
-        env:
-          DATABASE_URL: sqlite:///db.sqlite3
 
   coverage:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:///db.sqlite3
     steps:
       - uses: actions/checkout@v7
         with:
@@ -67,49 +69,65 @@ jobs:
         with:
           enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
 
+      - name: Start database services
+        run: docker compose -p ormdantic-coverage -f docker/databases/docker-compose.yaml up -d --wait
       - run: uv sync --group dev
       - run: uv run --group dev maturin develop
-      - run: bash scripts/test.sh
+      - name: Python SQLite coverage
+        run: bash scripts/test.sh
         env:
-          CONTEXT: py312-ubuntu-coverage
-          DATABASE_URL: sqlite:///db.sqlite3
-      - run: bash scripts/coverage-rust.sh
+          CONTEXT: py312-ubuntu-sqlite-coverage
+      - name: Python external database coverage
+        run: |
+          uv run --group testing pytest \
+            tests/integration/test_migrations_external.py \
+            tests/integration/test_relationship_loading_external.py \
+            tests/integration/test_transactions_external.py \
+            tests/integration/test_value_fidelity.py \
+            --cov=ormdantic \
+            --cov-append \
+            --cov-report=xml \
+            -q
+        env:
+          CONTEXT: py312-ubuntu-database-coverage
+          ORMDANTIC_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_TEST_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_TEST_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
+          ORMDANTIC_TEST_MSSQL_URL: mssql://sa:Password123@localhost:1433/master?trust_cert=true
+          ORMDANTIC_TEST_ORACLE_URL: oracle://system:oracle@localhost:1521/FREEPDB1
+      - name: Rust coverage with database URLs
+        run: bash scripts/coverage-rust.sh
+        env:
+          ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
+      - name: Rust SQL Server and Oracle smoke tests
+        run: cargo test -p ormdantic-engine --features mssql,oracle --test driver_matrix --test mssql_exec --test oracle_exec
+        env:
+          ORMDANTIC_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ORMDANTIC_MYSQL_URL: mysql://root:mysql@localhost:3306/mysql
+          ORMDANTIC_MARIADB_URL: mariadb://root:mariadb@localhost:3307/mariadb
+          ORMDANTIC_MSSQL_URL: mssql://sa:Password123@localhost:1433/master?trust_cert=true
+          ORMDANTIC_ORACLE_URL: oracle://system:oracle@localhost:1521/FREEPDB1
+      - name: Combined coverage gate
+        run: uv run --group testing python scripts/coverage_combined.py --fail-under 99
 
-      - uses: codecov/codecov-action@v7
+      - name: Upload combined coverage to Codecov
+        uses: codecov/codecov-action@v7
         with:
-          files: coverage.xml
-          flags: python
-          name: python-coverage
-          fail_ci_if_error: false
+          files: coverage.xml,target/coverage/rust.lcov
+          flags: combined,databases
+          name: combined-python-rust-database-coverage
+          fail_ci_if_error: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      - uses: codecov/codecov-action@v7
-        with:
-          files: target/coverage/rust.lcov
-          flags: rust
-          name: rust-coverage
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-  database-services:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
-        with:
-          enable-cache: true # zizmor: ignore[cache-poisoning] -- Job does not produce release artifacts and does not have sensitive permissions
-      - run: bash docker/databases/run-tests.sh
+      - name: Stop database services
+        if: always()
+        run: docker compose -p ormdantic-coverage -f docker/databases/docker-compose.yaml down -v
 
   check:
     if: always()
-    needs: [lint, tests, coverage, database-services]
+    needs: [lint, tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
