@@ -91,7 +91,7 @@ fn merge_selectin_results_skips_children_and_parents_with_missing_keys() {
         &plan,
     );
 
-    assert!(merged[0].get("flavors").is_none());
+    assert!(!merged[0].contains_key("flavors"));
     assert_eq!(
         merged[1].get("flavors").unwrap(),
         "coffee_id=1,id=11,name=mocha"
