@@ -137,6 +137,21 @@ def test_hydrate_flat_payload_returns_single_record() -> None:
     assert payload == {"id": flavor_id, "name": "mocha", "strength": 1}
 
 
+def test_serializer_returns_none_for_empty_flat_single_result_without_columns() -> None:
+    table = flavor_table()
+    result = FakeResult([], [])
+
+    hydrated = OrmSerializer[HydratedFlavor | None](
+        table_data=table,
+        table_map=Map(name_to_data={table.tablename: table}, model_to_data={}),
+        result_set=result,
+        is_array=False,
+        depth=0,
+    ).deserialize()
+
+    assert hydrated is None
+
+
 def test_serializer_uses_flat_hydration_path_for_array_results() -> None:
     table = flavor_table()
     rows = [
