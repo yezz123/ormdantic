@@ -1,5 +1,6 @@
 use ormdantic_core::{ExecutionErrorKind, OrmdanticError, OrmdanticResult};
-use postgres::types::{FromSql, ToSql, Type};
+use postgres::types::private::BytesMut;
+use postgres::types::{to_sql_checked, FromSql, IsNull, ToSql, Type};
 use postgres::{Client, NoTls, Row};
 use std::error::Error;
 
@@ -77,13 +78,10 @@ fn pg_params(params: &[DbValue]) -> Vec<Box<dyn ToSql + Sync>> {
     params
         .iter()
         .map(|value| match value {
-            DbValue::Null => Box::new(None::<String>) as Box<dyn ToSql + Sync>,
-            DbValue::Integer(value) => Box::new(*value),
-            DbValue::UnsignedInteger(value) => match i64::try_from(*value) {
-                Ok(value) => Box::new(value) as Box<dyn ToSql + Sync>,
-                Err(_) => Box::new(value.to_string()) as Box<dyn ToSql + Sync>,
-            },
-            DbValue::Decimal(value) => Box::new(value.clone()),
+            DbValue::Null => Box::new(PgNull) as Box<dyn ToSql + Sync>,
+            DbValue::Integer(value) => Box::new(PgInteger(*value)),
+            DbValue::UnsignedInteger(value) => Box::new(PgUnsignedInteger(*value)),
+            DbValue::Decimal(value) => Box::new(PgNumeric(value.clone())),
             DbValue::Real(value) => Box::new(*value),
             DbValue::Text(value) => Box::new(value.clone()),
             DbValue::Bool(value) => Box::new(*value),
@@ -142,6 +140,88 @@ where
     row.try_get::<usize, Option<T>>(idx).ok().flatten()
 }
 
+#[derive(Debug)]
+struct PgNull;
+
+impl ToSql for PgNull {
+    fn to_sql(
+        &self,
+        _ty: &Type,
+        _out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        Ok(IsNull::Yes)
+    }
+
+    fn accepts(_ty: &Type) -> bool {
+        true
+    }
+
+    to_sql_checked!();
+}
+
+#[derive(Debug)]
+struct PgInteger(i64);
+
+impl ToSql for PgInteger {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        if *ty == Type::INT2 {
+            return i16::try_from(self.0)?.to_sql(ty, out);
+        }
+        if *ty == Type::INT4 {
+            return i32::try_from(self.0)?.to_sql(ty, out);
+        }
+        if *ty == Type::INT8 {
+            return self.0.to_sql(ty, out);
+        }
+        if *ty == Type::NUMERIC {
+            return PgNumeric(self.0.to_string()).to_sql(ty, out);
+        }
+        Err(format!("unsupported PostgreSQL integer target type: {ty:?}").into())
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        *ty == Type::INT2 || *ty == Type::INT4 || *ty == Type::INT8 || *ty == Type::NUMERIC
+    }
+
+    to_sql_checked!();
+}
+
+#[derive(Debug)]
+struct PgUnsignedInteger(u64);
+
+impl ToSql for PgUnsignedInteger {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        if *ty == Type::INT2 {
+            return i16::try_from(self.0)?.to_sql(ty, out);
+        }
+        if *ty == Type::INT4 {
+            return i32::try_from(self.0)?.to_sql(ty, out);
+        }
+        if *ty == Type::INT8 {
+            return i64::try_from(self.0)?.to_sql(ty, out);
+        }
+        if *ty == Type::NUMERIC {
+            return PgNumeric(self.0.to_string()).to_sql(ty, out);
+        }
+        Err(format!("unsupported PostgreSQL unsigned integer target type: {ty:?}").into())
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        *ty == Type::INT2 || *ty == Type::INT4 || *ty == Type::INT8 || *ty == Type::NUMERIC
+    }
+
+    to_sql_checked!();
+}
+
+#[derive(Debug)]
 struct PgNumeric(String);
 
 impl<'a> FromSql<'a> for PgNumeric {
@@ -152,6 +232,112 @@ impl<'a> FromSql<'a> for PgNumeric {
     fn accepts(ty: &Type) -> bool {
         *ty == Type::NUMERIC
     }
+}
+
+impl ToSql for PgNumeric {
+    fn to_sql(
+        &self,
+        _ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        encode_pg_numeric(&self.0, out)?;
+        Ok(IsNull::No)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        *ty == Type::NUMERIC
+    }
+
+    to_sql_checked!();
+}
+
+fn encode_pg_numeric(value: &str, out: &mut BytesMut) -> Result<(), Box<dyn Error + Sync + Send>> {
+    let raw = value.trim();
+    if raw.eq_ignore_ascii_case("nan") {
+        out.extend_from_slice(&0_i16.to_be_bytes());
+        out.extend_from_slice(&0_i16.to_be_bytes());
+        out.extend_from_slice(&0xC000_u16.to_be_bytes());
+        out.extend_from_slice(&0_i16.to_be_bytes());
+        return Ok(());
+    }
+
+    let (negative, unsigned) = match raw.as_bytes().first() {
+        Some(b'-') => (true, &raw[1..]),
+        Some(b'+') => (false, &raw[1..]),
+        _ => (false, raw),
+    };
+    let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if (integer.is_empty() && fraction.is_empty())
+        || !integer
+            .bytes()
+            .chain(fraction.bytes())
+            .all(|byte| byte.is_ascii_digit())
+    {
+        return Err(format!("invalid PostgreSQL numeric literal: {value}").into());
+    }
+
+    let integer = integer.trim_start_matches('0');
+    let integer_group_count = if integer.is_empty() {
+        0
+    } else {
+        integer.len().div_ceil(4)
+    };
+    let fraction_group_count = fraction.len().div_ceil(4);
+    let scale = i16::try_from(fraction.len())
+        .map_err(|_| format!("PostgreSQL numeric scale is too large: {}", fraction.len()))?;
+    let weight = if integer_group_count == 0 {
+        if fraction_group_count == 0 {
+            0
+        } else {
+            -1
+        }
+    } else {
+        i16::try_from(integer_group_count - 1).map_err(|_| {
+            format!("PostgreSQL numeric integer group count is too large: {integer_group_count}")
+        })?
+    };
+
+    let mut digits = Vec::with_capacity(integer_group_count + fraction_group_count);
+    if integer_group_count > 0 {
+        let padded_len = integer_group_count * 4;
+        let mut padded = String::with_capacity(padded_len);
+        padded.push_str(&"0".repeat(padded_len - integer.len()));
+        padded.push_str(integer);
+        push_pg_numeric_digits(&padded, &mut digits)?;
+    }
+    if fraction_group_count > 0 {
+        let padded_len = fraction_group_count * 4;
+        let mut padded = String::with_capacity(padded_len);
+        padded.push_str(fraction);
+        padded.push_str(&"0".repeat(padded_len - fraction.len()));
+        push_pg_numeric_digits(&padded, &mut digits)?;
+    }
+    let digit_count = i16::try_from(digits.len()).map_err(|_| {
+        format!(
+            "PostgreSQL numeric digit count is too large: {}",
+            digits.len()
+        )
+    })?;
+
+    out.extend_from_slice(&digit_count.to_be_bytes());
+    out.extend_from_slice(&weight.to_be_bytes());
+    out.extend_from_slice(&(if negative { 0x4000_u16 } else { 0x0000_u16 }).to_be_bytes());
+    out.extend_from_slice(&scale.to_be_bytes());
+    for digit in digits {
+        out.extend_from_slice(&digit.to_be_bytes());
+    }
+    Ok(())
+}
+
+fn push_pg_numeric_digits(
+    padded: &str,
+    digits: &mut Vec<u16>,
+) -> Result<(), Box<dyn Error + Sync + Send>> {
+    for chunk in padded.as_bytes().chunks(4) {
+        let rendered = std::str::from_utf8(chunk)?;
+        digits.push(rendered.parse::<u16>()?);
+    }
+    Ok(())
 }
 
 fn parse_pg_numeric(raw: &[u8]) -> Result<String, Box<dyn Error + Sync + Send>> {
@@ -228,9 +414,14 @@ fn parse_pg_numeric(raw: &[u8]) -> Result<String, Box<dyn Error + Sync + Send>> 
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_postgres_sqlstate, parse_pg_numeric, pg_params};
+    use super::{
+        classify_postgres_sqlstate, encode_pg_numeric, parse_pg_numeric, pg_params, PgInteger,
+        PgUnsignedInteger,
+    };
     use crate::DbValue;
     use ormdantic_core::ExecutionErrorKind;
+    use postgres::types::private::BytesMut;
+    use postgres::types::{ToSql, Type};
 
     #[test]
     fn classifies_postgres_sqlstate_codes() {
@@ -281,6 +472,35 @@ mod tests {
     }
 
     #[test]
+    fn parses_postgres_numeric_integer_and_padded_fraction_payloads() {
+        let integer = [
+            0x00, 0x01, // ndigits
+            0x00, 0x00, // weight
+            0x00, 0x00, // positive
+            0x00, 0x00, // dscale
+            0x00, 0x7b, // 123
+        ];
+        let padded = [
+            0x00, 0x01, // ndigits
+            0xff, 0xff, // weight -1
+            0x00, 0x00, // positive
+            0x00, 0x06, // dscale
+            0x00, 0x0c, // 12
+        ];
+        let shifted = [
+            0x00, 0x01, // ndigits
+            0xff, 0xfe, // weight -2
+            0x00, 0x00, // positive
+            0x00, 0x08, // dscale
+            0x00, 0x0c, // 12
+        ];
+
+        assert_eq!(parse_pg_numeric(&integer).unwrap(), "123");
+        assert_eq!(parse_pg_numeric(&padded).unwrap(), "0.001200");
+        assert_eq!(parse_pg_numeric(&shifted).unwrap(), "0.00000012");
+    }
+
+    #[test]
     fn postgres_params_cover_all_db_value_variants() {
         let params = pg_params(&[
             DbValue::Null,
@@ -294,6 +514,91 @@ mod tests {
         ]);
 
         assert_eq!(params.len(), 8);
+    }
+
+    #[test]
+    fn postgres_decimal_params_serialize_as_numeric() {
+        let params = pg_params(&[DbValue::Decimal("123456789012345.123456789".to_string())]);
+        let mut out = BytesMut::new();
+
+        params[0]
+            .to_sql_checked(&Type::NUMERIC, &mut out)
+            .expect("decimal should serialize as PostgreSQL numeric");
+
+        assert_eq!(parse_pg_numeric(&out).unwrap(), "123456789012345.123456789");
+    }
+
+    #[test]
+    fn postgres_integer_params_serialize_to_int4_columns() {
+        let params = pg_params(&[DbValue::Integer(1)]);
+        let mut out = BytesMut::new();
+
+        params[0]
+            .to_sql_checked(&Type::INT4, &mut out)
+            .expect("integer should serialize to PostgreSQL int4");
+    }
+
+    #[test]
+    fn postgres_integer_params_cover_widths_numeric_and_rejections() {
+        for ty in [Type::INT2, Type::INT4, Type::INT8] {
+            let mut out = BytesMut::new();
+            PgInteger(7).to_sql_checked(&ty, &mut out).unwrap();
+        }
+
+        let mut numeric = BytesMut::new();
+        PgInteger(-7)
+            .to_sql_checked(&Type::NUMERIC, &mut numeric)
+            .unwrap();
+        assert_eq!(parse_pg_numeric(&numeric).unwrap(), "-7");
+
+        let mut unsupported = BytesMut::new();
+        assert!(ToSql::to_sql(&PgInteger(1), &Type::TEXT, &mut unsupported).is_err());
+    }
+
+    #[test]
+    fn postgres_unsigned_integer_params_cover_widths_numeric_and_rejections() {
+        for ty in [Type::INT2, Type::INT4, Type::INT8] {
+            let mut out = BytesMut::new();
+            PgUnsignedInteger(7).to_sql_checked(&ty, &mut out).unwrap();
+        }
+
+        let mut numeric = BytesMut::new();
+        PgUnsignedInteger(u64::MAX)
+            .to_sql_checked(&Type::NUMERIC, &mut numeric)
+            .unwrap();
+        assert_eq!(parse_pg_numeric(&numeric).unwrap(), u64::MAX.to_string());
+
+        let mut unsupported = BytesMut::new();
+        assert!(ToSql::to_sql(&PgUnsignedInteger(1), &Type::TEXT, &mut unsupported).is_err());
+    }
+
+    #[test]
+    fn postgres_null_params_accept_any_target_type() {
+        let params = pg_params(&[DbValue::Null]);
+        let mut out = BytesMut::new();
+
+        let is_null = params[0]
+            .to_sql_checked(&Type::INT4, &mut out)
+            .expect("null should serialize to any PostgreSQL target type");
+
+        assert!(matches!(is_null, postgres::types::IsNull::Yes));
+    }
+
+    #[test]
+    fn postgres_numeric_encoder_covers_edge_literals() {
+        let mut nan = BytesMut::new();
+        encode_pg_numeric("NaN", &mut nan).unwrap();
+        assert_eq!(parse_pg_numeric(&nan).unwrap(), "NaN");
+
+        let mut zero = BytesMut::new();
+        encode_pg_numeric("+0", &mut zero).unwrap();
+        assert_eq!(parse_pg_numeric(&zero).unwrap(), "0");
+
+        let mut fraction = BytesMut::new();
+        encode_pg_numeric("-0.0012", &mut fraction).unwrap();
+        assert_eq!(parse_pg_numeric(&fraction).unwrap(), "-0.0012");
+
+        assert!(encode_pg_numeric("not-a-number", &mut BytesMut::new()).is_err());
     }
 
     #[test]

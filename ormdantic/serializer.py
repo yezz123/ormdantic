@@ -89,6 +89,8 @@ class OrmSerializer(Generic[SerializedType]):
 
     def _deserialize_flat(self) -> SerializedType:
         rows = [tuple(row) for row in self._result_set]
+        if not rows:
+            return [] if self._is_array else None  # type: ignore
         payload = hydrate_flat_payload(
             tablename=self._table_data.tablename,
             pk=self._table_data.pk,
