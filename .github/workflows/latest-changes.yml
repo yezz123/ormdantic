@@ -45,7 +45,9 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug_enabled == 'true' }}
         with:
           limit-access-to-actor: true
-      - uses: tiangolo/latest-changes@43f19d63faf0edfed2cc482122bcfbc4a637cf02 # 0.6.0
+      - uses: tiangolo/latest-changes@0.6.1 # 0.6.0
+        env:
+          UV_PROJECT: /app
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           latest_changes_file: docs/release.md
