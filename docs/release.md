@@ -8,6 +8,7 @@
 
 ### Features
 
+* ♻️ Refactor upsert functionality and enhance SQL dialect support. PR [#266](https://github.com/yezz123/ormdantic/pull/266) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance savepoint & rollback functionality. PR [#265](https://github.com/yezz123/ormdantic/pull/265) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance schema reflection and testing for multiple SQL dialects. PR [#262](https://github.com/yezz123/ormdantic/pull/262) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance error handling and diagnostics in Ormdantic. PR [#260](https://github.com/yezz123/ormdantic/pull/260) by [@yezz123](https://github.com/yezz123).
