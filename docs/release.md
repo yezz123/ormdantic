@@ -8,6 +8,7 @@
 
 ### Features
 
+* ✨ Enhance testing suite with benchmarks & error handling. PR [#269](https://github.com/yezz123/ormdantic/pull/269) by [@yezz123](https://github.com/yezz123).
 * ✨ Introduce native extension support and enhance testing documentation. PR [#268](https://github.com/yezz123/ormdantic/pull/268) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance dependency management, linting, and migration CLI features. PR [#267](https://github.com/yezz123/ormdantic/pull/267) by [@yezz123](https://github.com/yezz123).
 * ♻️ Refactor upsert functionality and enhance SQL dialect support. PR [#266](https://github.com/yezz123/ormdantic/pull/266) by [@yezz123](https://github.com/yezz123).
