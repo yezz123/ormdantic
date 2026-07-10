@@ -22,6 +22,13 @@ def test_write_chart_bundle_creates_svg_charts_and_summary(tmp_path: Path) -> No
             samples_ms=(24.8, 25.0, 25.2),
         ),
         BenchmarkMeasurement(
+            case="filtered read",
+            rows=10_000,
+            orm="sqlmodel",
+            median_ms=30.0,
+            samples_ms=(29.8, 30.0, 30.2),
+        ),
+        BenchmarkMeasurement(
             case="point lookup batch",
             rows=1_000,
             orm="ormdantic",
@@ -35,6 +42,13 @@ def test_write_chart_bundle_creates_svg_charts_and_summary(tmp_path: Path) -> No
             median_ms=36.0,
             samples_ms=(35.2, 36.0, 36.6),
         ),
+        BenchmarkMeasurement(
+            case="point lookup batch",
+            rows=1_000,
+            orm="sqlmodel",
+            median_ms=54.0,
+            samples_ms=(53.2, 54.0, 54.6),
+        ),
     ]
 
     artifacts = write_chart_bundle(measurements, tmp_path)
@@ -44,14 +58,19 @@ def test_write_chart_bundle_creates_svg_charts_and_summary(tmp_path: Path) -> No
     summary_csv = artifacts.summary_csv.read_text()
 
     assert latency_svg.startswith("<svg")
-    assert "Ormdantic vs SQLAlchemy median latency" in latency_svg
+    assert "Ormdantic, SQLAlchemy, and SQLModel median latency" in latency_svg
     assert "filtered read" in latency_svg
     assert "SQLAlchemy" in latency_svg
+    assert "SQLModel" in latency_svg
+    assert 'fill="#ffffff"' not in latency_svg
     assert speedup_svg.startswith("<svg")
-    assert "Ormdantic speedup over SQLAlchemy" in speedup_svg
+    assert "Ormdantic speedup over SQLAlchemy and SQLModel" in speedup_svg
     assert "2.50x" in speedup_svg
     assert "2.00x" in speedup_svg
+    assert "3.00x" in speedup_svg
+    assert 'fill="#ffffff"' not in speedup_svg
     assert summary_csv.splitlines()[0] == (
-        "case,rows,ormdantic_median_ms,sqlalchemy_median_ms,ormdantic_speedup"
+        "case,rows,ormdantic_median_ms,sqlalchemy_median_ms,sqlmodel_median_ms,"
+        "ormdantic_vs_sqlalchemy_speedup,ormdantic_vs_sqlmodel_speedup"
     )
-    assert "filtered read,10000,10.000,25.000,2.500" in summary_csv
+    assert "filtered read,10000,10.000,25.000,30.000,2.500,3.000" in summary_csv
