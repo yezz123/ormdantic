@@ -1,0 +1,6 @@
+case,rows,ormdantic_median_ms,sqlalchemy_median_ms,ormdantic_speedup
+count all rows,20000,0.195,0.723,3.716
+count filtered,20000,0.252,0.876,3.484
+count score range,20000,0.288,0.917,3.186
+aggregate filtered,20000,0.987,1.603,1.625
+point lookup batch,1000,58.384,190.947,3.271
