@@ -1,4 +1,4 @@
-.PHONY: test lint docs coverage coverage-combined bench benchmark-report format taplo-check
+.PHONY: test lint docs coverage coverage-combined bench benchmark-report benchmark-huge format taplo-check
 
 test:
 	uv run --group dev maturin develop
@@ -29,6 +29,10 @@ bench:
 benchmark-report:
 	uv run --group dev maturin develop
 	uv run --group benchmark python -m benchmark.run
+
+benchmark-huge:
+	uv run --group dev maturin develop
+	uv run --group benchmark python -m benchmark.run --profile huge
 
 format:
 	cargo fmt
