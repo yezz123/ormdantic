@@ -11,6 +11,13 @@ SQLModel combines Pydantic-style models with SQLAlchemy. Ormdantic keeps Pydanti
 | Loading | SQLAlchemy relationship APIs. | Explicit async-safe loaders. |
 | Migrations | Usually Alembic. | Built-in snapshot and migration manager. |
 
+## Benchmark Snapshot
+
+The local report in `benchmark/` includes SQLModel alongside SQLAlchemy and
+Ormdantic for read and write cases on SQLite.
+
+![Ormdantic speedup over SQLAlchemy and SQLModel](../assets/benchmarks/default/ormdantic-orm-benchmark-speedup.svg)
+
 ## The Practical Difference
 
 SQLModel is the right choice if you want SQLAlchemy compatibility with a Pydantic-friendly declaration style.

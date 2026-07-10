@@ -39,13 +39,17 @@ The project is designed for applications that want Python model ergonomics witho
 
 ## Benchmarks
 
-The reproducible SQLAlchemy comparison in `benchmark/` measures native runtime
-fast paths on local SQLite file databases: counts, aggregate projections, and
-batched primary-key lookups.
+The reproducible benchmark report in `benchmark/` compares Ormdantic,
+SQLAlchemy, and SQLModel on local SQLite file databases. It includes read and
+write cases, and the optional huge profile uses million-row datasets.
 
-![Ormdantic speedup over SQLAlchemy](docs/assets/benchmarks/ormdantic-vs-sqlalchemy-speedup.svg)
+![Ormdantic speedup over SQLAlchemy and SQLModel](docs/assets/benchmarks/default/ormdantic-orm-benchmark-speedup.svg)
 
-![Ormdantic and SQLAlchemy median latency](docs/assets/benchmarks/ormdantic-vs-sqlalchemy-latency.svg)
+![Ormdantic, SQLAlchemy, and SQLModel median latency](docs/assets/benchmarks/default/ormdantic-orm-benchmark-latency.svg)
+
+Million-row profile:
+
+![Million-row Ormdantic speedup over SQLAlchemy and SQLModel](docs/assets/benchmarks/huge/ormdantic-orm-benchmark-speedup.svg)
 
 ## Install
 

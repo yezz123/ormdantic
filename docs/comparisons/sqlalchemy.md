@@ -13,11 +13,11 @@ SQLAlchemy is the most complete Python SQL toolkit and ORM. Ormdantic is narrowe
 
 ## Benchmark Snapshot
 
-The local report in `benchmark/` compares native runtime fast paths against
-SQLAlchemy's async SQLite path. These are median timings from the committed
-benchmark artifacts, not a universal claim about every ORM workflow.
+The local report in `benchmark/` compares Ormdantic, SQLAlchemy, and SQLModel
+on read and write cases. These are median timings from the committed benchmark
+artifacts, not a universal claim about every ORM workflow.
 
-![Ormdantic speedup over SQLAlchemy](../assets/benchmarks/ormdantic-vs-sqlalchemy-speedup.svg)
+![Ormdantic speedup over SQLAlchemy and SQLModel](../assets/benchmarks/default/ormdantic-orm-benchmark-speedup.svg)
 
 ## Choose Ormdantic When
 

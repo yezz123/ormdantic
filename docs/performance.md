@@ -21,17 +21,18 @@ The benchmark suite covers:
 - select-in merging
 - native driver execution
 
-## SQLAlchemy comparison report
+## ORM comparison report
 
 The repository also includes a reproducible comparison report under
-`benchmark/`. It focuses on native runtime fast paths that both Ormdantic and
-SQLAlchemy can run against local SQLite file databases: full-table counts,
-filtered counts, score-range counts, aggregate projections, and batched
-primary-key lookups.
+`benchmark/`. It compares Ormdantic, SQLAlchemy, and SQLModel against local
+SQLite file databases. The default profile is sized for quick local runs; the
+huge profile uses million-row read and write datasets.
+The charts show every measured case, including cases where Ormdantic is not the
+fastest path.
 
-![Ormdantic speedup over SQLAlchemy](assets/benchmarks/ormdantic-vs-sqlalchemy-speedup.svg)
+![Ormdantic speedup over SQLAlchemy and SQLModel](assets/benchmarks/default/ormdantic-orm-benchmark-speedup.svg)
 
-![Ormdantic and SQLAlchemy median latency](assets/benchmarks/ormdantic-vs-sqlalchemy-latency.svg)
+![Ormdantic, SQLAlchemy, and SQLModel median latency](assets/benchmarks/default/ormdantic-orm-benchmark-latency.svg)
 
 Regenerate the report and SVGs:
 
@@ -39,6 +40,19 @@ Regenerate the report and SVGs:
 uv run --group dev maturin develop
 uv run --group benchmark python -m benchmark.run
 ```
+
+Run the million-row profile:
+
+```console
+uv run --group dev maturin develop
+uv run --group benchmark python -m benchmark.run --profile huge
+```
+
+Million-row profile results:
+
+![Million-row Ormdantic speedup over SQLAlchemy and SQLModel](assets/benchmarks/huge/ormdantic-orm-benchmark-speedup.svg)
+
+![Million-row Ormdantic, SQLAlchemy, and SQLModel median latency](assets/benchmarks/huge/ormdantic-orm-benchmark-latency.svg)
 
 The command writes JSON, CSV, and SVG outputs under `benchmark/`, plus docs-ready
 SVG copies under `docs/assets/benchmarks/`.
