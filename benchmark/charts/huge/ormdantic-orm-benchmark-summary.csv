@@ -1,0 +1,8 @@
+case,rows,ormdantic_median_ms,sqlalchemy_median_ms,sqlmodel_median_ms,ormdantic_vs_sqlalchemy_speedup,ormdantic_vs_sqlmodel_speedup
+write insert batches,1000000,9415.450,4673.745,4727.767,0.496,0.502
+count all rows,1000000,2.346,3.866,3.212,1.648,1.369
+count filtered,1000000,1.596,5.173,5.171,3.242,3.241
+count score range,1000000,3.169,7.147,7.278,2.255,2.297
+aggregate filtered,1000000,22.678,57.576,57.311,2.539,2.527
+scalar projection read,1000000,74.179,156.005,152.081,2.103,2.050
+point lookup batch,10000,341.142,1970.133,1922.760,5.775,5.636
