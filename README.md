@@ -37,6 +37,16 @@ The project is designed for applications that want Python model ergonomics witho
 | Reflection | Live database inspection for tables, columns, indexes, constraints, schemas, views, sequences, and dialect metadata. |
 | Drivers | SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle through the native runtime. |
 
+## Benchmarks
+
+The reproducible SQLAlchemy comparison in `benchmark/` measures native runtime
+fast paths on local SQLite file databases: counts, aggregate projections, and
+batched primary-key lookups.
+
+![Ormdantic speedup over SQLAlchemy](docs/assets/benchmarks/ormdantic-vs-sqlalchemy-speedup.svg)
+
+![Ormdantic and SQLAlchemy median latency](docs/assets/benchmarks/ormdantic-vs-sqlalchemy-latency.svg)
+
 ## Install
 
 ```bash
