@@ -365,8 +365,11 @@ def _ormdantic_write_case(
         engine = NativeEngine(f"sqlite:///{context.db_path}")
 
         async def run() -> None:
-            for sql, values in _insert_statements(config.write_rows, config.batch_size):
-                await engine.execute(sql, tuple(values))
+            async with engine.transaction():
+                for sql, values in _insert_statements(
+                    config.write_rows, config.batch_size
+                ):
+                    await engine.execute(sql, tuple(values))
 
         async def validate() -> int:
             return _sqlite_count(context.db_path)

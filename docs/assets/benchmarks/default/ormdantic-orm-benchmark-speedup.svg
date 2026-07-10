@@ -5,38 +5,38 @@
 <line x1="330" y1="116" x2="330" y2="766" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 5"/>
 <text x="330.0" y="106.0" font-size="13" font-weight="700" fill="#64748b">1.00x</text>
 <text x="40.0" y="162.0" font-size="15" font-weight="700" fill="#111827">write insert batches (20,000 rows)</text>
-<rect x="330.0" y="130.0" width="58.3" height="22.0" rx="4" fill="#b45309"/>
-<text x="398.3" y="147.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.62x</text>
-<rect x="330.0" y="162.0" width="59.5" height="22.0" rx="4" fill="#b45309"/>
-<text x="399.5" y="179.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.64x</text>
+<rect x="330.0" y="130.0" width="97.1" height="22.0" rx="4" fill="#0f766e"/>
+<text x="437.1" y="147.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.06x</text>
+<rect x="330.0" y="162.0" width="96.5" height="22.0" rx="4" fill="#0f766e"/>
+<text x="436.5" y="179.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.06x</text>
 <text x="40.0" y="250.0" font-size="15" font-weight="700" fill="#111827">count all rows (20,000 rows)</text>
-<rect x="330.0" y="218.0" width="657.4" height="22.0" rx="4" fill="#0f766e"/>
-<text x="997.4" y="235.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 7.03x</text>
-<rect x="330.0" y="250.0" width="614.3" height="22.0" rx="4" fill="#0f766e"/>
-<text x="954.3" y="267.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 6.57x</text>
+<rect x="330.0" y="218.0" width="704.9" height="22.0" rx="4" fill="#0f766e"/>
+<text x="1044.9" y="235.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 7.72x</text>
+<rect x="330.0" y="250.0" width="672.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="1012.8" y="267.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 7.37x</text>
 <text x="40.0" y="338.0" font-size="15" font-weight="700" fill="#111827">count filtered (20,000 rows)</text>
-<rect x="330.0" y="306.0" width="720.0" height="22.0" rx="4" fill="#0f766e"/>
-<text x="1060.0" y="323.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 7.70x</text>
-<rect x="330.0" y="338.0" width="679.9" height="22.0" rx="4" fill="#0f766e"/>
-<text x="1019.9" y="355.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 7.27x</text>
+<rect x="330.0" y="306.0" width="699.6" height="22.0" rx="4" fill="#0f766e"/>
+<text x="1039.6" y="323.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 7.66x</text>
+<rect x="330.0" y="338.0" width="720.0" height="22.0" rx="4" fill="#0f766e"/>
+<text x="1060.0" y="355.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 7.88x</text>
 <text x="40.0" y="426.0" font-size="15" font-weight="700" fill="#111827">count score range (20,000 rows)</text>
-<rect x="330.0" y="394.0" width="554.9" height="22.0" rx="4" fill="#0f766e"/>
-<text x="894.9" y="411.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 5.93x</text>
-<rect x="330.0" y="426.0" width="531.0" height="22.0" rx="4" fill="#0f766e"/>
-<text x="871.0" y="443.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 5.68x</text>
+<rect x="330.0" y="394.0" width="570.3" height="22.0" rx="4" fill="#0f766e"/>
+<text x="910.3" y="411.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 6.24x</text>
+<rect x="330.0" y="426.0" width="540.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="880.8" y="443.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 5.92x</text>
 <text x="40.0" y="514.0" font-size="15" font-weight="700" fill="#111827">aggregate filtered (20,000 rows)</text>
-<rect x="330.0" y="482.0" width="327.7" height="22.0" rx="4" fill="#0f766e"/>
-<text x="667.7" y="499.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 3.51x</text>
-<rect x="330.0" y="514.0" width="316.3" height="22.0" rx="4" fill="#0f766e"/>
-<text x="656.3" y="531.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 3.38x</text>
+<rect x="330.0" y="482.0" width="345.7" height="22.0" rx="4" fill="#0f766e"/>
+<text x="685.7" y="499.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 3.78x</text>
+<rect x="330.0" y="514.0" width="354.0" height="22.0" rx="4" fill="#0f766e"/>
+<text x="694.0" y="531.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 3.88x</text>
 <text x="40.0" y="602.0" font-size="15" font-weight="700" fill="#111827">scalar projection read (20,000 rows)</text>
-<rect x="330.0" y="570.0" width="209.4" height="22.0" rx="4" fill="#0f766e"/>
-<text x="549.4" y="587.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 2.24x</text>
-<rect x="330.0" y="602.0" width="218.3" height="22.0" rx="4" fill="#0f766e"/>
-<text x="558.3" y="619.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 2.33x</text>
+<rect x="330.0" y="570.0" width="216.9" height="22.0" rx="4" fill="#0f766e"/>
+<text x="556.9" y="587.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 2.37x</text>
+<rect x="330.0" y="602.0" width="227.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="567.8" y="619.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 2.49x</text>
 <text x="40.0" y="690.0" font-size="15" font-weight="700" fill="#111827">point lookup batch (1,000 rows)</text>
-<rect x="330.0" y="658.0" width="548.4" height="22.0" rx="4" fill="#0f766e"/>
-<text x="888.4" y="675.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 5.86x</text>
-<rect x="330.0" y="690.0" width="550.9" height="22.0" rx="4" fill="#0f766e"/>
-<text x="890.9" y="707.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 5.89x</text>
+<rect x="330.0" y="658.0" width="563.5" height="22.0" rx="4" fill="#0f766e"/>
+<text x="903.5" y="675.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 6.17x</text>
+<rect x="330.0" y="690.0" width="566.7" height="22.0" rx="4" fill="#0f766e"/>
+<text x="906.7" y="707.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 6.20x</text>
 </svg>
