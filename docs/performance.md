@@ -21,6 +21,28 @@ The benchmark suite covers:
 - select-in merging
 - native driver execution
 
+## SQLAlchemy comparison report
+
+The repository also includes a reproducible comparison report under
+`benchmark/`. It focuses on native runtime fast paths that both Ormdantic and
+SQLAlchemy can run against local SQLite file databases: full-table counts,
+filtered counts, score-range counts, aggregate projections, and batched
+primary-key lookups.
+
+![Ormdantic speedup over SQLAlchemy](assets/benchmarks/ormdantic-vs-sqlalchemy-speedup.svg)
+
+![Ormdantic and SQLAlchemy median latency](assets/benchmarks/ormdantic-vs-sqlalchemy-latency.svg)
+
+Regenerate the report and SVGs:
+
+```console
+uv run --group dev maturin develop
+uv run --group benchmark python -m benchmark.run
+```
+
+The command writes JSON, CSV, and SVG outputs under `benchmark/`, plus docs-ready
+SVG copies under `docs/assets/benchmarks/`.
+
 ## Run Python benchmarks
 
 Run the CodSpeed-enabled Python benchmarks locally:

@@ -11,6 +11,14 @@ SQLAlchemy is the most complete Python SQL toolkit and ORM. Ormdantic is narrowe
 | Migrations | Usually Alembic. | Built-in snapshot, diff, plan, artifact, history, rollback, and repair APIs. |
 | Ecosystem | Large and mature. | Smaller, purpose-built API. |
 
+## Benchmark Snapshot
+
+The local report in `benchmark/` compares native runtime fast paths against
+SQLAlchemy's async SQLite path. These are median timings from the committed
+benchmark artifacts, not a universal claim about every ORM workflow.
+
+![Ormdantic speedup over SQLAlchemy](../assets/benchmarks/ormdantic-vs-sqlalchemy-speedup.svg)
+
 ## Choose Ormdantic When
 
 - your application models are already Pydantic models;

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="558" viewBox="0 0 1120 558" role="img">
+<style>text{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0}</style>
+<rect width="1120" height="558" fill="#ffffff"/>
+<text x="40.0" y="52.0" font-size="28" font-weight="700" fill="#111827">Ormdantic speedup over SQLAlchemy</text>
+<text x="40.0" y="84.0" font-size="15" font-weight="400" fill="#4b5563">Values above 1.00x mean Ormdantic completed the measured case faster.</text>
+<text x="300.0" y="104.0" font-size="13" font-weight="600" fill="#6b7280">1.00x parity</text>
+<line x1="300" y1="106" x2="300" y2="500" stroke="#9ca3af" stroke-width="1" stroke-dasharray="5 5"/>
+<text x="40.0" y="146.0" font-size="15" font-weight="600" fill="#111827">count all rows (20,000 rows)</text>
+<rect x="300.0" y="126.0" width="650.0" height="28.0" rx="5" fill="#0f766e"/>
+<text x="962.0" y="146.0" font-size="15" font-weight="700" fill="#0f766e">3.72x</text>
+<text x="40.0" y="218.0" font-size="15" font-weight="600" fill="#111827">count filtered (20,000 rows)</text>
+<rect x="300.0" y="198.0" width="609.3" height="28.0" rx="5" fill="#0f766e"/>
+<text x="921.3" y="218.0" font-size="15" font-weight="700" fill="#0f766e">3.48x</text>
+<text x="40.0" y="290.0" font-size="15" font-weight="600" fill="#111827">count score range (20,000 rows)</text>
+<rect x="300.0" y="270.0" width="557.3" height="28.0" rx="5" fill="#0f766e"/>
+<text x="869.3" y="290.0" font-size="15" font-weight="700" fill="#0f766e">3.19x</text>
+<text x="40.0" y="362.0" font-size="15" font-weight="600" fill="#111827">aggregate filtered (20,000 rows)</text>
+<rect x="300.0" y="342.0" width="284.2" height="28.0" rx="5" fill="#0f766e"/>
+<text x="596.2" y="362.0" font-size="15" font-weight="700" fill="#0f766e">1.62x</text>
+<text x="40.0" y="434.0" font-size="15" font-weight="600" fill="#111827">point lookup batch (1,000 rows)</text>
+<rect x="300.0" y="414.0" width="572.0" height="28.0" rx="5" fill="#0f766e"/>
+<text x="884.0" y="434.0" font-size="15" font-weight="700" fill="#0f766e">3.27x</text>
+</svg>
