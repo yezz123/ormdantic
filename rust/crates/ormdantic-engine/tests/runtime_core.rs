@@ -10,7 +10,7 @@ use ormdantic_engine::{
     MigrationStore, NativeConnection, QueryResult, Reflector, StatementResult, TransactionState,
 };
 use ormdantic_schema::FieldKind;
-use rusqlite::types::{ToSqlOutput, Value as RusqliteValue};
+use rusqlite::types::{ToSqlOutput, Value as RusqliteValue, ValueRef};
 use rusqlite::ToSql;
 
 #[test]
@@ -82,9 +82,13 @@ fn sqlite_db_value_to_sql_covers_scalar_variants() {
     ];
 
     for (value, expected) in cases {
-        match value.to_sql().expect("db value should convert to sqlite") {
-            ToSqlOutput::Owned(actual) => assert_eq!(actual, expected),
-            other => panic!("expected owned sqlite value for {value:?}, got {other:?}"),
+        let actual = value.to_sql().expect("db value should convert to sqlite");
+        match (&actual, &expected) {
+            (ToSqlOutput::Owned(actual), expected) => assert_eq!(actual, expected),
+            (ToSqlOutput::Borrowed(ValueRef::Text(actual)), RusqliteValue::Text(expected)) => {
+                assert_eq!(*actual, expected.as_bytes());
+            }
+            _ => panic!("unexpected sqlite value for {value:?}: {actual:?}"),
         }
     }
 }
