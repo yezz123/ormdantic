@@ -80,6 +80,7 @@ docs = [
   "pyyaml >=5.3.1",
   "zensical>=0.0.42",
 ]
+benchmark = ["aiosqlite>=0.20.0", "sqlalchemy[asyncio]>=2.0.0"]
 dev = [
   { include-group = "testing" },
   { include-group = "linting" },
