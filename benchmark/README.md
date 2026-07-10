@@ -16,12 +16,15 @@ databases. It measures:
 
 Setup work is outside the timed section. Validation queries also run outside the
 timed section, so each sample records only the measured operation.
+Build the native extension with `--release` before recording report artifacts;
+debug Rust builds are useful for development, but they are not representative
+performance inputs.
 
 ## Run
 
 ```bash
 uv sync --group dev --group benchmark
-uv run --group dev maturin develop
+uv run --group dev maturin develop --release
 uv run --group benchmark python -m benchmark.run
 ```
 
@@ -44,7 +47,7 @@ The default run writes:
 Run the million-row profile when you want a real large local workload:
 
 ```bash
-uv run --group dev maturin develop
+uv run --group dev maturin develop --release
 uv run --group benchmark python -m benchmark.run --profile huge
 ```
 

@@ -49,7 +49,7 @@ jobs:
 
       - run: cargo test --workspace --exclude ormdantic-py
       - run: uv sync --group dev
-      - run: uv run --group dev maturin develop
+      - run: uv run --group dev maturin develop --release
       - run: bash scripts/test.sh
 
   coverage:
@@ -72,7 +72,7 @@ jobs:
       - name: Start database services
         run: docker compose -p ormdantic-coverage -f docker/databases/docker-compose.yaml up -d --wait
       - run: uv sync --group dev
-      - run: uv run --group dev maturin develop
+      - run: uv run --group dev maturin develop --release
       - name: Python SQLite coverage
         run: bash scripts/test.sh
         env:

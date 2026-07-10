@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from uuid import UUID, uuid4
 
 from ormdantic._ormdantic import (
@@ -12,6 +13,7 @@ from ormdantic._ormdantic import (
     compile_update,
     compile_upsert,
     normalize_filters,
+    sql_value,
 )
 from pydantic import BaseModel, Field
 
@@ -202,6 +204,13 @@ def test_rust_query_bridge_compiles_insert() -> None:
         "params": ["id", "name"],
         "operation": "insert",
     }
+
+
+def test_sql_value_converts_primitives_without_decimal_import(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "decimal", None)
+
+    assert sql_value("payload") == "payload"
+    assert sql_value(42) == 42
 
 
 def test_rust_query_bridge_compiles_mysql_connection_url() -> None:

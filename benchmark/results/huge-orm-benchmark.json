@@ -1,13 +1,14 @@
 {
   "metadata": {
-    "generated_at": "2026-07-10T23:06:57.113871+00:00",
+    "generated_at": "2026-07-10T23:36:39.829445+00:00",
     "python": "3.12.4",
     "platform": "macOS-26.5.1-arm64-arm-64bit",
     "runner": "benchmark.ormdantic_vs_sqlalchemy",
     "notes": [
       "SQLite file databases are created in a temporary directory per sample.",
       "Rows are seeded outside the timed section for every measured case.",
-      "Validation queries run after the timed section and before cleanup."
+      "Validation queries run after the timed section and before cleanup.",
+      "Report artifacts should be generated with a release-built native extension."
     ]
   },
   "config": {
@@ -25,189 +26,189 @@
       "case": "write insert batches",
       "rows": 1000000,
       "orm": "ormdantic",
-      "median_ms": 9415.449792,
+      "median_ms": 4251.918042,
       "samples_ms": [
-        9415.449792
+        4251.918042
       ]
     },
     {
       "case": "write insert batches",
       "rows": 1000000,
       "orm": "sqlalchemy",
-      "median_ms": 4673.745417,
+      "median_ms": 4750.422916,
       "samples_ms": [
-        4673.745417
+        4750.422916
       ]
     },
     {
       "case": "write insert batches",
       "rows": 1000000,
       "orm": "sqlmodel",
-      "median_ms": 4727.767084,
+      "median_ms": 5007.926166,
       "samples_ms": [
-        4727.767084
+        5007.926166
       ]
     },
     {
       "case": "count all rows",
       "rows": 1000000,
       "orm": "ormdantic",
-      "median_ms": 2.345708,
+      "median_ms": 2.499167,
       "samples_ms": [
-        2.345708
+        2.499167
       ]
     },
     {
       "case": "count all rows",
       "rows": 1000000,
       "orm": "sqlalchemy",
-      "median_ms": 3.865542,
+      "median_ms": 3.714666,
       "samples_ms": [
-        3.865542
+        3.714666
       ]
     },
     {
       "case": "count all rows",
       "rows": 1000000,
       "orm": "sqlmodel",
-      "median_ms": 3.212125,
+      "median_ms": 3.439917,
       "samples_ms": [
-        3.212125
+        3.439917
       ]
     },
     {
       "case": "count filtered",
       "rows": 1000000,
       "orm": "ormdantic",
-      "median_ms": 1.595834,
+      "median_ms": 1.630875,
       "samples_ms": [
-        1.595834
+        1.630875
       ]
     },
     {
       "case": "count filtered",
       "rows": 1000000,
       "orm": "sqlalchemy",
-      "median_ms": 5.173292,
+      "median_ms": 5.258792,
       "samples_ms": [
-        5.173292
+        5.258792
       ]
     },
     {
       "case": "count filtered",
       "rows": 1000000,
       "orm": "sqlmodel",
-      "median_ms": 5.171458,
+      "median_ms": 5.170542,
       "samples_ms": [
-        5.171458
+        5.170542
       ]
     },
     {
       "case": "count score range",
       "rows": 1000000,
       "orm": "ormdantic",
-      "median_ms": 3.169,
+      "median_ms": 3.393875,
       "samples_ms": [
-        3.169
+        3.393875
       ]
     },
     {
       "case": "count score range",
       "rows": 1000000,
       "orm": "sqlalchemy",
-      "median_ms": 7.147,
+      "median_ms": 7.011833,
       "samples_ms": [
-        7.147
+        7.011833
       ]
     },
     {
       "case": "count score range",
       "rows": 1000000,
       "orm": "sqlmodel",
-      "median_ms": 7.278166,
+      "median_ms": 6.789459,
       "samples_ms": [
-        7.278166
+        6.789459
       ]
     },
     {
       "case": "aggregate filtered",
       "rows": 1000000,
       "orm": "ormdantic",
-      "median_ms": 22.678417,
+      "median_ms": 21.950583,
       "samples_ms": [
-        22.678417
+        21.950583
       ]
     },
     {
       "case": "aggregate filtered",
       "rows": 1000000,
       "orm": "sqlalchemy",
-      "median_ms": 57.576209,
+      "median_ms": 61.541583,
       "samples_ms": [
-        57.576209
+        61.541583
       ]
     },
     {
       "case": "aggregate filtered",
       "rows": 1000000,
       "orm": "sqlmodel",
-      "median_ms": 57.310583,
+      "median_ms": 57.754917,
       "samples_ms": [
-        57.310583
+        57.754917
       ]
     },
     {
       "case": "scalar projection read",
       "rows": 1000000,
       "orm": "ormdantic",
-      "median_ms": 74.179458,
+      "median_ms": 78.491667,
       "samples_ms": [
-        74.179458
+        78.491667
       ]
     },
     {
       "case": "scalar projection read",
       "rows": 1000000,
       "orm": "sqlalchemy",
-      "median_ms": 156.005416,
+      "median_ms": 155.999209,
       "samples_ms": [
-        156.005416
+        155.999209
       ]
     },
     {
       "case": "scalar projection read",
       "rows": 1000000,
       "orm": "sqlmodel",
-      "median_ms": 152.08125,
+      "median_ms": 149.131125,
       "samples_ms": [
-        152.08125
+        149.131125
       ]
     },
     {
       "case": "point lookup batch",
       "rows": 10000,
       "orm": "ormdantic",
-      "median_ms": 341.141791,
+      "median_ms": 318.998916,
       "samples_ms": [
-        341.141791
+        318.998916
       ]
     },
     {
       "case": "point lookup batch",
       "rows": 10000,
       "orm": "sqlalchemy",
-      "median_ms": 1970.133417,
+      "median_ms": 1884.523083,
       "samples_ms": [
-        1970.133417
+        1884.523083
       ]
     },
     {
       "case": "point lookup batch",
       "rows": 10000,
       "orm": "sqlmodel",
-      "median_ms": 1922.75975,
+      "median_ms": 1927.600333,
       "samples_ms": [
-        1922.75975
+        1927.600333
       ]
     }
   ]

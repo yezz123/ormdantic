@@ -116,6 +116,7 @@ def _payload(
                 "SQLite file databases are created in a temporary directory per sample.",
                 "Rows are seeded outside the timed section for every measured case.",
                 "Validation queries run after the timed section and before cleanup.",
+                "Report artifacts should be generated with a release-built native extension.",
             ],
         },
         "config": {

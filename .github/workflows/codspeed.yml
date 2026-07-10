@@ -27,7 +27,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --group dev
-      - run: uv run --group dev maturin develop
+      - run: uv run --group dev maturin develop --release
       - uses: CodSpeedHQ/action@v4
         with:
           mode: instrumentation

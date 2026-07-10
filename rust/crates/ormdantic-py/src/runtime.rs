@@ -259,25 +259,25 @@ pub(crate) fn py_to_db_value(py: Python<'_>, value: Py<PyAny>) -> PyResult<DbVal
     if let Ok(value) = value.extract::<bool>() {
         return Ok(DbValue::Bool(value));
     }
+    if let Ok(value) = value.extract::<i64>() {
+        return Ok(DbValue::Integer(value));
+    }
+    if let Ok(value) = value.extract::<u64>() {
+        return Ok(DbValue::UnsignedInteger(value));
+    }
+    if let Ok(value) = value.extract::<String>() {
+        return Ok(DbValue::Text(value));
+    }
+    let int_type = py.import("builtins")?.getattr("int")?;
+    if value.is_instance(&int_type)? {
+        return Ok(DbValue::Decimal(value.str()?.to_string()));
+    }
     let decimal_type = py.import("decimal")?.getattr("Decimal")?;
     if value.is_instance(&decimal_type)? {
         let formatted = value
             .call_method1("__format__", ("f",))?
             .extract::<String>()?;
         return Ok(DbValue::Decimal(formatted));
-    }
-    let int_type = py.import("builtins")?.getattr("int")?;
-    if value.is_instance(&int_type)? {
-        if let Ok(value) = value.extract::<i64>() {
-            return Ok(DbValue::Integer(value));
-        }
-        if let Ok(value) = value.extract::<u64>() {
-            return Ok(DbValue::UnsignedInteger(value));
-        }
-        return Ok(DbValue::Decimal(value.str()?.to_string()));
-    }
-    if let Ok(value) = value.extract::<i64>() {
-        return Ok(DbValue::Integer(value));
     }
     if let Ok(value) = value.extract::<f64>() {
         return Ok(DbValue::Real(value));

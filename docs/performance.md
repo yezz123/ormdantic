@@ -27,8 +27,8 @@ The repository also includes a reproducible comparison report under
 `benchmark/`. It compares Ormdantic, SQLAlchemy, and SQLModel against local
 SQLite file databases. The default profile is sized for quick local runs; the
 huge profile uses million-row read and write datasets.
-The charts show every measured case, including cases where Ormdantic is not the
-fastest path.
+The charts show every measured case so improvements and regressions stay visible
+instead of being hidden behind a single aggregate number.
 
 ![Ormdantic speedup over SQLAlchemy and SQLModel](assets/benchmarks/default/ormdantic-orm-benchmark-speedup.svg)
 
@@ -37,14 +37,17 @@ fastest path.
 Regenerate the report and SVGs:
 
 ```console
-uv run --group dev maturin develop
+uv run --group dev maturin develop --release
 uv run --group benchmark python -m benchmark.run
 ```
+
+Use the release native extension for report artifacts. Debug Rust builds are
+for development feedback and can make native write paths look artificially slow.
 
 Run the million-row profile:
 
 ```console
-uv run --group dev maturin develop
+uv run --group dev maturin develop --release
 uv run --group benchmark python -m benchmark.run --profile huge
 ```
 
