@@ -23,6 +23,7 @@
 
 ### Refactors
 
+* ♻️ Enhance benchmarking & refactor `DbValue`. PR [#271](https://github.com/yezz123/ormdantic/pull/271) by [@yezz123](https://github.com/yezz123).
 * ✨ Refactor migrations and native runtime modules. PR [#255](https://github.com/yezz123/ormdantic/pull/255) by [@yezz123](https://github.com/yezz123).
 - ♻️ Refactor demo project to use Class notion. PR [#215](https://github.com/yezz123/ormdantic/pull/215) by [@yezz123](https://github.com/yezz123).
 - ♻️ Enhance schema, transaction features, and Rust integration. PR [#239](https://github.com/yezz123/ormdantic/pull/239) by [@yezz123](https://github.com/yezz123).
