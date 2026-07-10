@@ -120,7 +120,7 @@ jobs:
 
       - run: uv sync --group dev
 
-      - run: uv run --group dev maturin develop
+      - run: uv run --group dev maturin develop --release
 
       - run: bash scripts/test.sh
         env:
