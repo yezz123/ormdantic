@@ -1,0 +1,214 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-10T23:06:57.113871+00:00",
+    "python": "3.12.4",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "runner": "benchmark.ormdantic_vs_sqlalchemy",
+    "notes": [
+      "SQLite file databases are created in a temporary directory per sample.",
+      "Rows are seeded outside the timed section for every measured case.",
+      "Validation queries run after the timed section and before cleanup."
+    ]
+  },
+  "config": {
+    "rows": 1000000,
+    "write_rows": 1000000,
+    "lookup_count": 10000,
+    "iterations": 1,
+    "warmups": 0,
+    "batch_size": 5000,
+    "category": "cat-3",
+    "profile": "huge"
+  },
+  "measurements": [
+    {
+      "case": "write insert batches",
+      "rows": 1000000,
+      "orm": "ormdantic",
+      "median_ms": 9415.449792,
+      "samples_ms": [
+        9415.449792
+      ]
+    },
+    {
+      "case": "write insert batches",
+      "rows": 1000000,
+      "orm": "sqlalchemy",
+      "median_ms": 4673.745417,
+      "samples_ms": [
+        4673.745417
+      ]
+    },
+    {
+      "case": "write insert batches",
+      "rows": 1000000,
+      "orm": "sqlmodel",
+      "median_ms": 4727.767084,
+      "samples_ms": [
+        4727.767084
+      ]
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000000,
+      "orm": "ormdantic",
+      "median_ms": 2.345708,
+      "samples_ms": [
+        2.345708
+      ]
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000000,
+      "orm": "sqlalchemy",
+      "median_ms": 3.865542,
+      "samples_ms": [
+        3.865542
+      ]
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000000,
+      "orm": "sqlmodel",
+      "median_ms": 3.212125,
+      "samples_ms": [
+        3.212125
+      ]
+    },
+    {
+      "case": "count filtered",
+      "rows": 1000000,
+      "orm": "ormdantic",
+      "median_ms": 1.595834,
+      "samples_ms": [
+        1.595834
+      ]
+    },
+    {
+      "case": "count filtered",
+      "rows": 1000000,
+      "orm": "sqlalchemy",
+      "median_ms": 5.173292,
+      "samples_ms": [
+        5.173292
+      ]
+    },
+    {
+      "case": "count filtered",
+      "rows": 1000000,
+      "orm": "sqlmodel",
+      "median_ms": 5.171458,
+      "samples_ms": [
+        5.171458
+      ]
+    },
+    {
+      "case": "count score range",
+      "rows": 1000000,
+      "orm": "ormdantic",
+      "median_ms": 3.169,
+      "samples_ms": [
+        3.169
+      ]
+    },
+    {
+      "case": "count score range",
+      "rows": 1000000,
+      "orm": "sqlalchemy",
+      "median_ms": 7.147,
+      "samples_ms": [
+        7.147
+      ]
+    },
+    {
+      "case": "count score range",
+      "rows": 1000000,
+      "orm": "sqlmodel",
+      "median_ms": 7.278166,
+      "samples_ms": [
+        7.278166
+      ]
+    },
+    {
+      "case": "aggregate filtered",
+      "rows": 1000000,
+      "orm": "ormdantic",
+      "median_ms": 22.678417,
+      "samples_ms": [
+        22.678417
+      ]
+    },
+    {
+      "case": "aggregate filtered",
+      "rows": 1000000,
+      "orm": "sqlalchemy",
+      "median_ms": 57.576209,
+      "samples_ms": [
+        57.576209
+      ]
+    },
+    {
+      "case": "aggregate filtered",
+      "rows": 1000000,
+      "orm": "sqlmodel",
+      "median_ms": 57.310583,
+      "samples_ms": [
+        57.310583
+      ]
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000000,
+      "orm": "ormdantic",
+      "median_ms": 74.179458,
+      "samples_ms": [
+        74.179458
+      ]
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000000,
+      "orm": "sqlalchemy",
+      "median_ms": 156.005416,
+      "samples_ms": [
+        156.005416
+      ]
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000000,
+      "orm": "sqlmodel",
+      "median_ms": 152.08125,
+      "samples_ms": [
+        152.08125
+      ]
+    },
+    {
+      "case": "point lookup batch",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 341.141791,
+      "samples_ms": [
+        341.141791
+      ]
+    },
+    {
+      "case": "point lookup batch",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 1970.133417,
+      "samples_ms": [
+        1970.133417
+      ]
+    },
+    {
+      "case": "point lookup batch",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 1922.75975,
+      "samples_ms": [
+        1922.75975
+      ]
+    }
+  ]
+}

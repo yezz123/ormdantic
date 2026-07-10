@@ -9,6 +9,18 @@ from typing import Iterable
 
 ORMDANTIC = "ormdantic"
 SQLALCHEMY = "sqlalchemy"
+SQLMODEL = "sqlmodel"
+ORM_ORDER = (ORMDANTIC, SQLALCHEMY, SQLMODEL)
+ORM_LABELS = {
+    ORMDANTIC: "Ormdantic",
+    SQLALCHEMY: "SQLAlchemy",
+    SQLMODEL: "SQLModel",
+}
+ORM_COLORS = {
+    ORMDANTIC: "#0f766e",
+    SQLALCHEMY: "#64748b",
+    SQLMODEL: "#7c3aed",
+}
 
 
 @dataclass(frozen=True)
@@ -45,27 +57,30 @@ class ChartArtifacts:
 class _SummaryRow:
     case: str
     rows: int
-    ormdantic_median_ms: float
-    sqlalchemy_median_ms: float
+    medians_ms: dict[str, float]
 
-    @property
-    def speedup(self) -> float:
-        if self.ormdantic_median_ms <= 0:
-            return 0.0
-        return self.sqlalchemy_median_ms / self.ormdantic_median_ms
+    def median(self, orm: str) -> float | None:
+        return self.medians_ms.get(orm)
+
+    def ormdantic_speedup(self, other: str) -> float | None:
+        baseline = self.median(ORMDANTIC)
+        competitor = self.median(other)
+        if baseline is None or competitor is None or baseline <= 0:
+            return None
+        return competitor / baseline
 
 
 def write_chart_bundle(
     measurements: Iterable[BenchmarkMeasurement],
     output_dir: Path,
 ) -> ChartArtifacts:
-    """Write SVG charts and a CSV summary for paired ORM measurements."""
+    """Write transparent SVG charts and a CSV summary."""
     rows = _summary_rows(tuple(measurements))
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    latency_svg = output_dir / "ormdantic-vs-sqlalchemy-latency.svg"
-    speedup_svg = output_dir / "ormdantic-vs-sqlalchemy-speedup.svg"
-    summary_csv = output_dir / "ormdantic-vs-sqlalchemy-summary.csv"
+    latency_svg = output_dir / "ormdantic-orm-benchmark-latency.svg"
+    speedup_svg = output_dir / "ormdantic-orm-benchmark-speedup.svg"
+    summary_csv = output_dir / "ormdantic-orm-benchmark-summary.csv"
 
     latency_svg.write_text(_latency_svg(rows), encoding="utf-8")
     speedup_svg.write_text(_speedup_svg(rows), encoding="utf-8")
@@ -93,20 +108,19 @@ def _summary_rows(
     rows = []
     for key in order:
         pair = grouped[key]
-        if ORMDANTIC not in pair or SQLALCHEMY not in pair:
+        if ORMDANTIC not in pair:
             continue
         rows.append(
             _SummaryRow(
                 case=key[0],
                 rows=key[1],
-                ormdantic_median_ms=pair[ORMDANTIC].median_ms,
-                sqlalchemy_median_ms=pair[SQLALCHEMY].median_ms,
+                medians_ms={
+                    orm: pair[orm].median_ms for orm in ORM_ORDER if orm in pair
+                },
             )
         )
     if not rows:
-        raise ValueError(
-            "benchmark chart output requires paired ormdantic and sqlalchemy results"
-        )
+        raise ValueError("benchmark chart output requires ormdantic results")
     return rows
 
 
@@ -119,7 +133,9 @@ def _summary_csv(rows: list[_SummaryRow]) -> str:
             "rows",
             "ormdantic_median_ms",
             "sqlalchemy_median_ms",
-            "ormdantic_speedup",
+            "sqlmodel_median_ms",
+            "ormdantic_vs_sqlalchemy_speedup",
+            "ormdantic_vs_sqlmodel_speedup",
         ]
     )
     for row in rows:
@@ -127,128 +143,140 @@ def _summary_csv(rows: list[_SummaryRow]) -> str:
             [
                 row.case,
                 row.rows,
-                f"{row.ormdantic_median_ms:.3f}",
-                f"{row.sqlalchemy_median_ms:.3f}",
-                f"{row.speedup:.3f}",
+                _format_number(row.median(ORMDANTIC)),
+                _format_number(row.median(SQLALCHEMY)),
+                _format_number(row.median(SQLMODEL)),
+                _format_number(row.ormdantic_speedup(SQLALCHEMY)),
+                _format_number(row.ormdantic_speedup(SQLMODEL)),
             ]
         )
     return buffer.getvalue()
 
 
 def _latency_svg(rows: list[_SummaryRow]) -> str:
-    width = 1120
-    left = 300
-    chart_width = 650
-    top = 120
-    group_height = 92
-    height = top + len(rows) * group_height + 86
-    max_ms = max(max(row.ormdantic_median_ms, row.sqlalchemy_median_ms) for row in rows)
+    width = 1240
+    left = 330
+    chart_width = 720
+    top = 134
+    bar_height = 18
+    bar_gap = 8
+    group_height = 102
+    height = top + len(rows) * group_height + 70
+    max_ms = max(median for row in rows for median in row.medians_ms.values())
     max_ms = max(max_ms, 1.0)
     parts = [_svg_header(width, height)]
     parts.extend(
         [
-            _text(40, 52, "Ormdantic vs SQLAlchemy median latency", 28, "#111827", 700),
             _text(
                 40,
-                84,
-                "Lower is better. Values are median wall time in milliseconds.",
+                48,
+                "Ormdantic, SQLAlchemy, and SQLModel median latency",
+                27,
+                "#111827",
+                700,
+            ),
+            _text(
+                40,
+                80,
+                "Lower is better. Bars use median wall time; labels show exact milliseconds.",
                 15,
                 "#4b5563",
             ),
-            _legend(left, 82, "Ormdantic", "#0f766e"),
-            _legend(left + 160, 82, "SQLAlchemy", "#6b7280"),
+            _legend(left, 102),
         ]
     )
     for index, row in enumerate(rows):
         y = top + index * group_height
-        label = f"{row.case} ({row.rows:,} rows)"
-        parts.append(_text(40, y + 28, label, 15, "#111827", 600))
         parts.append(
-            _bar(
-                left,
-                y + 8,
-                row.ormdantic_median_ms / max_ms * chart_width,
-                24,
-                "#0f766e",
-            )
+            _text(40, y + 33, f"{row.case} ({row.rows:,} rows)", 15, "#111827", 700)
         )
-        parts.append(
-            _bar(
-                left,
-                y + 42,
-                row.sqlalchemy_median_ms / max_ms * chart_width,
-                24,
-                "#6b7280",
+        for orm_index, orm in enumerate(ORM_ORDER):
+            median = row.median(orm)
+            if median is None:
+                continue
+            bar_y = y + orm_index * (bar_height + bar_gap)
+            bar_width = median / max_ms * chart_width
+            parts.append(_bar(left, bar_y, bar_width, bar_height, ORM_COLORS[orm]))
+            parts.append(
+                _text(
+                    left + bar_width + 10,
+                    bar_y + 15,
+                    f"{ORM_LABELS[orm]} {median:.2f} ms",
+                    13,
+                    ORM_COLORS[orm],
+                    700,
+                )
             )
-        )
-        parts.append(
-            _text(
-                left + row.ormdantic_median_ms / max_ms * chart_width + 12,
-                y + 26,
-                f"{row.ormdantic_median_ms:.2f} ms",
-                14,
-                "#0f766e",
-                700,
-            )
-        )
-        parts.append(
-            _text(
-                left + row.sqlalchemy_median_ms / max_ms * chart_width + 12,
-                y + 60,
-                f"{row.sqlalchemy_median_ms:.2f} ms",
-                14,
-                "#374151",
-                700,
-            )
-        )
     parts.append("</svg>\n")
     return "\n".join(parts)
 
 
 def _speedup_svg(rows: list[_SummaryRow]) -> str:
-    width = 1120
-    left = 300
-    chart_width = 650
-    top = 118
-    group_height = 72
-    height = top + len(rows) * group_height + 80
-    max_speedup = max(max(row.speedup for row in rows), 1.0)
+    width = 1240
+    left = 330
+    chart_width = 720
+    top = 130
+    bar_height = 22
+    group_height = 88
+    height = top + len(rows) * group_height + 68
+    speedups = [
+        speedup
+        for row in rows
+        for speedup in (
+            row.ormdantic_speedup(SQLALCHEMY),
+            row.ormdantic_speedup(SQLMODEL),
+        )
+        if speedup is not None
+    ]
+    max_speedup = max(max(speedups), 1.0)
     parts = [_svg_header(width, height)]
     parts.extend(
         [
-            _text(40, 52, "Ormdantic speedup over SQLAlchemy", 28, "#111827", 700),
             _text(
                 40,
-                84,
-                "Values above 1.00x mean Ormdantic completed the measured case faster.",
+                48,
+                "Ormdantic speedup over SQLAlchemy and SQLModel",
+                27,
+                "#111827",
+                700,
+            ),
+            _text(
+                40,
+                80,
+                "Higher is better. 1.00x is parity; values above 1.00x favor Ormdantic.",
                 15,
                 "#4b5563",
             ),
-            _text(left, 104, "1.00x parity", 13, "#6b7280", 600),
             (
-                f'<line x1="{left}" y1="{top - 12}" x2="{left}" y2="{height - 58}" '
-                'stroke="#9ca3af" stroke-width="1" stroke-dasharray="5 5"/>'
+                f'<line x1="{left}" y1="{top - 14}" x2="{left}" y2="{height - 48}" '
+                'stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 5"/>'
             ),
+            _text(left, 106, "1.00x", 13, "#64748b", 700),
         ]
     )
     for index, row in enumerate(rows):
         y = top + index * group_height
-        label = f"{row.case} ({row.rows:,} rows)"
-        speedup = row.speedup
-        color = "#0f766e" if speedup >= 1.0 else "#b45309"
-        bar_width = speedup / max_speedup * chart_width
-        parts.append(_text(40, y + 28, label, 15, "#111827", 600))
-        parts.append(_bar(left, y + 8, bar_width, 28, color))
         parts.append(
-            _text(
-                left + bar_width + 12,
-                y + 28,
-                f"{speedup:.2f}x",
-                15,
-                color,
-                700,
-            )
+            _text(40, y + 32, f"{row.case} ({row.rows:,} rows)", 15, "#111827", 700)
         )
+        for offset, orm in enumerate((SQLALCHEMY, SQLMODEL)):
+            speedup = row.ormdantic_speedup(orm)
+            if speedup is None:
+                continue
+            color = "#0f766e" if speedup >= 1.0 else "#b45309"
+            bar_y = y + offset * (bar_height + 10)
+            bar_width = speedup / max_speedup * chart_width
+            parts.append(_bar(left, bar_y, bar_width, bar_height, color))
+            parts.append(
+                _text(
+                    left + bar_width + 10,
+                    bar_y + 17,
+                    f"vs {ORM_LABELS[orm]} {speedup:.2f}x",
+                    13,
+                    color,
+                    700,
+                )
+            )
     parts.append("</svg>\n")
     return "\n".join(parts)
 
@@ -262,8 +290,13 @@ def _svg_header(width: int, height: int) -> str:
         "text{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"
         "'Segoe UI',sans-serif;letter-spacing:0}"
         "</style>"
-        f'\n<rect width="{width}" height="{height}" fill="#ffffff"/>'
     )
+
+
+def _format_number(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{value:.3f}"
 
 
 def _text(
@@ -283,12 +316,18 @@ def _text(
 def _bar(x: float, y: float, width: float, height: float, fill: str) -> str:
     return (
         f'<rect x="{x:.1f}" y="{y:.1f}" width="{max(width, 2):.1f}" '
-        f'height="{height:.1f}" rx="5" fill="{fill}"/>'
+        f'height="{height:.1f}" rx="4" fill="{fill}"/>'
     )
 
 
-def _legend(x: float, y: float, label: str, fill: str) -> str:
-    return (
-        f'<rect x="{x:.1f}" y="{y - 13:.1f}" width="18" height="12" rx="3" '
-        f'fill="{fill}"/>{_text(x + 26, y, label, 14, "#374151", 600)}'
-    )
+def _legend(x: float, y: float) -> str:
+    parts = []
+    cursor = x
+    for orm in ORM_ORDER:
+        parts.append(
+            f'<rect x="{cursor:.1f}" y="{y - 13:.1f}" width="18" height="12" '
+            f'rx="3" fill="{ORM_COLORS[orm]}"/>'
+        )
+        parts.append(_text(cursor + 26, y, ORM_LABELS[orm], 14, "#374151", 700))
+        cursor += 155
+    return "".join(parts)

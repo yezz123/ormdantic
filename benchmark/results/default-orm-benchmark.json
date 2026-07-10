@@ -1,0 +1,298 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-10T23:04:53.576683+00:00",
+    "python": "3.12.4",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "runner": "benchmark.ormdantic_vs_sqlalchemy",
+    "notes": [
+      "SQLite file databases are created in a temporary directory per sample.",
+      "Rows are seeded outside the timed section for every measured case.",
+      "Validation queries run after the timed section and before cleanup."
+    ]
+  },
+  "config": {
+    "rows": 20000,
+    "write_rows": 20000,
+    "lookup_count": 1000,
+    "iterations": 5,
+    "warmups": 1,
+    "batch_size": 5000,
+    "category": "cat-3",
+    "profile": "default"
+  },
+  "measurements": [
+    {
+      "case": "write insert batches",
+      "rows": 20000,
+      "orm": "ormdantic",
+      "median_ms": 79.896958,
+      "samples_ms": [
+        79.896958,
+        78.611833,
+        80.816041,
+        79.648166,
+        80.353125
+      ]
+    },
+    {
+      "case": "write insert batches",
+      "rows": 20000,
+      "orm": "sqlalchemy",
+      "median_ms": 49.784459,
+      "samples_ms": [
+        50.01625,
+        49.784459,
+        49.545583,
+        48.956125,
+        50.233125
+      ]
+    },
+    {
+      "case": "write insert batches",
+      "rows": 20000,
+      "orm": "sqlmodel",
+      "median_ms": 50.830792,
+      "samples_ms": [
+        52.895708,
+        50.830792,
+        51.864875,
+        50.414125,
+        50.239166
+      ]
+    },
+    {
+      "case": "count all rows",
+      "rows": 20000,
+      "orm": "ormdantic",
+      "median_ms": 0.113416,
+      "samples_ms": [
+        0.113416,
+        0.120334,
+        0.110042,
+        0.158417,
+        0.102958
+      ]
+    },
+    {
+      "case": "count all rows",
+      "rows": 20000,
+      "orm": "sqlalchemy",
+      "median_ms": 0.797416,
+      "samples_ms": [
+        0.800875,
+        0.797416,
+        0.772833,
+        1.333542,
+        0.731125
+      ]
+    },
+    {
+      "case": "count all rows",
+      "rows": 20000,
+      "orm": "sqlmodel",
+      "median_ms": 0.745125,
+      "samples_ms": [
+        0.703667,
+        0.849959,
+        0.745125,
+        0.73,
+        0.832458
+      ]
+    },
+    {
+      "case": "count filtered",
+      "rows": 20000,
+      "orm": "ormdantic",
+      "median_ms": 0.122542,
+      "samples_ms": [
+        0.129875,
+        0.122542,
+        0.118833,
+        0.143541,
+        0.120916
+      ]
+    },
+    {
+      "case": "count filtered",
+      "rows": 20000,
+      "orm": "sqlalchemy",
+      "median_ms": 0.943625,
+      "samples_ms": [
+        0.96575,
+        0.943625,
+        0.859708,
+        1.088917,
+        0.834333
+      ]
+    },
+    {
+      "case": "count filtered",
+      "rows": 20000,
+      "orm": "sqlmodel",
+      "median_ms": 0.891084,
+      "samples_ms": [
+        0.891083,
+        0.913542,
+        0.885458,
+        0.891084,
+        1.072833
+      ]
+    },
+    {
+      "case": "count score range",
+      "rows": 20000,
+      "orm": "ormdantic",
+      "median_ms": 0.156834,
+      "samples_ms": [
+        0.156834,
+        0.159458,
+        0.153917,
+        0.17,
+        0.155
+      ]
+    },
+    {
+      "case": "count score range",
+      "rows": 20000,
+      "orm": "sqlalchemy",
+      "median_ms": 0.930708,
+      "samples_ms": [
+        0.990542,
+        0.936625,
+        0.892709,
+        0.89775,
+        0.930708
+      ]
+    },
+    {
+      "case": "count score range",
+      "rows": 20000,
+      "orm": "sqlmodel",
+      "median_ms": 0.890625,
+      "samples_ms": [
+        1.054416,
+        0.910708,
+        0.890625,
+        0.835,
+        0.869709
+      ]
+    },
+    {
+      "case": "aggregate filtered",
+      "rows": 20000,
+      "orm": "ormdantic",
+      "median_ms": 0.481125,
+      "samples_ms": [
+        0.481125,
+        0.541375,
+        0.520916,
+        0.472667,
+        0.479291
+      ]
+    },
+    {
+      "case": "aggregate filtered",
+      "rows": 20000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.686458,
+      "samples_ms": [
+        1.81025,
+        2.139125,
+        1.618875,
+        1.686458,
+        1.573458
+      ]
+    },
+    {
+      "case": "aggregate filtered",
+      "rows": 20000,
+      "orm": "sqlmodel",
+      "median_ms": 1.627708,
+      "samples_ms": [
+        1.661375,
+        1.628333,
+        1.622708,
+        1.59625,
+        1.627708
+      ]
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 20000,
+      "orm": "ormdantic",
+      "median_ms": 1.248959,
+      "samples_ms": [
+        1.248959,
+        1.269583,
+        1.191708,
+        1.171958,
+        1.252625
+      ]
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 20000,
+      "orm": "sqlalchemy",
+      "median_ms": 2.796708,
+      "samples_ms": [
+        2.796708,
+        2.745708,
+        2.85725,
+        2.801541,
+        2.74875
+      ]
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 20000,
+      "orm": "sqlmodel",
+      "median_ms": 2.916292,
+      "samples_ms": [
+        2.916292,
+        2.707,
+        3.026542,
+        9.022792,
+        2.760167
+      ]
+    },
+    {
+      "case": "point lookup batch",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 31.514333,
+      "samples_ms": [
+        31.907125,
+        31.863458,
+        31.514333,
+        30.877292,
+        30.948875
+      ]
+    },
+    {
+      "case": "point lookup batch",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 184.820166,
+      "samples_ms": [
+        184.344166,
+        184.820166,
+        184.866083,
+        182.915666,
+        185.539
+      ]
+    },
+    {
+      "case": "point lookup batch",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 185.678583,
+      "samples_ms": [
+        184.847709,
+        186.165917,
+        183.655833,
+        185.678583,
+        185.7385
+      ]
+    }
+  ]
+}

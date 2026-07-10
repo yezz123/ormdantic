@@ -4,6 +4,7 @@ import argparse
 import json
 import platform
 import sys
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,21 +14,15 @@ from benchmark.ormdantic_vs_sqlalchemy import (
     run_benchmarks_sync,
 )
 
-DEFAULT_RESULTS = Path("benchmark/results/ormdantic-vs-sqlalchemy.json")
-DEFAULT_CHARTS = Path("benchmark/charts")
-DEFAULT_DOCS_CHARTS = Path("docs/assets/benchmarks")
+DEFAULT_RESULTS_ROOT = Path("benchmark/results")
+DEFAULT_CHARTS_ROOT = Path("benchmark/charts")
+DEFAULT_DOCS_CHARTS_ROOT = Path("docs/assets/benchmarks")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
-    config = BenchmarkConfig(
-        rows=args.rows,
-        lookup_count=args.lookup_count,
-        iterations=args.iterations,
-        warmups=args.warmups,
-        category=args.category,
-    )
+    config = _config_from_args(args)
 
     try:
         measurements = run_benchmarks_sync(
@@ -38,21 +33,27 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    output = Path(args.output)
+    output = Path(
+        args.output or DEFAULT_RESULTS_ROOT / f"{config.profile}-orm-benchmark.json"
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(_payload(config, measurements), indent=2) + "\n",
         encoding="utf-8",
     )
 
-    charts = write_chart_bundle(measurements, Path(args.charts_dir))
+    charts_dir = Path(args.charts_dir or DEFAULT_CHARTS_ROOT / config.profile)
+    charts = write_chart_bundle(measurements, charts_dir)
     print(f"wrote {output}")
     print(f"wrote {charts.latency_svg}")
     print(f"wrote {charts.speedup_svg}")
     print(f"wrote {charts.summary_csv}")
 
-    if args.docs_charts_dir:
-        docs_charts = write_chart_bundle(measurements, Path(args.docs_charts_dir))
+    if args.docs_charts_dir != "":
+        docs_dir = Path(
+            args.docs_charts_dir or DEFAULT_DOCS_CHARTS_ROOT / config.profile
+        )
+        docs_charts = write_chart_bundle(measurements, docs_dir)
         docs_charts.summary_csv.unlink(missing_ok=True)
         print(f"wrote {docs_charts.latency_svg}")
         print(f"wrote {docs_charts.speedup_svg}")
@@ -64,21 +65,41 @@ def main(argv: list[str] | None = None) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run Ormdantic vs SQLAlchemy async SQLite benchmarks.",
+        description="Run Ormdantic, SQLAlchemy, and SQLModel SQLite benchmarks.",
     )
-    parser.add_argument("--rows", type=int, default=20_000)
-    parser.add_argument("--lookup-count", type=int, default=1_000)
-    parser.add_argument("--iterations", type=int, default=5)
-    parser.add_argument("--warmups", type=int, default=1)
-    parser.add_argument("--category", default="cat-3")
-    parser.add_argument("--output", default=str(DEFAULT_RESULTS))
-    parser.add_argument("--charts-dir", default=str(DEFAULT_CHARTS))
+    parser.add_argument("--profile", choices=["default", "huge"], default="default")
+    parser.add_argument("--rows", type=int)
+    parser.add_argument("--write-rows", type=int)
+    parser.add_argument("--lookup-count", type=int)
+    parser.add_argument("--iterations", type=int)
+    parser.add_argument("--warmups", type=int)
+    parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--category")
+    parser.add_argument("--output")
+    parser.add_argument("--charts-dir")
     parser.add_argument(
         "--docs-charts-dir",
-        default=str(DEFAULT_DOCS_CHARTS),
+        default=None,
         help="write docs-ready SVG copies; pass an empty string to skip",
     )
     return parser
+
+
+def _config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
+    config = BenchmarkConfig.for_profile(args.profile)
+    overrides = {
+        "rows": args.rows,
+        "write_rows": args.write_rows,
+        "lookup_count": args.lookup_count,
+        "iterations": args.iterations,
+        "warmups": args.warmups,
+        "batch_size": args.batch_size,
+        "category": args.category,
+    }
+    return replace(
+        config,
+        **{key: value for key, value in overrides.items() if value is not None},
+    )
 
 
 def _payload(
@@ -99,10 +120,13 @@ def _payload(
         },
         "config": {
             "rows": config.rows,
+            "write_rows": config.write_rows,
             "lookup_count": config.lookup_count,
             "iterations": config.iterations,
             "warmups": config.warmups,
+            "batch_size": config.batch_size,
             "category": config.category,
+            "profile": config.profile,
         },
         "measurements": [measurement.as_dict() for measurement in measurements],
     }

@@ -1,15 +1,17 @@
-# Ormdantic vs SQLAlchemy Benchmarks
+# Ormdantic, SQLAlchemy, and SQLModel Benchmarks
 
 This folder contains the reproducible benchmark report used by the README and
 performance docs.
 
-The suite compares Ormdantic and SQLAlchemy through their normal async ORM APIs
-on local SQLite file databases. It measures:
+The suite compares Ormdantic, SQLAlchemy, and SQLModel on local SQLite file
+databases. It measures:
 
+- chunked write inserts;
 - full-table counts;
 - filtered counts;
 - score-range counts;
 - aggregate filtered projections;
+- scalar projection reads;
 - batched primary-key lookups.
 
 Setup work is outside the timed section. Validation queries also run outside the
@@ -31,11 +33,36 @@ make benchmark-report
 
 The default run writes:
 
-- `benchmark/results/ormdantic-vs-sqlalchemy.json`
-- `benchmark/charts/ormdantic-vs-sqlalchemy-latency.svg`
-- `benchmark/charts/ormdantic-vs-sqlalchemy-speedup.svg`
-- `benchmark/charts/ormdantic-vs-sqlalchemy-summary.csv`
-- docs-ready SVG copies under `docs/assets/benchmarks/`
+- `benchmark/results/default-orm-benchmark.json`
+- `benchmark/charts/default/ormdantic-orm-benchmark-latency.svg`
+- `benchmark/charts/default/ormdantic-orm-benchmark-speedup.svg`
+- `benchmark/charts/default/ormdantic-orm-benchmark-summary.csv`
+- docs-ready SVG copies under `docs/assets/benchmarks/default/`
+
+## Huge Profile
+
+Run the million-row profile when you want a real large local workload:
+
+```bash
+uv run --group dev maturin develop
+uv run --group benchmark python -m benchmark.run --profile huge
+```
+
+Or use:
+
+```bash
+make benchmark-huge
+```
+
+The huge profile uses:
+
+- `1,000,000` read rows;
+- `1,000,000` write rows;
+- `10,000` primary-key lookups;
+- one measured iteration with no warmup.
+
+It writes separate artifacts under `benchmark/results/huge-orm-benchmark.json`,
+`benchmark/charts/huge/`, and `docs/assets/benchmarks/huge/`.
 
 ## Tune
 
@@ -44,6 +71,7 @@ Use smaller inputs for a fast local smoke run:
 ```bash
 uv run --group benchmark python -m benchmark.run \
   --rows 5000 \
+  --write-rows 5000 \
   --lookup-count 250 \
   --iterations 3 \
   --warmups 1
