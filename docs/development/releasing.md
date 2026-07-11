@@ -72,13 +72,13 @@ external database service.
 Create and push a tag that matches the version:
 
 ```bash
-git tag v2.0.0
-git push origin v2.0.0
+git tag 2.0.0
+git push origin 2.0.0
 ```
 
-The release workflow validates the tag, runs the release verification checks,
-publishes crates in dependency order, publishes the Python package, and uploads
-the artifacts to the GitHub Release.
+Then create a GitHub Release for that tag. The release workflow validates the
+tag, runs the release verification checks, publishes crates in dependency order,
+publishes the Python package, and uploads the artifacts to the GitHub Release.
 
 For a non-publishing rehearsal, run the `Release` workflow manually with
 `publish` set to `false`.

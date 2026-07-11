@@ -1,9 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types:
+      - created
   workflow_dispatch:
     inputs:
       publish:
@@ -75,7 +75,7 @@ jobs:
                   )
 
           print(f"version={py_version}")
-          print(f"tag=v{py_version}")
+          print(f"tag={py_version}")
           PY
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.publish }}" != "true" ]]; then
