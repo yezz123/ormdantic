@@ -153,7 +153,7 @@ jobs:
           wait_for_crate() {
             local crate="$1"
             for attempt in {1..30}; do
-              if cargo info "${crate}@${VERSION}" >/dev/null 2>&1; then
+              if cargo info --registry crates-io "${crate}@${VERSION}" >/dev/null 2>&1; then
                 return 0
               fi
               echo "Waiting for ${crate}@${VERSION} to appear in the crates.io index (${attempt}/30)..."
@@ -165,7 +165,7 @@ jobs:
           }
 
           for crate in ${CRATE_PUBLISH_ORDER}; do
-            if cargo info "${crate}@${VERSION}" >/dev/null 2>&1; then
+            if cargo info --registry crates-io "${crate}@${VERSION}" >/dev/null 2>&1; then
               echo "${crate}@${VERSION} is already published; skipping."
             else
               cargo publish -p "$crate" --locked --dry-run
