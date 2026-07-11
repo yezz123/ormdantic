@@ -16,7 +16,7 @@ authors = ["Yasser Tahiri <hello@yezz.me>"]
 license = "MIT"
 repository = "https://github.com/yezz123/ormdantic"
 readme = "README.md"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 rust-version = "1.88"
 categories = ["database", "orm", "async"]
@@ -25,12 +25,12 @@ documentation = "https://ormdantic.yezz.me/"
 homepage = "https://ormdantic.yezz.me/"
 
 [workspace.dependencies]
-ormdantic-core = { version = "2.0.0", path = "rust/crates/ormdantic-core" }
-ormdantic-schema = { version = "2.0.0", path = "rust/crates/ormdantic-schema" }
-ormdantic-hydrate = { version = "2.0.0", path = "rust/crates/ormdantic-hydrate" }
-ormdantic-dialects = { version = "2.0.0", path = "rust/crates/ormdantic-dialects" }
-ormdantic-engine = { version = "2.0.0", path = "rust/crates/ormdantic-engine" }
-ormdantic-sql = { version = "2.0.0", path = "rust/crates/ormdantic-sql" }
+ormdantic-core = { version = "2.0.1", path = "rust/crates/ormdantic-core" }
+ormdantic-schema = { version = "2.0.1", path = "rust/crates/ormdantic-schema" }
+ormdantic-hydrate = { version = "2.0.1", path = "rust/crates/ormdantic-hydrate" }
+ormdantic-dialects = { version = "2.0.1", path = "rust/crates/ormdantic-dialects" }
+ormdantic-engine = { version = "2.0.1", path = "rust/crates/ormdantic-engine" }
+ormdantic-sql = { version = "2.0.1", path = "rust/crates/ormdantic-sql" }
 pyo3 = "0.29.0"
 
 [profile.release]

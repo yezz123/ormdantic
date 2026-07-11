@@ -1,6 +1,6 @@
 """asynchronous ORM that uses pydantic models to represent database tables ✨"""
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 from ormdantic.association import association_proxy, hybrid_property
 from ormdantic.engine import runtime_capabilities
