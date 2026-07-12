@@ -1,0 +1,22 @@
+backend,profile,case,rows,ormdantic_median_ms,sqlalchemy_median_ms,sqlmodel_median_ms,ormdantic_vs_sqlalchemy_speedup,ormdantic_vs_sqlmodel_speedup
+postgres,smoke,schema create/drop,0,13.597,15.014,14.739,1.104,1.084
+postgres,smoke,raw batch insert,1000,14.582,12.397,11.141,0.850,0.764
+postgres,smoke,orm insert models,1000,509.782,18.671,23.965,0.037,0.047
+postgres,smoke,orm update filtered,1000,1.921,2.327,1.994,1.211,1.038
+postgres,smoke,orm upsert mixed,100,108.616,105.748,106.295,0.974,0.979
+postgres,smoke,orm delete filtered,1000,45.244,2.431,2.236,0.054,0.049
+postgres,smoke,count all rows,1000,0.673,1.250,1.356,1.859,2.016
+postgres,smoke,count equality filter,1000,0.706,1.419,1.336,2.011,1.893
+postgres,smoke,count range filter,1000,0.888,1.820,1.443,2.050,1.625
+postgres,smoke,aggregate filtered rows,1000,0.877,1.795,1.496,2.046,1.705
+postgres,smoke,scalar projection read,1000,0.903,1.621,1.618,1.795,1.792
+postgres,smoke,batched primary-key lookup,100,32.563,24.163,24.684,0.742,0.758
+postgres,smoke,paginated find_many,100,1.250,1.358,1.631,1.086,1.305
+postgres,smoke,ordered find_many,100,1.631,1.978,1.819,1.213,1.116
+postgres,smoke,hydrate flat rows,100,1.248,1.626,14.598,1.303,11.696
+postgres,smoke,serialize simple payloads,100,2.329,0.401,1.013,0.172,0.435
+postgres,smoke,serialize nested payloads,40,2.108,0.341,0.562,0.162,0.267
+postgres,smoke,hydrate relationship results,40,1.315,2.918,2.625,2.219,1.996
+postgres,smoke,one-to-many relationship loading,40,1.465,2.551,2.504,1.742,1.709
+postgres,smoke,many-to-one relationship loading,40,1.565,2.435,2.534,1.556,1.620
+postgres,smoke,nested relationship loading,40,1.818,3.360,3.559,1.848,1.957

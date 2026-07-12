@@ -1,0 +1,1056 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-11T17:16:39.873696+00:00",
+    "git_commit": "62c2445504842a3e692ed3683dc5d2824003e560",
+    "git_dirty": true,
+    "python": "3.12.4",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "ormdantic_version": "2.0.1",
+    "runtime_capabilities": {
+      "sqlite": true,
+      "postgresql": true,
+      "mysql": true,
+      "mariadb": true,
+      "mssql": true,
+      "oracle": true
+    },
+    "runner": "benchmark.runner",
+    "runner_version": "cross-db-v1",
+    "backend": "mysql",
+    "server_version": "8.4.10",
+    "database_url": "mysql://root:***@localhost:3306/mysql",
+    "docker_image": "mysql:8",
+    "profile": "smoke",
+    "materialized": true,
+    "planner_scale": false,
+    "methodology": [
+      "Setup and seed work are measured separately from operation latency.",
+      "Validation runs after each timed operation and before cleanup.",
+      "Server database cleanup drops only benchmark-owned tables.",
+      "Billion planner-scale artifacts must not be merged into materialized latency charts."
+    ]
+  },
+  "config": {
+    "backend": "mysql",
+    "profile": "smoke",
+    "rows": 1000,
+    "write_rows": 1000,
+    "lookup_count": 100,
+    "iterations": 1,
+    "warmups": 0,
+    "batch_size": 5000,
+    "category": "cat-3",
+    "materialized": true,
+    "planner_scale": false
+  },
+  "measurements": [
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "ormdantic",
+      "median_ms": 47.172,
+      "samples_ms": [
+        47.172
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 58.64425,
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "sqlalchemy",
+      "median_ms": 52.70025,
+      "samples_ms": [
+        52.70025
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 17.149917,
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "sqlmodel",
+      "median_ms": 51.96325,
+      "samples_ms": [
+        51.96325
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 5.820958,
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 29.508583,
+      "samples_ms": [
+        29.508583
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 100.894833,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 19.208209,
+      "samples_ms": [
+        19.208209
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 59.540875,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 18.51175,
+      "samples_ms": [
+        18.51175
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 59.317208,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 771.764333,
+      "samples_ms": [
+        771.764333
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 98.433292,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 25.473542,
+      "samples_ms": [
+        25.473542
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 61.289458,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 30.501,
+      "samples_ms": [
+        30.501
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 53.838916,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 3.728125,
+      "samples_ms": [
+        3.728125
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 117.070458,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 3.806375,
+      "samples_ms": [
+        3.806375
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 71.178375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 3.246208,
+      "samples_ms": [
+        3.246208
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 70.085209,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 148.68175,
+      "samples_ms": [
+        148.68175
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 126.331791,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 116.890667,
+      "samples_ms": [
+        116.890667
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 77.91975,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 112.84375,
+      "samples_ms": [
+        112.84375
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 71.9785,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 75.457083,
+      "samples_ms": [
+        75.457083
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 127.149916,
+      "validation": {
+        "expected": 900,
+        "actual": 900
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 3.689916,
+      "samples_ms": [
+        3.689916
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 73.726375,
+      "validation": {
+        "expected": 900,
+        "actual": 900
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 3.5725,
+      "samples_ms": [
+        3.5725
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 72.281625,
+      "validation": {
+        "expected": 900,
+        "actual": 900
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.58175,
+      "samples_ms": [
+        0.58175
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 124.7505,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.249208,
+      "samples_ms": [
+        1.249208
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 68.551625,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.147208,
+      "samples_ms": [
+        1.147208
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 69.314791,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.728084,
+      "samples_ms": [
+        0.728084
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 122.121375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.4185,
+      "samples_ms": [
+        1.4185
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 66.80375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.130875,
+      "samples_ms": [
+        1.130875
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 67.436583,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.74775,
+      "samples_ms": [
+        0.74775
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 120.04975,
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.226375,
+      "samples_ms": [
+        1.226375
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 70.134042,
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.505209,
+      "samples_ms": [
+        1.505209
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 62.505959,
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.794709,
+      "samples_ms": [
+        0.794709
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 115.306708,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.565084,
+      "samples_ms": [
+        1.565084
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 70.385291,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.387291,
+      "samples_ms": [
+        1.387291
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 66.018375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.76325,
+      "samples_ms": [
+        0.76325
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 116.581292,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.512125,
+      "samples_ms": [
+        1.512125
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 64.780375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.482709,
+      "samples_ms": [
+        1.482709
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 59.500875,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 18.373209,
+      "samples_ms": [
+        18.373209
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 112.109667,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 31.312625,
+      "samples_ms": [
+        31.312625
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 70.881917,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 30.698083,
+      "samples_ms": [
+        30.698083
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 58.690042,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 1.269292,
+      "samples_ms": [
+        1.269292
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 104.974958,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 1.683625,
+      "samples_ms": [
+        1.683625
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 60.303292,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 1.713625,
+      "samples_ms": [
+        1.713625
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 66.993458,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 1.547416,
+      "samples_ms": [
+        1.547416
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 109.379833,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 1.890708,
+      "samples_ms": [
+        1.890708
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 68.434,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 2.129458,
+      "samples_ms": [
+        2.129458
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 67.424,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 2.296666,
+      "samples_ms": [
+        2.296666
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 116.883959,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 1.59575,
+      "samples_ms": [
+        1.59575
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 65.738125,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 1.678708,
+      "samples_ms": [
+        1.678708
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 61.286667,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 4.61,
+      "samples_ms": [
+        4.61
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 0.011209,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 0.411958,
+      "samples_ms": [
+        0.411958
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 0.005292,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 1.536625,
+      "samples_ms": [
+        1.536625
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 0.002209,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 3.043666,
+      "samples_ms": [
+        3.043666
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 0.00225,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 0.786459,
+      "samples_ms": [
+        0.786459
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 0.005916,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 0.466833,
+      "samples_ms": [
+        0.466833
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 0.001875,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 2.069709,
+      "samples_ms": [
+        2.069709
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 111.528166,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 4.840167,
+      "samples_ms": [
+        4.840167
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 52.091583,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 15.5875,
+      "samples_ms": [
+        15.5875
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 54.933083,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 1.42325,
+      "samples_ms": [
+        1.42325
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 110.274041,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 2.177458,
+      "samples_ms": [
+        2.177458
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 56.015833,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 1.997667,
+      "samples_ms": [
+        1.997667
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 53.109125,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 1.737083,
+      "samples_ms": [
+        1.737083
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 113.5795,
+      "validation": {
+        "expected": 12,
+        "actual": 12
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 4.5085,
+      "samples_ms": [
+        4.5085
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 53.463333,
+      "validation": {
+        "expected": 12,
+        "actual": 12
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 2.115584,
+      "samples_ms": [
+        2.115584
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 55.510042,
+      "validation": {
+        "expected": 12,
+        "actual": 12
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 2.116833,
+      "samples_ms": [
+        2.116833
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 110.7795,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 2.968916,
+      "samples_ms": [
+        2.968916
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 71.929666,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 5.449333,
+      "samples_ms": [
+        5.449333
+      ],
+      "backend": "mysql",
+      "profile": "smoke",
+      "setup_ms": 55.448167,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    }
+  ]
+}
