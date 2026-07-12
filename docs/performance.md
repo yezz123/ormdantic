@@ -24,9 +24,9 @@ The benchmark suite covers:
 ## ORM comparison report
 
 The repository also includes a reproducible comparison report under
-`benchmark/`. It compares Ormdantic, SQLAlchemy, and SQLModel against local
-SQLite file databases. The default profile is sized for quick local runs; the
-huge profile uses million-row read and write datasets.
+`benchmark/`. It compares Ormdantic, SQLAlchemy, and SQLModel across SQLite,
+PostgreSQL, and MySQL. SQLite runs use temporary local files; PostgreSQL and
+MySQL runs use the Docker Compose services under `docker/databases/`.
 The charts show every measured case so improvements and regressions stay visible
 instead of being hidden behind a single aggregate number.
 
@@ -38,24 +38,31 @@ Regenerate the report and SVGs:
 
 ```console
 uv run --group dev maturin develop --release
-uv run --group benchmark python -m benchmark.run
+uv run --group benchmark python -m benchmark.run --backend sqlite --profile default
 ```
 
 Use the release native extension for report artifacts. Debug Rust builds are
 for development feedback and can make native write paths look artificially slow.
 
-Run the million-row profile:
+Run server-backed smoke profiles:
+
+```console
+docker compose -p ormdantic-benchmark -f docker/databases/docker-compose.yaml up -d --wait postgres mysql
+uv run --group benchmark python -m benchmark.run --backend postgres --profile smoke
+uv run --group benchmark python -m benchmark.run --backend mysql --profile smoke
+```
+
+Run the materialized million-row profile:
 
 ```console
 uv run --group dev maturin develop --release
-uv run --group benchmark python -m benchmark.run --profile huge
+uv run --group benchmark python -m benchmark.run --backend sqlite --profile million
 ```
 
-Million-row profile results:
-
-![Million-row Ormdantic speedup over SQLAlchemy and SQLModel](assets/benchmarks/huge/ormdantic-orm-benchmark-speedup.svg)
-
-![Million-row Ormdantic, SQLAlchemy, and SQLModel median latency](assets/benchmarks/huge/ormdantic-orm-benchmark-latency.svg)
+The `billion` profile requires `--i-understand-this-may-be-expensive`. Use
+`--planner-scale` for planner-scale artifacts. Those artifacts can discuss query
+shape and database estimates, but they must not be merged into materialized
+latency charts.
 
 The command writes JSON, CSV, and SVG outputs under `benchmark/`, plus docs-ready
 SVG copies under `docs/assets/benchmarks/`.
