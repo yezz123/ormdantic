@@ -8,6 +8,7 @@
 
 ### Features
 
+* ✨ Implement backend resolution & benchmark charts. PR [#272](https://github.com/yezz123/ormdantic/pull/272) by [@yezz123](https://github.com/yezz123).
 * ✨ Add benchmarking suite for Ormdantic vs SQLAlchemy. PR [#270](https://github.com/yezz123/ormdantic/pull/270) by [@yezz123](https://github.com/yezz123).
 * ✨ Enhance testing suite with benchmarks & error handling. PR [#269](https://github.com/yezz123/ormdantic/pull/269) by [@yezz123](https://github.com/yezz123).
 * ✨ Introduce native extension support and enhance testing documentation. PR [#268](https://github.com/yezz123/ormdantic/pull/268) by [@yezz123](https://github.com/yezz123).
