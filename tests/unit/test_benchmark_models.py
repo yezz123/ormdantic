@@ -37,6 +37,7 @@ def test_ormdantic_indexed_strings_are_bounded_for_mysql(tmp_path) -> None:
 
 
 def test_sqlmodel_benchmark_tables_are_scoped_to_benchmark_prefix() -> None:
+    pytest.importorskip("sqlmodel")
     from benchmark.models import sqlmodel_benchmark_tables
 
     names = {table.name for table in sqlmodel_benchmark_tables()}
