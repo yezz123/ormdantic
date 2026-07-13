@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="2046" viewBox="0 0 1240 2046" role="img">
+<style>text{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0}</style>
+<text x="40.0" y="48.0" font-size="27" font-weight="700" fill="#111827">MySQL smoke profile Ormdantic speedup</text>
+<text x="40.0" y="80.0" font-size="15" font-weight="400" fill="#4b5563">Higher is better. 1.00x is parity; values above 1.00x favor Ormdantic.</text>
+<line x1="330" y1="116" x2="330" y2="1998" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 5"/>
+<text x="330.0" y="106.0" font-size="13" font-weight="700" fill="#64748b">1.00x</text>
+<text x="40.0" y="162.0" font-size="15" font-weight="700" fill="#111827">schema create/drop (0 rows)</text>
+<rect x="330.0" y="130.0" width="106.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="446.8" y="147.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.12x</text>
+<rect x="330.0" y="162.0" width="105.3" height="22.0" rx="4" fill="#0f766e"/>
+<text x="445.3" y="179.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.10x</text>
+<text x="40.0" y="250.0" font-size="15" font-weight="700" fill="#111827">raw batch insert (1,000 rows)</text>
+<rect x="330.0" y="218.0" width="62.2" height="22.0" rx="4" fill="#b45309"/>
+<text x="402.2" y="235.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.65x</text>
+<rect x="330.0" y="250.0" width="60.0" height="22.0" rx="4" fill="#b45309"/>
+<text x="400.0" y="267.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.63x</text>
+<text x="40.0" y="338.0" font-size="15" font-weight="700" fill="#111827">orm insert models (1,000 rows)</text>
+<rect x="330.0" y="306.0" width="3.2" height="22.0" rx="4" fill="#b45309"/>
+<text x="343.2" y="323.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.03x</text>
+<rect x="330.0" y="338.0" width="3.8" height="22.0" rx="4" fill="#b45309"/>
+<text x="343.8" y="355.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.04x</text>
+<text x="40.0" y="426.0" font-size="15" font-weight="700" fill="#111827">orm update filtered (1,000 rows)</text>
+<rect x="330.0" y="394.0" width="97.6" height="22.0" rx="4" fill="#0f766e"/>
+<text x="437.6" y="411.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.02x</text>
+<rect x="330.0" y="426.0" width="83.2" height="22.0" rx="4" fill="#b45309"/>
+<text x="423.2" y="443.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.87x</text>
+<text x="40.0" y="514.0" font-size="15" font-weight="700" fill="#111827">orm upsert mixed (100 rows)</text>
+<rect x="330.0" y="482.0" width="75.2" height="22.0" rx="4" fill="#b45309"/>
+<text x="415.2" y="499.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.79x</text>
+<rect x="330.0" y="514.0" width="72.6" height="22.0" rx="4" fill="#b45309"/>
+<text x="412.6" y="531.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.76x</text>
+<text x="40.0" y="602.0" font-size="15" font-weight="700" fill="#111827">orm delete filtered (1,000 rows)</text>
+<rect x="330.0" y="570.0" width="4.7" height="22.0" rx="4" fill="#b45309"/>
+<text x="344.7" y="587.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.05x</text>
+<rect x="330.0" y="602.0" width="4.5" height="22.0" rx="4" fill="#b45309"/>
+<text x="344.5" y="619.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.05x</text>
+<text x="40.0" y="690.0" font-size="15" font-weight="700" fill="#111827">count all rows (1,000 rows)</text>
+<rect x="330.0" y="658.0" width="205.3" height="22.0" rx="4" fill="#0f766e"/>
+<text x="545.3" y="675.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 2.15x</text>
+<rect x="330.0" y="690.0" width="188.5" height="22.0" rx="4" fill="#0f766e"/>
+<text x="528.5" y="707.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.97x</text>
+<text x="40.0" y="778.0" font-size="15" font-weight="700" fill="#111827">count equality filter (1,000 rows)</text>
+<rect x="330.0" y="746.0" width="186.3" height="22.0" rx="4" fill="#0f766e"/>
+<text x="526.3" y="763.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.95x</text>
+<rect x="330.0" y="778.0" width="148.5" height="22.0" rx="4" fill="#0f766e"/>
+<text x="488.5" y="795.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.55x</text>
+<text x="40.0" y="866.0" font-size="15" font-weight="700" fill="#111827">count range filter (1,000 rows)</text>
+<rect x="330.0" y="834.0" width="156.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="496.8" y="851.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.64x</text>
+<rect x="330.0" y="866.0" width="192.4" height="22.0" rx="4" fill="#0f766e"/>
+<text x="532.4" y="883.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 2.01x</text>
+<text x="40.0" y="954.0" font-size="15" font-weight="700" fill="#111827">aggregate filtered rows (1,000 rows)</text>
+<rect x="330.0" y="922.0" width="188.3" height="22.0" rx="4" fill="#0f766e"/>
+<text x="528.3" y="939.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.97x</text>
+<rect x="330.0" y="954.0" width="166.9" height="22.0" rx="4" fill="#0f766e"/>
+<text x="506.9" y="971.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.75x</text>
+<text x="40.0" y="1042.0" font-size="15" font-weight="700" fill="#111827">scalar projection read (1,000 rows)</text>
+<rect x="330.0" y="1010.0" width="189.4" height="22.0" rx="4" fill="#0f766e"/>
+<text x="529.4" y="1027.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.98x</text>
+<rect x="330.0" y="1042.0" width="185.7" height="22.0" rx="4" fill="#0f766e"/>
+<text x="525.7" y="1059.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.94x</text>
+<text x="40.0" y="1130.0" font-size="15" font-weight="700" fill="#111827">batched primary-key lookup (100 rows)</text>
+<rect x="330.0" y="1098.0" width="162.9" height="22.0" rx="4" fill="#0f766e"/>
+<text x="502.9" y="1115.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.70x</text>
+<rect x="330.0" y="1130.0" width="159.7" height="22.0" rx="4" fill="#0f766e"/>
+<text x="499.7" y="1147.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.67x</text>
+<text x="40.0" y="1218.0" font-size="15" font-weight="700" fill="#111827">paginated find_many (100 rows)</text>
+<rect x="330.0" y="1186.0" width="126.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="466.8" y="1203.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.33x</text>
+<rect x="330.0" y="1218.0" width="129.1" height="22.0" rx="4" fill="#0f766e"/>
+<text x="469.1" y="1235.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.35x</text>
+<text x="40.0" y="1306.0" font-size="15" font-weight="700" fill="#111827">ordered find_many (100 rows)</text>
+<rect x="330.0" y="1274.0" width="116.8" height="22.0" rx="4" fill="#0f766e"/>
+<text x="456.8" y="1291.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.22x</text>
+<rect x="330.0" y="1306.0" width="131.6" height="22.0" rx="4" fill="#0f766e"/>
+<text x="471.6" y="1323.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.38x</text>
+<text x="40.0" y="1394.0" font-size="15" font-weight="700" fill="#111827">hydrate flat rows (100 rows)</text>
+<rect x="330.0" y="1362.0" width="66.4" height="22.0" rx="4" fill="#b45309"/>
+<text x="406.4" y="1379.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.69x</text>
+<rect x="330.0" y="1394.0" width="69.9" height="22.0" rx="4" fill="#b45309"/>
+<text x="409.9" y="1411.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.73x</text>
+<text x="40.0" y="1482.0" font-size="15" font-weight="700" fill="#111827">serialize simple payloads (100 rows)</text>
+<rect x="330.0" y="1450.0" width="8.5" height="22.0" rx="4" fill="#b45309"/>
+<text x="348.5" y="1467.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.09x</text>
+<rect x="330.0" y="1482.0" width="31.9" height="22.0" rx="4" fill="#b45309"/>
+<text x="371.9" y="1499.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.33x</text>
+<text x="40.0" y="1570.0" font-size="15" font-weight="700" fill="#111827">serialize nested payloads (40 rows)</text>
+<rect x="330.0" y="1538.0" width="24.7" height="22.0" rx="4" fill="#b45309"/>
+<text x="364.7" y="1555.0" font-size="13" font-weight="700" fill="#b45309">vs SQLAlchemy 0.26x</text>
+<rect x="330.0" y="1570.0" width="14.7" height="22.0" rx="4" fill="#b45309"/>
+<text x="354.7" y="1587.0" font-size="13" font-weight="700" fill="#b45309">vs SQLModel 0.15x</text>
+<text x="40.0" y="1658.0" font-size="15" font-weight="700" fill="#111827">hydrate relationship results (40 rows)</text>
+<rect x="330.0" y="1626.0" width="223.6" height="22.0" rx="4" fill="#0f766e"/>
+<text x="563.6" y="1643.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 2.34x</text>
+<rect x="330.0" y="1658.0" width="720.0" height="22.0" rx="4" fill="#0f766e"/>
+<text x="1060.0" y="1675.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 7.53x</text>
+<text x="40.0" y="1746.0" font-size="15" font-weight="700" fill="#111827">one-to-many relationship loading (40 rows)</text>
+<rect x="330.0" y="1714.0" width="146.3" height="22.0" rx="4" fill="#0f766e"/>
+<text x="486.3" y="1731.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.53x</text>
+<rect x="330.0" y="1746.0" width="134.2" height="22.0" rx="4" fill="#0f766e"/>
+<text x="474.2" y="1763.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.40x</text>
+<text x="40.0" y="1834.0" font-size="15" font-weight="700" fill="#111827">many-to-one relationship loading (40 rows)</text>
+<rect x="330.0" y="1802.0" width="248.1" height="22.0" rx="4" fill="#0f766e"/>
+<text x="588.1" y="1819.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 2.60x</text>
+<rect x="330.0" y="1834.0" width="116.4" height="22.0" rx="4" fill="#0f766e"/>
+<text x="456.4" y="1851.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 1.22x</text>
+<text x="40.0" y="1922.0" font-size="15" font-weight="700" fill="#111827">nested relationship loading (40 rows)</text>
+<rect x="330.0" y="1890.0" width="134.1" height="22.0" rx="4" fill="#0f766e"/>
+<text x="474.1" y="1907.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLAlchemy 1.40x</text>
+<rect x="330.0" y="1922.0" width="246.1" height="22.0" rx="4" fill="#0f766e"/>
+<text x="586.1" y="1939.0" font-size="13" font-weight="700" fill="#0f766e">vs SQLModel 2.57x</text>
+</svg>

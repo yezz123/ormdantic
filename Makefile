@@ -1,4 +1,4 @@
-.PHONY: test lint docs coverage coverage-combined bench benchmark-report benchmark-huge format taplo-check
+.PHONY: test lint docs coverage coverage-combined bench benchmark-smoke benchmark-sqlite-smoke benchmark-postgres-smoke benchmark-mysql-smoke benchmark-report benchmark-million benchmark-huge format taplo-check
 
 test:
 	uv run --group dev maturin develop
@@ -26,13 +26,31 @@ bench:
 	uv run --group testing pytest tests/benchmarks
 	cargo bench --workspace
 
+benchmark-smoke: benchmark-sqlite-smoke
+
+benchmark-sqlite-smoke:
+	uv run --group dev maturin develop --release
+	uv run --group benchmark python -m benchmark.run --backend sqlite --profile smoke
+
+benchmark-postgres-smoke:
+	docker compose -p ormdantic-benchmark -f docker/databases/docker-compose.yaml up -d --wait postgres
+	uv run --group dev maturin develop --release
+	uv run --group benchmark python -m benchmark.run --backend postgres --profile smoke
+
+benchmark-mysql-smoke:
+	docker compose -p ormdantic-benchmark -f docker/databases/docker-compose.yaml up -d --wait mysql
+	uv run --group dev maturin develop --release
+	uv run --group benchmark python -m benchmark.run --backend mysql --profile smoke
+
 benchmark-report:
 	uv run --group dev maturin develop --release
-	uv run --group benchmark python -m benchmark.run
+	uv run --group benchmark python -m benchmark.run --backend sqlite --profile default
 
-benchmark-huge:
+benchmark-million:
 	uv run --group dev maturin develop --release
-	uv run --group benchmark python -m benchmark.run --profile huge
+	uv run --group benchmark python -m benchmark.run --backend sqlite --profile million
+
+benchmark-huge: benchmark-million
 
 format:
 	cargo fmt

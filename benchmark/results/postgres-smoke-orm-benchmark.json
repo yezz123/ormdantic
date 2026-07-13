@@ -1,0 +1,1056 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-11T17:16:36.524474+00:00",
+    "git_commit": "62c2445504842a3e692ed3683dc5d2824003e560",
+    "git_dirty": true,
+    "python": "3.12.4",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "ormdantic_version": "2.0.1",
+    "runtime_capabilities": {
+      "sqlite": true,
+      "postgresql": true,
+      "mysql": true,
+      "mariadb": true,
+      "mssql": true,
+      "oracle": true
+    },
+    "runner": "benchmark.runner",
+    "runner_version": "cross-db-v1",
+    "backend": "postgres",
+    "server_version": "PostgreSQL 16.14 (Debian 16.14-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "database_url": "postgresql://postgres:***@localhost:5432/postgres",
+    "docker_image": "postgres:16",
+    "profile": "smoke",
+    "materialized": true,
+    "planner_scale": false,
+    "methodology": [
+      "Setup and seed work are measured separately from operation latency.",
+      "Validation runs after each timed operation and before cleanup.",
+      "Server database cleanup drops only benchmark-owned tables.",
+      "Billion planner-scale artifacts must not be merged into materialized latency charts."
+    ]
+  },
+  "config": {
+    "backend": "postgres",
+    "profile": "smoke",
+    "rows": 1000,
+    "write_rows": 1000,
+    "lookup_count": 100,
+    "iterations": 1,
+    "warmups": 0,
+    "batch_size": 5000,
+    "category": "cat-3",
+    "materialized": true,
+    "planner_scale": false
+  },
+  "measurements": [
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "ormdantic",
+      "median_ms": 13.597334,
+      "samples_ms": [
+        13.597334
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 23.250375,
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "sqlalchemy",
+      "median_ms": 15.01425,
+      "samples_ms": [
+        15.01425
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.814833,
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "sqlmodel",
+      "median_ms": 14.739291,
+      "samples_ms": [
+        14.739291
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 16.867125,
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 14.581625,
+      "samples_ms": [
+        14.581625
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 27.427958,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 12.396958,
+      "samples_ms": [
+        12.396958
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 30.7805,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 11.141417,
+      "samples_ms": [
+        11.141417
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 30.541625,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 509.781625,
+      "samples_ms": [
+        509.781625
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 24.854083,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 18.67075,
+      "samples_ms": [
+        18.67075
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 30.151208,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 23.965333,
+      "samples_ms": [
+        23.965333
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 29.471209,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 1.921042,
+      "samples_ms": [
+        1.921042
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.065459,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 2.326875,
+      "samples_ms": [
+        2.326875
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.299583,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.993834,
+      "samples_ms": [
+        1.993834
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.227417,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 108.616333,
+      "samples_ms": [
+        108.616333
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 41.5305,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 105.747667,
+      "samples_ms": [
+        105.747667
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 48.149834,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 106.295416,
+      "samples_ms": [
+        106.295416
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.955792,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 45.243959,
+      "samples_ms": [
+        45.243959
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.029584,
+      "validation": {
+        "expected": 900,
+        "actual": 900
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 2.431167,
+      "samples_ms": [
+        2.431167
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.158958,
+      "validation": {
+        "expected": 900,
+        "actual": 900
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 2.235917,
+      "samples_ms": [
+        2.235917
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 37.29475,
+      "validation": {
+        "expected": 900,
+        "actual": 900
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.672709,
+      "samples_ms": [
+        0.672709
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.8715,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.25025,
+      "samples_ms": [
+        1.25025
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 37.2695,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.356084,
+      "samples_ms": [
+        1.356084
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.390291,
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.705791,
+      "samples_ms": [
+        0.705791
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.702208,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.419209,
+      "samples_ms": [
+        1.419209
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 37.7035,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.336334,
+      "samples_ms": [
+        1.336334
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 37.933708,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.887917,
+      "samples_ms": [
+        0.887917
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 41.637416,
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.820042,
+      "samples_ms": [
+        1.820042
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.894167,
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.442583,
+      "samples_ms": [
+        1.442583
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.355459,
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.877333,
+      "samples_ms": [
+        0.877333
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.2205,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.795125,
+      "samples_ms": [
+        1.795125
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.088709,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.495959,
+      "samples_ms": [
+        1.495959
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.883541,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000,
+      "orm": "ormdantic",
+      "median_ms": 0.903167,
+      "samples_ms": [
+        0.903167
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.493542,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.621042,
+      "samples_ms": [
+        1.621042
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.31375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 1000,
+      "orm": "sqlmodel",
+      "median_ms": 1.618375,
+      "samples_ms": [
+        1.618375
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.312833,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 32.563,
+      "samples_ms": [
+        32.563
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.054833,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 24.163333,
+      "samples_ms": [
+        24.163333
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 36.341791,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 24.684167,
+      "samples_ms": [
+        24.684167
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.8875,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 1.250125,
+      "samples_ms": [
+        1.250125
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.056959,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 1.357708,
+      "samples_ms": [
+        1.357708
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 36.499375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 1.631125,
+      "samples_ms": [
+        1.631125
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 34.989959,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 1.630541,
+      "samples_ms": [
+        1.630541
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 38.062083,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 1.978,
+      "samples_ms": [
+        1.978
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 46.743625,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 1.819125,
+      "samples_ms": [
+        1.819125
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 37.150333,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 1.248084,
+      "samples_ms": [
+        1.248084
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 37.350833,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 1.625791,
+      "samples_ms": [
+        1.625791
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 39.471625,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 14.597958,
+      "samples_ms": [
+        14.597958
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 40.429375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 100,
+      "orm": "ormdantic",
+      "median_ms": 2.328625,
+      "samples_ms": [
+        2.328625
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 0.007458,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 100,
+      "orm": "sqlalchemy",
+      "median_ms": 0.400792,
+      "samples_ms": [
+        0.400792
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 0.00375,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 100,
+      "orm": "sqlmodel",
+      "median_ms": 1.01275,
+      "samples_ms": [
+        1.01275
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 0.001792,
+      "validation": {
+        "expected": 100,
+        "actual": 100
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 2.107916,
+      "samples_ms": [
+        2.107916
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 0.001917,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 0.341458,
+      "samples_ms": [
+        0.341458
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 0.003584,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 0.562208,
+      "samples_ms": [
+        0.562208
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 0.002292,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 1.315334,
+      "samples_ms": [
+        1.315334
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 43.869916,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 2.918417,
+      "samples_ms": [
+        2.918417
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 33.056333,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 2.625417,
+      "samples_ms": [
+        2.625417
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 35.076625,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 1.464875,
+      "samples_ms": [
+        1.464875
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 44.783125,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 2.551291,
+      "samples_ms": [
+        2.551291
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 35.559084,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 2.503666,
+      "samples_ms": [
+        2.503666
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 35.311208,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 1.564875,
+      "samples_ms": [
+        1.564875
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 46.488417,
+      "validation": {
+        "expected": 12,
+        "actual": 12
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 2.434541,
+      "samples_ms": [
+        2.434541
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 33.957959,
+      "validation": {
+        "expected": 12,
+        "actual": 12
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 2.534458,
+      "samples_ms": [
+        2.534458
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 33.882541,
+      "validation": {
+        "expected": 12,
+        "actual": 12
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 40,
+      "orm": "ormdantic",
+      "median_ms": 1.818458,
+      "samples_ms": [
+        1.818458
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 45.470542,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 40,
+      "orm": "sqlalchemy",
+      "median_ms": 3.36,
+      "samples_ms": [
+        3.36
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 34.742042,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 40,
+      "orm": "sqlmodel",
+      "median_ms": 3.559375,
+      "samples_ms": [
+        3.559375
+      ],
+      "backend": "postgres",
+      "profile": "smoke",
+      "setup_ms": 34.502583,
+      "validation": {
+        "expected": 4,
+        "actual": 4
+      }
+    }
+  ]
+}

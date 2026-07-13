@@ -30,18 +30,34 @@ class BenchmarkMeasurement:
     case: str
     rows: int
     orm: str
-    median_ms: float
+    median_ms: float | None
     samples_ms: tuple[float, ...]
+    backend: str = ""
+    profile: str = ""
+    setup_ms: float | None = None
+    validation: dict[str, object] | None = None
+    skip_reason: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-serializable representation."""
-        return {
+        payload: dict[str, object] = {
             "case": self.case,
             "rows": self.rows,
             "orm": self.orm,
             "median_ms": self.median_ms,
             "samples_ms": list(self.samples_ms),
         }
+        if self.backend:
+            payload["backend"] = self.backend
+        if self.profile:
+            payload["profile"] = self.profile
+        if self.setup_ms is not None:
+            payload["setup_ms"] = self.setup_ms
+        if self.validation is not None:
+            payload["validation"] = self.validation
+        if self.skip_reason is not None:
+            payload["skip_reason"] = self.skip_reason
+        return payload
 
 
 @dataclass(frozen=True)
@@ -55,6 +71,8 @@ class ChartArtifacts:
 
 @dataclass(frozen=True)
 class _SummaryRow:
+    backend: str
+    profile: str
     case: str
     rows: int
     medians_ms: dict[str, float]
@@ -73,6 +91,9 @@ class _SummaryRow:
 def write_chart_bundle(
     measurements: Iterable[BenchmarkMeasurement],
     output_dir: Path,
+    *,
+    backend: str | None = None,
+    profile: str | None = None,
 ) -> ChartArtifacts:
     """Write transparent SVG charts and a CSV summary."""
     rows = _summary_rows(tuple(measurements))
@@ -82,8 +103,12 @@ def write_chart_bundle(
     speedup_svg = output_dir / "ormdantic-orm-benchmark-speedup.svg"
     summary_csv = output_dir / "ormdantic-orm-benchmark-summary.csv"
 
-    latency_svg.write_text(_latency_svg(rows), encoding="utf-8")
-    speedup_svg.write_text(_speedup_svg(rows), encoding="utf-8")
+    latency_svg.write_text(
+        _latency_svg(rows, backend=backend, profile=profile), encoding="utf-8"
+    )
+    speedup_svg.write_text(
+        _speedup_svg(rows, backend=backend, profile=profile), encoding="utf-8"
+    )
     summary_csv.write_text(_summary_csv(rows), encoding="utf-8")
 
     return ChartArtifacts(
@@ -96,10 +121,17 @@ def write_chart_bundle(
 def _summary_rows(
     measurements: tuple[BenchmarkMeasurement, ...],
 ) -> list[_SummaryRow]:
-    grouped: dict[tuple[str, int], dict[str, BenchmarkMeasurement]] = {}
-    order: list[tuple[str, int]] = []
+    grouped: dict[tuple[str, str, str, int], dict[str, BenchmarkMeasurement]] = {}
+    order: list[tuple[str, str, str, int]] = []
     for measurement in measurements:
-        key = (measurement.case, measurement.rows)
+        if measurement.median_ms is None:
+            continue
+        key = (
+            measurement.backend,
+            measurement.profile,
+            measurement.case,
+            measurement.rows,
+        )
         if key not in grouped:
             grouped[key] = {}
             order.append(key)
@@ -112,10 +144,14 @@ def _summary_rows(
             continue
         rows.append(
             _SummaryRow(
-                case=key[0],
-                rows=key[1],
+                backend=key[0],
+                profile=key[1],
+                case=key[2],
+                rows=key[3],
                 medians_ms={
-                    orm: pair[orm].median_ms for orm in ORM_ORDER if orm in pair
+                    orm: pair[orm].median_ms
+                    for orm in ORM_ORDER
+                    if orm in pair and pair[orm].median_ms is not None
                 },
             )
         )
@@ -129,6 +165,8 @@ def _summary_csv(rows: list[_SummaryRow]) -> str:
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(
         [
+            "backend",
+            "profile",
             "case",
             "rows",
             "ormdantic_median_ms",
@@ -141,6 +179,8 @@ def _summary_csv(rows: list[_SummaryRow]) -> str:
     for row in rows:
         writer.writerow(
             [
+                row.backend,
+                row.profile,
                 row.case,
                 row.rows,
                 _format_number(row.median(ORMDANTIC)),
@@ -153,7 +193,12 @@ def _summary_csv(rows: list[_SummaryRow]) -> str:
     return buffer.getvalue()
 
 
-def _latency_svg(rows: list[_SummaryRow]) -> str:
+def _latency_svg(
+    rows: list[_SummaryRow],
+    *,
+    backend: str | None = None,
+    profile: str | None = None,
+) -> str:
     width = 1240
     left = 330
     chart_width = 720
@@ -164,13 +209,14 @@ def _latency_svg(rows: list[_SummaryRow]) -> str:
     height = top + len(rows) * group_height + 70
     max_ms = max(median for row in rows for median in row.medians_ms.values())
     max_ms = max(max_ms, 1.0)
+    title = _latency_title(rows, backend=backend, profile=profile)
     parts = [_svg_header(width, height)]
     parts.extend(
         [
             _text(
                 40,
                 48,
-                "Ormdantic, SQLAlchemy, and SQLModel median latency",
+                title,
                 27,
                 "#111827",
                 700,
@@ -211,7 +257,12 @@ def _latency_svg(rows: list[_SummaryRow]) -> str:
     return "\n".join(parts)
 
 
-def _speedup_svg(rows: list[_SummaryRow]) -> str:
+def _speedup_svg(
+    rows: list[_SummaryRow],
+    *,
+    backend: str | None = None,
+    profile: str | None = None,
+) -> str:
     width = 1240
     left = 330
     chart_width = 720
@@ -228,14 +279,15 @@ def _speedup_svg(rows: list[_SummaryRow]) -> str:
         )
         if speedup is not None
     ]
-    max_speedup = max(max(speedups), 1.0)
+    max_speedup = max(max(speedups) if speedups else 1.0, 1.0)
+    title = _speedup_title(rows, backend=backend, profile=profile)
     parts = [_svg_header(width, height)]
     parts.extend(
         [
             _text(
                 40,
                 48,
-                "Ormdantic speedup over SQLAlchemy and SQLModel",
+                title,
                 27,
                 "#111827",
                 700,
@@ -297,6 +349,56 @@ def _format_number(value: float | None) -> str:
     if value is None:
         return ""
     return f"{value:.3f}"
+
+
+def _latency_title(
+    rows: list[_SummaryRow],
+    *,
+    backend: str | None,
+    profile: str | None,
+) -> str:
+    backend_label, profile_label = _scope_labels(rows, backend=backend, profile=profile)
+    if backend_label and profile_label:
+        return f"{backend_label} {profile_label} profile median latency"
+    return "Ormdantic, SQLAlchemy, and SQLModel median latency"
+
+
+def _speedup_title(
+    rows: list[_SummaryRow],
+    *,
+    backend: str | None,
+    profile: str | None,
+) -> str:
+    backend_label, profile_label = _scope_labels(rows, backend=backend, profile=profile)
+    if backend_label and profile_label:
+        return f"{backend_label} {profile_label} profile Ormdantic speedup"
+    return "Ormdantic speedup over SQLAlchemy and SQLModel"
+
+
+def _scope_labels(
+    rows: list[_SummaryRow],
+    *,
+    backend: str | None,
+    profile: str | None,
+) -> tuple[str | None, str | None]:
+    row_backend = rows[0].backend if rows and rows[0].backend else None
+    row_profile = rows[0].profile if rows and rows[0].profile else None
+    backend_name = backend or row_backend
+    profile_name = profile or row_profile
+    return (
+        _backend_label(backend_name) if backend_name else None,
+        profile_name if profile_name else None,
+    )
+
+
+def _backend_label(backend: str) -> str:
+    labels = {
+        "sqlite": "SQLite",
+        "postgres": "PostgreSQL",
+        "postgresql": "PostgreSQL",
+        "mysql": "MySQL",
+    }
+    return labels.get(backend, backend.title())
 
 
 def _text(

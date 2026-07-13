@@ -39,17 +39,17 @@ The project is designed for applications that want Python model ergonomics witho
 
 ## Benchmarks
 
-The reproducible benchmark report in `benchmark/` compares Ormdantic,
-SQLAlchemy, and SQLModel on local SQLite file databases. It includes read and
-write cases, and the optional huge profile uses million-row datasets.
+The reproducible benchmark suite in `benchmark/` compares Ormdantic,
+SQLAlchemy, and SQLModel across SQLite, PostgreSQL, and MySQL. It covers schema
+setup, writes, reads, query expressions, hydration, serialization, and
+relationship loading. Results are scoped by backend and profile; they are not a
+global winner score.
 
-![Ormdantic speedup over SQLAlchemy and SQLModel](docs/assets/benchmarks/default/ormdantic-orm-benchmark-speedup.svg)
+SQLite smoke profile example:
 
-![Ormdantic, SQLAlchemy, and SQLModel median latency](docs/assets/benchmarks/default/ormdantic-orm-benchmark-latency.svg)
+![SQLite smoke profile Ormdantic speedup](benchmark/charts/smoke/sqlite/ormdantic-orm-benchmark-speedup.svg)
 
-Million-row profile:
-
-![Million-row Ormdantic speedup over SQLAlchemy and SQLModel](docs/assets/benchmarks/huge/ormdantic-orm-benchmark-speedup.svg)
+![SQLite smoke profile median latency](benchmark/charts/smoke/sqlite/ormdantic-orm-benchmark-latency.svg)
 
 ## Install
 

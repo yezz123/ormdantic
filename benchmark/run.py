@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
 import sys
-from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 
-from benchmark.charts import BenchmarkMeasurement, write_chart_bundle
-from benchmark.ormdantic_vs_sqlalchemy import (
-    BenchmarkConfig,
-    run_benchmarks_sync,
+from benchmark.backends import resolve_backend
+from benchmark.charts import write_chart_bundle
+from benchmark.config import (
+    PROFILES,
+    SUPPORTED_BACKENDS,
+    BenchmarkConfigurationError,
+    build_config,
+)
+from benchmark.runner import (
+    backend_server_version,
+    build_result_payload,
+    run_from_config,
 )
 
 DEFAULT_RESULTS_ROOT = Path("benchmark/results")
@@ -22,52 +27,119 @@ DEFAULT_DOCS_CHARTS_ROOT = Path("docs/assets/benchmarks")
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
-    config = _config_from_args(args)
-
     try:
-        measurements = run_benchmarks_sync(
-            config,
-            progress=lambda message: print(f"running {message}", flush=True),
+        config = build_config(
+            profile=args.profile,
+            backend=args.backend,
+            rows=args.rows,
+            write_rows=args.write_rows,
+            lookup_count=args.lookup_count,
+            iterations=args.iterations,
+            warmups=args.warmups,
+            batch_size=args.batch_size,
+            category=args.category,
+            planner_scale=args.planner_scale,
+            i_understand_this_may_be_expensive=args.i_understand_this_may_be_expensive,
         )
-    except RuntimeError as exc:
+    except BenchmarkConfigurationError as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
+    backend = resolve_backend(config.backend)
+    try:
+        measurements = run_from_config(
+            config,
+            allow_missing=args.allow_missing,
+            progress=lambda message: print(f"running {message}", flush=True),
+        )
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    server_version = None
+    if not config.planner_scale:
+        try:
+            import asyncio
+
+            server_version = asyncio.run(backend_server_version(backend))
+        except Exception as exc:
+            if not args.allow_missing:
+                print(str(exc), file=sys.stderr)
+                return 2
+
     output = Path(
-        args.output or DEFAULT_RESULTS_ROOT / f"{config.profile}-orm-benchmark.json"
+        args.output
+        or DEFAULT_RESULTS_ROOT
+        / f"{config.backend}-{config.profile}-orm-benchmark.json"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
-        json.dumps(_payload(config, measurements), indent=2) + "\n",
+        json.dumps(
+            build_result_payload(
+                config=config,
+                backend=backend,
+                measurements=measurements,
+                server_version=server_version,
+            ),
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
-    charts_dir = Path(args.charts_dir or DEFAULT_CHARTS_ROOT / config.profile)
-    charts = write_chart_bundle(measurements, charts_dir)
-    print(f"wrote {output}")
-    print(f"wrote {charts.latency_svg}")
-    print(f"wrote {charts.speedup_svg}")
-    print(f"wrote {charts.summary_csv}")
-
-    if args.docs_charts_dir != "":
-        docs_dir = Path(
-            args.docs_charts_dir or DEFAULT_DOCS_CHARTS_ROOT / config.profile
+    charts_dir = Path(
+        args.charts_dir or DEFAULT_CHARTS_ROOT / config.profile / config.backend
+    )
+    try:
+        charts = write_chart_bundle(
+            measurements,
+            charts_dir,
+            backend=config.backend,
+            profile=config.profile,
         )
-        docs_charts = write_chart_bundle(measurements, docs_dir)
-        docs_charts.summary_csv.unlink(missing_ok=True)
-        print(f"wrote {docs_charts.latency_svg}")
-        print(f"wrote {docs_charts.speedup_svg}")
+    except ValueError as exc:
+        print(f"skipped chart output: {exc}")
+        charts = None
 
-    print()
-    print(charts.summary_csv.read_text(encoding="utf-8").strip())
+    print(f"wrote {output}")
+    if charts is not None:
+        print(f"wrote {charts.latency_svg}")
+        print(f"wrote {charts.speedup_svg}")
+        print(f"wrote {charts.summary_csv}")
+
+        if args.docs_charts_dir != "":
+            docs_dir = Path(
+                args.docs_charts_dir
+                or DEFAULT_DOCS_CHARTS_ROOT / config.profile / config.backend
+            )
+            docs_charts = write_chart_bundle(
+                measurements,
+                docs_dir,
+                backend=config.backend,
+                profile=config.profile,
+            )
+            docs_charts.summary_csv.unlink(missing_ok=True)
+            print(f"wrote {docs_charts.latency_svg}")
+            print(f"wrote {docs_charts.speedup_svg}")
+
+        print()
+        print(charts.summary_csv.read_text(encoding="utf-8").strip())
     return 0
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run Ormdantic, SQLAlchemy, and SQLModel SQLite benchmarks.",
+        description=(
+            "Run Ormdantic, SQLAlchemy, and SQLModel benchmarks across SQLite, "
+            "PostgreSQL, or MySQL."
+        ),
     )
-    parser.add_argument("--profile", choices=["default", "huge"], default="default")
+    parser.add_argument("--backend", choices=SUPPORTED_BACKENDS, default="sqlite")
+    parser.add_argument(
+        "--profile",
+        choices=tuple(PROFILES) + ("huge",),
+        default="default",
+    )
     parser.add_argument("--rows", type=int)
     parser.add_argument("--write-rows", type=int)
     parser.add_argument("--lookup-count", type=int)
@@ -82,55 +154,22 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="write docs-ready SVG copies; pass an empty string to skip",
     )
-    return parser
-
-
-def _config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
-    config = BenchmarkConfig.for_profile(args.profile)
-    overrides = {
-        "rows": args.rows,
-        "write_rows": args.write_rows,
-        "lookup_count": args.lookup_count,
-        "iterations": args.iterations,
-        "warmups": args.warmups,
-        "batch_size": args.batch_size,
-        "category": args.category,
-    }
-    return replace(
-        config,
-        **{key: value for key, value in overrides.items() if value is not None},
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="record unsupported or unavailable combinations as skipped measurements",
     )
-
-
-def _payload(
-    config: BenchmarkConfig,
-    measurements: list[BenchmarkMeasurement],
-) -> dict[str, object]:
-    return {
-        "metadata": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "python": sys.version.split()[0],
-            "platform": platform.platform(),
-            "runner": "benchmark.ormdantic_vs_sqlalchemy",
-            "notes": [
-                "SQLite file databases are created in a temporary directory per sample.",
-                "Rows are seeded outside the timed section for every measured case.",
-                "Validation queries run after the timed section and before cleanup.",
-                "Report artifacts should be generated with a release-built native extension.",
-            ],
-        },
-        "config": {
-            "rows": config.rows,
-            "write_rows": config.write_rows,
-            "lookup_count": config.lookup_count,
-            "iterations": config.iterations,
-            "warmups": config.warmups,
-            "batch_size": config.batch_size,
-            "category": config.category,
-            "profile": config.profile,
-        },
-        "measurements": [measurement.as_dict() for measurement in measurements],
-    }
+    parser.add_argument(
+        "--planner-scale",
+        action="store_true",
+        help="label billion-scale artifacts as planner-scale rather than materialized",
+    )
+    parser.add_argument(
+        "--i-understand-this-may-be-expensive",
+        action="store_true",
+        help="required for the billion profile",
+    )
+    return parser
 
 
 if __name__ == "__main__":

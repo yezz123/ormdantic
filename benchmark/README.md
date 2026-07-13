@@ -1,85 +1,91 @@
-# Ormdantic, SQLAlchemy, and SQLModel Benchmarks
+# Cross-Database ORM Benchmarks
 
-This folder contains the reproducible benchmark report used by the README and
-performance docs.
+This folder contains the reproducible Ormdantic comparison suite used for docs,
+release notes, and blog-post data. The suite compares Ormdantic, SQLAlchemy, and
+SQLModel across SQLite, PostgreSQL, and MySQL.
 
-The suite compares Ormdantic, SQLAlchemy, and SQLModel on local SQLite file
-databases. It measures:
+The benchmark measures scoped cases instead of producing one global winner:
 
-- chunked write inserts;
-- full-table counts;
-- filtered counts;
-- score-range counts;
-- aggregate filtered projections;
-- scalar projection reads;
-- batched primary-key lookups.
+- schema create/drop;
+- raw batch inserts and ORM inserts;
+- filtered updates, mixed upserts, and filtered deletes;
+- counts, filters, aggregation, scalar projections, point lookup, pagination, and ordering;
+- flat hydration and simple/nested serialization;
+- one-to-many, many-to-one, and nested relationship loading.
 
-Setup work is outside the timed section. Validation queries also run outside the
-timed section, so each sample records only the measured operation.
-Build the native extension with `--release` before recording report artifacts;
-debug Rust builds are useful for development, but they are not representative
-performance inputs.
+Setup and seed work are outside the timed section. Validation also runs outside
+the timed section before cleanup, so each latency sample measures only the case
+operation. Use a release-built native extension before recording report artifacts.
+
+## Backend Matrix
+
+| Backend | Runtime | URL source |
+| --- | --- | --- |
+| SQLite | local file per sample | generated temporary file |
+| PostgreSQL | Docker Compose service | `ORMDANTIC_BENCH_POSTGRES_URL`, then `ORMDANTIC_TEST_POSTGRES_URL`, then `postgresql://postgres:postgres@localhost:5432/postgres` |
+| MySQL | Docker Compose service | `ORMDANTIC_BENCH_MYSQL_URL`, then `ORMDANTIC_TEST_MYSQL_URL`, then `mysql://root:mysql@localhost:3306/mysql` |
+
+Server runs use `docker/databases/docker-compose.yaml`. The runner never destroys
+shared Docker volumes. Cleanup drops only benchmark-owned tables named
+`ormdantic_bench_*`.
+
+## Profiles
+
+| Profile | Purpose | Read rows | Write rows | Lookups | Iterations | Warmups |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `smoke` | fast harness verification | 1,000 | 1,000 | 100 | 1 | 0 |
+| `default` | local docs refresh | 20,000 | 20,000 | 1,000 | 5 | 1 |
+| `million` | real large local workload | 1,000,000 | 1,000,000 | 10,000 | 1 | 0 |
+| `large` | opt-in stress workload | 10,000,000 | 1,000,000 | 50,000 | 1 | 0 |
+| `billion` | explicit scale workload | 1,000,000,000 | 10,000,000 | 100,000 | 1 | 0 |
+
+The `billion` profile requires `--i-understand-this-may-be-expensive`. Use
+`--planner-scale` when producing planner-scale artifacts that must not be mixed
+into materialized latency charts.
 
 ## Run
+
+Install benchmark dependencies and build the native extension:
 
 ```bash
 uv sync --group dev --group benchmark
 uv run --group dev maturin develop --release
-uv run --group benchmark python -m benchmark.run
 ```
 
-Or use the Makefile target:
+Run SQLite smoke without Docker:
 
 ```bash
-make benchmark-report
+uv run --group benchmark python -m benchmark.run --backend sqlite --profile smoke
 ```
 
-The default run writes:
-
-- `benchmark/results/default-orm-benchmark.json`
-- `benchmark/charts/default/ormdantic-orm-benchmark-latency.svg`
-- `benchmark/charts/default/ormdantic-orm-benchmark-speedup.svg`
-- `benchmark/charts/default/ormdantic-orm-benchmark-summary.csv`
-- docs-ready SVG copies under `docs/assets/benchmarks/default/`
-
-## Huge Profile
-
-Run the million-row profile when you want a real large local workload:
+Run PostgreSQL and MySQL smoke with Docker:
 
 ```bash
-uv run --group dev maturin develop --release
-uv run --group benchmark python -m benchmark.run --profile huge
+docker compose -p ormdantic-benchmark -f docker/databases/docker-compose.yaml up -d --wait postgres mysql
+uv run --group benchmark python -m benchmark.run --backend postgres --profile smoke
+uv run --group benchmark python -m benchmark.run --backend mysql --profile smoke
 ```
 
-Or use:
+Use `--allow-missing` to record unavailable dependencies or server connections
+as skipped measurements in JSON instead of aborting the run.
 
-```bash
-make benchmark-huge
-```
+## Artifacts
 
-The huge profile uses:
+Each run writes backend/profile-scoped artifacts:
 
-- `1,000,000` read rows;
-- `1,000,000` write rows;
-- `10,000` primary-key lookups;
-- one measured iteration with no warmup.
+- raw JSON under `benchmark/results/`;
+- CSV summaries under `benchmark/charts/<profile>/<backend>/`;
+- SVG latency and speedup charts under `benchmark/charts/<profile>/<backend>/`;
+- docs-ready SVG copies under `docs/assets/benchmarks/<profile>/<backend>/` unless `--docs-charts-dir ""` is passed.
 
-It writes separate artifacts under `benchmark/results/huge-orm-benchmark.json`,
-`benchmark/charts/huge/`, and `docs/assets/benchmarks/huge/`.
+The JSON payload records git SHA, dirty-worktree state, Python/platform details,
+Ormdantic version, runtime capabilities, backend/server metadata, redacted
+database URL, exact profile settings, setup time, measured latency samples,
+validation results, skip reasons, and methodology caveats.
 
-## Tune
+## Interpretation
 
-Use smaller inputs for a fast local smoke run:
-
-```bash
-uv run --group benchmark python -m benchmark.run \
-  --rows 5000 \
-  --write-rows 5000 \
-  --lookup-count 250 \
-  --iterations 3 \
-  --warmups 1
-```
-
-Benchmarks are machine-sensitive. Compare trends on the same hardware and
-Python version, and treat the charts as a snapshot of these measured cases, not
-as a claim that every query shape is faster.
+Benchmark results are machine-sensitive. Acceptable claims are scoped to the
+backend, profile, case, hardware, and commit that produced the artifact. Avoid
+global statements such as "Ormdantic is always faster." Prefer wording like:
+"On this machine, for SQLite smoke, this case measured X."

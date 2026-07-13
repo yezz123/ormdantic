@@ -1,0 +1,22 @@
+backend,profile,case,rows,ormdantic_median_ms,sqlalchemy_median_ms,sqlmodel_median_ms,ormdantic_vs_sqlalchemy_speedup,ormdantic_vs_sqlmodel_speedup
+sqlite,smoke,schema create/drop,0,2.271,6.732,7.992,2.965,3.520
+sqlite,smoke,raw batch insert,1000,3.999,7.962,7.594,1.991,1.899
+sqlite,smoke,orm insert models,1000,280.589,14.640,20.369,0.052,0.073
+sqlite,smoke,orm update filtered,1000,0.769,1.714,1.440,2.229,1.872
+sqlite,smoke,orm upsert mixed,100,60.784,84.264,86.169,1.386,1.418
+sqlite,smoke,orm delete filtered,1000,26.819,1.998,1.718,0.075,0.064
+sqlite,smoke,count all rows,1000,0.088,0.716,0.659,8.114,7.472
+sqlite,smoke,count equality filter,1000,0.106,0.776,0.766,7.316,7.214
+sqlite,smoke,count range filter,1000,0.129,0.809,0.777,6.277,6.030
+sqlite,smoke,aggregate filtered rows,1000,0.208,1.064,0.984,5.117,4.731
+sqlite,smoke,scalar projection read,1000,0.214,0.855,0.831,3.990,3.879
+sqlite,smoke,batched primary-key lookup,100,3.600,23.579,23.600,6.550,6.556
+sqlite,smoke,paginated find_many,100,0.784,1.154,1.052,1.471,1.341
+sqlite,smoke,ordered find_many,100,0.884,1.136,1.124,1.285,1.271
+sqlite,smoke,hydrate flat rows,100,0.793,1.226,1.034,1.545,1.304
+sqlite,smoke,serialize simple payloads,100,2.073,0.406,1.037,0.196,0.500
+sqlite,smoke,serialize nested payloads,40,2.233,0.405,0.474,0.181,0.212
+sqlite,smoke,hydrate relationship results,40,0.874,2.182,1.894,2.497,2.168
+sqlite,smoke,one-to-many relationship loading,40,0.463,1.764,1.430,3.809,3.088
+sqlite,smoke,many-to-one relationship loading,40,0.331,1.696,1.634,5.128,4.941
+sqlite,smoke,nested relationship loading,40,0.534,2.638,2.476,4.941,4.636

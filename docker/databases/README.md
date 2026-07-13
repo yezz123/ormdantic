@@ -29,6 +29,25 @@ The runner exports both Python migration smoke-test URLs (`ORMDANTIC_TEST_*_URL`
 - `cargo test -p ormdantic-engine`
 - `cargo test -p ormdantic-engine --features mssql,oracle --test mssql_exec --test oracle_exec`
 
+## Run Benchmark Smoke Checks
+
+Start only the database services needed by the benchmark suite:
+
+```bash
+docker compose -p ormdantic-benchmark -f docker/databases/docker-compose.yaml up -d --wait postgres mysql
+```
+
+Then run backend-scoped smoke profiles:
+
+```bash
+uv run --group dev maturin develop --release
+uv run --group benchmark python -m benchmark.run --backend postgres --profile smoke
+uv run --group benchmark python -m benchmark.run --backend mysql --profile smoke
+```
+
+The benchmark runner drops only tables named `ormdantic_bench_*`; it does not
+remove or reset Docker volumes.
+
 ## URLs
 
 ```bash
