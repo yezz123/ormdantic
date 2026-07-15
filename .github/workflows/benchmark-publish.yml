@@ -1,0 +1,116 @@
+name: Publish ORM Benchmark Report
+
+on:
+  workflow_run:
+    workflows:
+      - ORM Benchmark Report
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+
+concurrency:
+  group: orm-benchmark-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Validate and publish pull-request report
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0] != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Locate benchmark artifact
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name == "orm-benchmark-report" and .expired == false)] | first | .id // empty')"
+          if [[ -z "$artifact_id" ]]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No complete benchmark artifact was found." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "artifact_id=$artifact_id" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifact archive
+        if: steps.artifact.outputs.found == 'true'
+        env:
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact_id }}
+        run: gh api "repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/artifact.zip"
+
+      - name: Validate data and regenerate trusted report
+        if: steps.artifact.outputs.found == 'true'
+        run: |
+          python -m benchmark.publish \
+            --archive "$RUNNER_TEMP/artifact.zip" \
+            --extract-dir "$RUNNER_TEMP/untrusted" \
+            --output-dir "$RUNNER_TEMP/trusted" \
+            --workflow-pr "$PR_NUMBER" \
+            --workflow-sha "$HEAD_SHA"
+
+      - name: Publish immutable report files
+        if: steps.artifact.outputs.found == 'true'
+        shell: bash
+        env:
+          PUBLISH_DIR: ${{ runner.temp }}/benchmark-results
+          TRUSTED_DIR: ${{ runner.temp }}/trusted
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin benchmark-results >/dev/null 2>&1; then
+            git fetch origin benchmark-results:refs/remotes/origin/benchmark-results
+            git worktree add --detach "$PUBLISH_DIR" refs/remotes/origin/benchmark-results
+          else
+            git worktree add --detach "$PUBLISH_DIR"
+            git -C "$PUBLISH_DIR" switch --orphan benchmark-results
+            git -C "$PUBLISH_DIR" rm -rf --ignore-unmatch .
+          fi
+          destination="$PUBLISH_DIR/pull/$PR_NUMBER/$HEAD_SHA"
+          mkdir -p "$destination"
+          cp -R "$TRUSTED_DIR/." "$destination/"
+          git -C "$PUBLISH_DIR" add "pull/$PR_NUMBER/$HEAD_SHA"
+          if ! git -C "$PUBLISH_DIR" diff --cached --quiet; then
+            git -C "$PUBLISH_DIR" commit -m "Publish benchmark report for PR #$PR_NUMBER at $HEAD_SHA"
+            git -C "$PUBLISH_DIR" push origin HEAD:benchmark-results
+          fi
+
+      - name: Create or update the benchmark comment
+        if: steps.artifact.outputs.found == 'true'
+        shell: bash
+        env:
+          REPORT_MARKER: '<!-- ormdantic-benchmark-report -->'
+          TRUSTED_DIR: ${{ runner.temp }}/trusted
+          IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/benchmark-results/pull/${{ github.event.workflow_run.pull_requests[0].number }}/${{ github.event.workflow_run.head_sha }}/report.svg
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          python -c 'import json, os, pathlib; report = pathlib.Path(os.environ["TRUSTED_DIR"], "report.md").read_text(); body = report + "\n![Ormdantic benchmark report](" + os.environ["IMAGE_URL"] + ")\n\n[Workflow run](" + os.environ["RUN_URL"] + ") · `" + os.environ["HEAD_SHA"] + "`\n"; pathlib.Path(os.environ["RUNNER_TEMP"], "comment.json").write_text(json.dumps({"body": body}))'
+          comment_id="$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" --jq "[.[] | select(.body | contains(\"$REPORT_MARKER\"))] | first | .id // empty")"
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" --input "$RUNNER_TEMP/comment.json"
+          else
+            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" --input "$RUNNER_TEMP/comment.json"
+          fi
