@@ -105,6 +105,9 @@ def test_runtime_capabilities_and_native_result(
     assert result.cursor.description == [("id",), ("name",)]
     assert list(result) == [(1, "dark"), (2, "light")]
     assert result.scalar() == 1
+    assert result.rowcount is None
+    affected = NativeResult([], [], rowcount=3)
+    assert affected.rowcount == 3
     assert NativeResult(["id"], []).scalar() is None
     assert NativeResult(["id"], [()]).scalar() is None
 

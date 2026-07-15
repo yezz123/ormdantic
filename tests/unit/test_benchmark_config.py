@@ -25,6 +25,14 @@ def test_named_profiles_match_cross_database_design() -> None:
         "iterations": 5,
         "warmups": 1,
     }
+    assert Profile.for_name("ci").settings == {
+        "rows": 10_000,
+        "write_rows": 10_000,
+        "lookup_count": 500,
+        "iterations": 7,
+        "warmups": 2,
+    }
+    assert build_config(profile="ci", backend="sqlite").batch_size == 500
     assert Profile.for_name("million").settings["rows"] == 1_000_000
     assert Profile.for_name("large").settings == {
         "rows": 10_000_000,

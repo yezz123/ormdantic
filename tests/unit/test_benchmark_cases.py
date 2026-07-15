@@ -73,3 +73,11 @@ def test_case_rows_and_expected_values_are_profile_aware() -> None:
         )
         == 3
     )
+
+
+def test_non_equivalent_serialization_cases_are_diagnostic() -> None:
+    cases = {case.name: case for case in case_matrix()}
+
+    assert cases["serialize simple payloads"].comparable is False
+    assert cases["serialize nested payloads"].comparable is False
+    assert cases["orm insert models"].comparable is True

@@ -20,7 +20,9 @@ def test_result_payload_contains_reproducibility_metadata() -> None:
         orm="ormdantic",
         median_ms=1.25,
         samples_ms=(1.25,),
+        mad_ms=0.0,
         setup_ms=0.5,
+        order_positions=(0,),
         validation={"expected": 1_000, "actual": 1_000},
     )
 
@@ -32,8 +34,11 @@ def test_result_payload_contains_reproducibility_metadata() -> None:
         git_dirty=True,
         server_version="PostgreSQL 16",
         docker_image="postgres:16",
+        cases=("count all rows",),
+        orms=("ormdantic",),
     )
 
+    assert payload["schema_version"] == 2
     assert payload["metadata"]["git_commit"] == "abc123"
     assert payload["metadata"]["git_dirty"] is True
     assert payload["metadata"]["database_url"] == "postgresql://user:***@localhost/app"
@@ -42,13 +47,20 @@ def test_result_payload_contains_reproducibility_metadata() -> None:
     assert payload["metadata"]["materialized"] is True
     assert payload["metadata"]["planner_scale"] is False
     assert payload["metadata"]["runner"] == "benchmark.runner"
+    assert payload["metadata"]["timing_order"] == "rotating-per-round"
+    assert isinstance(payload["metadata"]["dependency_versions"], dict)
     assert payload["config"]["profile"] == "smoke"
+    assert payload["config"]["cases"] == ["count all rows"]
+    assert payload["config"]["orms"] == ["ormdantic"]
     assert payload["measurements"][0]["backend"] == "postgres"
     assert payload["measurements"][0]["setup_ms"] == 0.5
+    assert payload["measurements"][0]["mad_ms"] == 0.0
+    assert payload["measurements"][0]["order_positions"] == [0]
     assert payload["measurements"][0]["validation"] == {
         "expected": 1_000,
         "actual": 1_000,
     }
+    assert payload["measurements"][0]["comparable"] is True
 
 
 def test_skipped_measurements_record_reason() -> None:
