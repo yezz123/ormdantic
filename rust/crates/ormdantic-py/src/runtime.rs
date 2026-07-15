@@ -25,8 +25,9 @@ pub(crate) fn execute_native(
         .into_iter()
         .map(|value| py_to_db_value(py, value))
         .collect::<PyResult<Vec<_>>>()?;
-    let result =
-        execute_url(url, sql, &values).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let result = py
+        .detach(|| execute_url(url, sql, &values).map_err(|error| error.to_string()))
+        .map_err(PyValueError::new_err)?;
     query_result_to_python(py, result)
 }
 
@@ -47,12 +48,15 @@ impl PyNativeConnection {
             .into_iter()
             .map(|value| py_to_db_value(py, value))
             .collect::<PyResult<Vec<_>>>()?;
-        let result = self
-            .inner
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .execute(sql, &values)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let result = py
+            .detach(|| {
+                self.inner
+                    .lock()
+                    .map_err(|_| "native connection lock poisoned".to_string())?
+                    .execute(sql, &values)
+                    .map_err(|error| error.to_string())
+            })
+            .map_err(PyValueError::new_err)?;
         query_result_to_python(py, result)
     }
 
@@ -101,6 +105,7 @@ pub(crate) fn query_result_to_python(py: Python<'_>, result: QueryResult) -> PyR
         rows.append(py_row)?;
     }
     output.set_item("rows", rows)?;
+    output.set_item("rowcount", result.row_count())?;
     Ok(output.into_any().unbind())
 }
 

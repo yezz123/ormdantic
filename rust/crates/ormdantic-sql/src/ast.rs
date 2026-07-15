@@ -9,7 +9,7 @@ use crate::compiler::{
 };
 use crate::Filter;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum QueryOperation {
     Select,
     Insert,

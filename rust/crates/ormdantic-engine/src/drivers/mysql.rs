@@ -82,7 +82,7 @@ fn execute_conn(
     } else {
         conn.exec_drop(sql, Params::Positional(mysql_params(params)))
             .map_err(sql_error)?;
-        Ok(QueryResult::empty())
+        Ok(QueryResult::affected(conn.affected_rows()))
     }
 }
 

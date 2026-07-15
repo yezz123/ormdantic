@@ -59,6 +59,15 @@ fn statement_result_new_preserves_explicit_statement_metadata() {
 }
 
 #[test]
+fn query_result_preserves_affected_row_count() {
+    let result = QueryResult::affected(3);
+
+    assert_eq!(result.row_count(), Some(3));
+    assert!(result.columns().is_empty());
+    assert!(result.rows().is_empty());
+}
+
+#[test]
 fn sqlite_db_value_to_sql_covers_scalar_variants() {
     let cases = [
         (DbValue::Null, RusqliteValue::Null),

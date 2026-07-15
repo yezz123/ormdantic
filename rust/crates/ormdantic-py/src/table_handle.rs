@@ -1,7 +1,7 @@
 use crate::query::{
-    bind_select_columns as select_columns, joined_filters, joined_order_by, parse_filter_input,
-    parse_sort_direction, select_ast_from_payload, update_ast_from_payload, RuntimeJoinedFilter,
-    RuntimeJoinedOrder, RuntimeJoinedQuery,
+    bind_select_columns as select_columns, delete_ast_from_payload, joined_filters,
+    joined_order_by, parse_filter_input, parse_sort_direction, select_ast_from_payload,
+    update_ast_from_payload, RuntimeJoinedFilter, RuntimeJoinedOrder, RuntimeJoinedQuery,
 };
 use crate::runtime::{py_to_db_value, query_result_to_python};
 use crate::schema::{
@@ -11,8 +11,8 @@ use crate::schema::{
 use ormdantic_dialects::{AnyDialect, Dialect, DialectKind};
 use ormdantic_engine::{DbValue, NativeConnection};
 use ormdantic_sql::{
-    CompiledQuery, Filter, JoinSpec, JoinedFilter, JoinedOrderBy, JoinedSelectColumn, OrderBy,
-    QueryAst, QueryOperation, SortDirection, TableRef,
+    CompiledQuery, DmlAst, Expr, Filter, JoinSpec, JoinedFilter, JoinedOrderBy, JoinedSelectColumn,
+    OrderBy, QueryAst, QueryOperation, SortDirection, TableRef, TableSource,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -103,12 +103,21 @@ pub(crate) struct PyTableHandle {
     pub(crate) connection: Arc<Mutex<NativeConnection>>,
     pub(crate) tables: Arc<HashMap<String, RuntimeTable>>,
     pub(crate) table: RuntimeTable,
+    pub(crate) compiled_dml: Mutex<HashMap<(QueryOperation, Vec<String>), CompiledQuery>>,
 }
 
 #[pymethods]
 impl PyTableHandle {
     fn insert(&self, py: Python<'_>, payload: &Bound<'_, PyDict>) -> PyResult<Py<PyAny>> {
         self.execute_write(py, QueryOperation::Insert, payload)
+    }
+
+    fn insert_many(&self, py: Python<'_>, payloads: Vec<Py<PyDict>>) -> PyResult<Py<PyAny>> {
+        self.execute_many_write(py, QueryOperation::Insert, payloads)
+    }
+
+    fn upsert_many(&self, py: Python<'_>, payloads: Vec<Py<PyDict>>) -> PyResult<Py<PyAny>> {
+        self.execute_many_write(py, QueryOperation::Upsert, payloads)
     }
 
     fn update(&self, py: Python<'_>, payload: &Bound<'_, PyDict>) -> PyResult<Py<PyAny>> {
@@ -120,15 +129,15 @@ impl PyTableHandle {
     }
 
     fn delete(&self, py: Python<'_>, primary_key: Py<PyAny>) -> PyResult<Py<PyAny>> {
-        let compiled = QueryAst::Delete {
-            table: TableRef::new(self.table.qualified_table_name()),
-            pk: self.table.primary_key.clone(),
-        }
-        .compile(
-            &AnyDialect::parse(&self.url)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?,
-        )
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let key = (QueryOperation::Delete, vec![self.table.primary_key.clone()]);
+        let compiled = cached_or_compile(&self.compiled_dml, key, || {
+            QueryAst::Delete {
+                table: TableRef::new(self.table.qualified_table_name()),
+                pk: self.table.primary_key.clone(),
+            }
+            .compile(&self.dialect()?)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+        })?;
         self.execute_compiled(py, compiled, vec![py_to_db_value(py, primary_key)?])
     }
 
@@ -379,6 +388,28 @@ impl PyTableHandle {
         self.execute_compiled(py, compiled, params)
     }
 
+    fn delete_expression(&self, py: Python<'_>, query: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let query = query.cast::<PyDict>()?;
+        let dialect = self.dialect()?;
+        let mut ast = delete_ast_from_payload(query)?;
+        if dialect.kind() == DialectKind::Sqlite {
+            ast = ast.rewrite_sqlite_decimal_columns(
+                &decimal_columns(&self.table),
+                &runtime_table_names(&self.table),
+            );
+        }
+        let compiled = ast
+            .compile(&dialect)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let empty_values = PyDict::new(py);
+        let values = match query.get_item("values")? {
+            Some(values) => values.cast::<PyDict>()?.clone(),
+            None => empty_values,
+        };
+        let params = bind_values(py, compiled.params(), &values)?;
+        self.execute_compiled(py, compiled, params)
+    }
+
     fn max_bind_parameters(&self) -> PyResult<Option<usize>> {
         Ok(self.dialect()?.max_bind_parameters())
     }
@@ -387,6 +418,74 @@ impl PyTableHandle {
 impl PyTableHandle {
     fn dialect(&self) -> PyResult<AnyDialect> {
         AnyDialect::parse(&self.url).map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn execute_many_write(
+        &self,
+        py: Python<'_>,
+        operation: QueryOperation,
+        payloads: Vec<Py<PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        let operation_name = match operation {
+            QueryOperation::Insert => "insert_many",
+            QueryOperation::Upsert => "upsert_many",
+            _ => {
+                return Err(PyValueError::new_err(
+                    "bulk table writes support insert and upsert only",
+                ))
+            }
+        };
+        let first = payloads.first().ok_or_else(|| {
+            PyValueError::new_err(format!("{operation_name} requires at least one payload"))
+        })?;
+        let columns = payload_columns(first.bind(py))?;
+        let rows = (0..payloads.len())
+            .map(|row| {
+                columns
+                    .iter()
+                    .map(|column| Expr::param(format!("row_{row}__{column}")))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let table = TableSource::table(self.table.qualified_table_name());
+        let dml = match operation {
+            QueryOperation::Insert => DmlAst::Insert {
+                table,
+                columns: columns.clone(),
+                rows,
+                returning: Vec::new(),
+            },
+            QueryOperation::Upsert => DmlAst::Upsert {
+                table,
+                columns: columns.clone(),
+                rows,
+                conflict_target: vec![self.table.primary_key.clone()],
+                update_assignments: Vec::new(),
+                returning: Vec::new(),
+            },
+            _ => unreachable!("operation validated above"),
+        };
+        let compiled = dml
+            .compile(&self.dialect()?)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let mut values = Vec::with_capacity(payloads.len() * columns.len());
+        for payload in payloads {
+            let payload = payload.bind(py);
+            if payload_columns(payload)? != columns {
+                return Err(PyValueError::new_err(format!(
+                    "{operation_name} payloads must use the same ordered columns"
+                )));
+            }
+            for column in &columns {
+                let value = payload.get_item(column)?.ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "{operation_name} payload is missing column '{column}'"
+                    ))
+                })?;
+                values.push(py_to_db_value(py, value.unbind())?);
+            }
+        }
+        self.execute_compiled(py, compiled, values)
     }
 
     fn execute_write(
@@ -421,12 +520,12 @@ impl PyTableHandle {
                 ))
             }
         };
-        let compiled = query
-            .compile(
-                &AnyDialect::parse(&self.url)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
-            )
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let key = (operation, payload_columns);
+        let compiled = cached_or_compile(&self.compiled_dml, key, || {
+            query
+                .compile(&self.dialect()?)
+                .map_err(|error| PyValueError::new_err(error.to_string()))
+        })?;
         let params = bind_values(py, compiled.params(), payload)?;
         self.execute_compiled(py, compiled, params)
     }
@@ -437,12 +536,15 @@ impl PyTableHandle {
         compiled: CompiledQuery,
         values: Vec<DbValue>,
     ) -> PyResult<Py<PyAny>> {
-        let result = self
-            .connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .execute(compiled.sql(), &values)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let result = py
+            .detach(|| {
+                self.connection
+                    .lock()
+                    .map_err(|_| "native connection lock poisoned".to_string())?
+                    .execute(compiled.sql(), &values)
+                    .map_err(|error| error.to_string())
+            })
+            .map_err(PyValueError::new_err)?;
         query_result_to_python(py, result)
     }
 
@@ -939,6 +1041,22 @@ fn bind_values(
         .collect()
 }
 
+fn cached_or_compile(
+    cache: &Mutex<HashMap<(QueryOperation, Vec<String>), CompiledQuery>>,
+    key: (QueryOperation, Vec<String>),
+    compile: impl FnOnce() -> PyResult<CompiledQuery>,
+) -> PyResult<CompiledQuery> {
+    let mut cache = cache
+        .lock()
+        .map_err(|_| PyValueError::new_err("compiled DML cache lock poisoned"))?;
+    if let Some(compiled) = cache.get(&key) {
+        return Ok(compiled.clone());
+    }
+    let compiled = compile()?;
+    cache.insert(key, compiled.clone());
+    Ok(compiled)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -963,5 +1081,31 @@ mod tests {
         assert!(loader_path_included(&paths, "author"));
         assert!(loader_path_included(&paths, "author/posts"));
         assert!(!loader_path_included(&paths, "comments"));
+    }
+
+    #[test]
+    fn compiled_dml_cache_reuses_shapes_and_separates_other_shapes() {
+        let cache = Mutex::new(HashMap::new());
+        let mut compile_count = 0;
+        let mut compile = |columns: Vec<String>| {
+            cached_or_compile(
+                &cache,
+                (QueryOperation::Insert, columns),
+                || -> PyResult<CompiledQuery> {
+                    compile_count += 1;
+                    Ok(CompiledQuery::new(
+                        "INSERT".to_string(),
+                        Vec::new(),
+                        QueryOperation::Insert,
+                    ))
+                },
+            )
+        };
+
+        compile(vec!["id".to_string(), "name".to_string()]).unwrap();
+        compile(vec!["id".to_string(), "name".to_string()]).unwrap();
+        compile(vec!["id".to_string()]).unwrap();
+
+        assert_eq!(compile_count, 2);
     }
 }

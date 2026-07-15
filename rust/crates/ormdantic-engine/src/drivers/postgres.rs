@@ -42,8 +42,8 @@ fn execute_client(
         let rows = client.query(sql, &refs).map_err(postgres_error)?;
         Ok(rows_to_result(&rows))
     } else {
-        client.execute(sql, &refs).map_err(postgres_error)?;
-        Ok(QueryResult::empty())
+        let row_count = client.execute(sql, &refs).map_err(postgres_error)?;
+        Ok(QueryResult::affected(row_count))
     }
 }
 

@@ -267,6 +267,7 @@ mod runtime {
     }
 
     fn result_to_query_result(result: oracle_rs::QueryResult) -> QueryResult {
+        let row_count = result.rows_affected;
         let columns = result
             .columns
             .iter()
@@ -283,7 +284,7 @@ mod runtime {
                     .collect::<Vec<_>>()
             })
             .collect();
-        QueryResult::new(columns, rows)
+        QueryResult::new(columns, rows).with_row_count(row_count)
     }
 
     fn oracle_value(value: &Value, column: Option<&ColumnInfo>) -> DbValue {

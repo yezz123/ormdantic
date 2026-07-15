@@ -720,6 +720,16 @@ pub(crate) fn update_ast_from_payload(
     })
 }
 
+pub(crate) fn delete_ast_from_payload(query: &Bound<'_, PyDict>) -> PyResult<DmlAst> {
+    let table: String = required_item(query, "table")?.extract()?;
+    let where_expr = query.get_item("where")?.map(parse_expression).transpose()?;
+    Ok(DmlAst::Delete {
+        table: TableSource::table(table),
+        where_expr,
+        returning: Vec::new(),
+    })
+}
+
 fn parse_projections(py: Python<'_>, projections: Vec<Py<PyAny>>) -> PyResult<Vec<Projection>> {
     projections
         .into_iter()
