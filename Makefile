@@ -1,4 +1,4 @@
-.PHONY: test lint docs coverage coverage-combined bench benchmark-smoke benchmark-sqlite-smoke benchmark-postgres-smoke benchmark-mysql-smoke benchmark-report benchmark-million benchmark-huge format taplo-check
+.PHONY: test lint docs coverage coverage-combined bench benchmark-smoke benchmark-sqlite-smoke benchmark-postgres-smoke benchmark-mysql-smoke benchmark-report benchmark-ci benchmark-target benchmark-compare benchmark-million benchmark-huge format taplo-check
 
 test:
 	uv run --group dev maturin develop
@@ -45,6 +45,17 @@ benchmark-mysql-smoke:
 benchmark-report:
 	uv run --group dev maturin develop --release
 	uv run --group benchmark python -m benchmark.run --backend sqlite --profile default
+
+benchmark-ci:
+	uv run --group dev maturin develop --release
+	ORMDANTIC_BENCH_BUILD_MODE=release uv run --group benchmark python -m benchmark.run --backend sqlite --profile ci
+
+benchmark-target:
+	uv run --group dev maturin develop --release
+	ORMDANTIC_BENCH_BUILD_MODE=release uv run --group benchmark python -m benchmark.run --backend sqlite --profile ci --case "$(CASE)"
+
+benchmark-compare:
+	uv run --group benchmark python -m benchmark.compare --base "$(BASE)" --head "$(HEAD)" --output-dir "$(or $(REPORT_DIR),benchmark/report)"
 
 benchmark-million:
 	uv run --group dev maturin develop --release

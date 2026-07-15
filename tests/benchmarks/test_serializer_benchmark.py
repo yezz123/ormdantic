@@ -425,7 +425,9 @@ def test_nested_serializer_loader_option_benchmark(benchmark: Any) -> None:
     )
 
 
-async def _runtime_crud_once(database_url: str) -> int:
+async def _prepare_runtime_crud(
+    database_url: str,
+) -> tuple[Any, type[BaseModel]]:
     db = Ormdantic(database_url)
 
     @db.table(pk="id")
@@ -437,11 +439,18 @@ async def _runtime_crud_once(database_url: str) -> int:
     await db.init()
     await db.drop_all()
     await db.create_all()
-    for index in range(25):
-        await db[BenchRuntimeFlavor].insert(
-            BenchRuntimeFlavor(id=str(index), name=f"flavor-{index}", strength=index)
-        )
-    results = await db[BenchRuntimeFlavor].find_many(
+    return db[BenchRuntimeFlavor], BenchRuntimeFlavor
+
+
+async def _runtime_crud_once(table: Any, model: type[BaseModel]) -> int:
+    await table.delete_where(allow_all=True)
+    await table.insert_many(
+        [
+            model(id=str(index), name=f"flavor-{index}", strength=index)
+            for index in range(25)
+        ]
+    )
+    results = await table.find_many(
         where=column("strength").ge(10) & column("name").like("flavor-%")
     )
     return len(results.data)
@@ -450,18 +459,24 @@ async def _runtime_crud_once(database_url: str) -> int:
 def test_runtime_crud_expression_benchmark(benchmark: Any) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         database_url = f"sqlite:///{tmp}/runtime.sqlite3"
-
-        result = benchmark(lambda: asyncio.run(_runtime_crud_once(database_url)))
+        loop = asyncio.new_event_loop()
+        try:
+            table, model = loop.run_until_complete(_prepare_runtime_crud(database_url))
+            result = benchmark(
+                lambda: loop.run_until_complete(_runtime_crud_once(table, model))
+            )
+        finally:
+            loop.run_until_complete(loop.shutdown_default_executor())
+            loop.close()
 
     assert result == 15
 
 
-async def _relationship_load_once(
+async def _prepare_relationship_load(
     database_url: str,
-    strategy: Any,
     parent_count: int,
     children_per_parent: int,
-) -> int:
+) -> Any:
     db = Ormdantic(database_url)
 
     @db.table(pk="id", back_references={"children": "parent"})
@@ -483,22 +498,25 @@ async def _relationship_load_once(
     await db.drop_all()
     await db.create_all()
     parents = [
-        await db[BenchParent].insert(
-            BenchParent(id=f"parent-{index}", name=f"parent-{index}")
-        )
+        BenchParent(id=f"parent-{index}", name=f"parent-{index}")
         for index in range(parent_count)
     ]
-    for parent in parents:
-        for child_index in range(children_per_parent):
-            await db[BenchChild].insert(
-                BenchChild(
-                    id=f"{parent.id}-child-{child_index}",
-                    name=f"child-{child_index}",
-                    parent=parent,
-                )
-            )
+    children = [
+        BenchChild(
+            id=f"{parent.id}-child-{child_index}",
+            name=f"child-{child_index}",
+            parent=parent,
+        )
+        for parent in parents
+        for child_index in range(children_per_parent)
+    ]
+    await db[BenchParent].insert_many(parents)
+    await db[BenchChild].insert_many(children)
+    return db[BenchParent]
 
-    result = await db[BenchParent].find_many(load=[strategy("children")])
+
+async def _relationship_load_once(table: Any, strategy: Any) -> int:
+    result = await table.find_many(load=[strategy("children")])
     return sum(len(parent.children) for parent in result.data)
 
 
@@ -520,29 +538,33 @@ def test_relationship_loader_strategy_benchmark(
 ) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         database_url = f"sqlite:///{tmp}/relationship-loaders.sqlite3"
-
-        result = benchmark(
-            lambda: asyncio.run(
-                _relationship_load_once(
+        loop = asyncio.new_event_loop()
+        try:
+            table = loop.run_until_complete(
+                _prepare_relationship_load(
                     database_url,
-                    strategy,
                     parent_count,
                     children_per_parent,
                 )
             )
-        )
+            result = benchmark(
+                lambda: loop.run_until_complete(
+                    _relationship_load_once(table, strategy)
+                )
+            )
+        finally:
+            loop.run_until_complete(loop.shutdown_default_executor())
+            loop.close()
 
     assert result == parent_count * children_per_parent
 
 
-async def _nested_relationship_load_once(
+async def _prepare_nested_relationship_load(
     database_url: str,
-    root_strategy: Any,
-    nested_strategy: Any,
     parent_count: int,
     children_per_parent: int,
     leaves_per_child: int,
-) -> int:
+) -> Any:
     db = Ormdantic(database_url)
 
     @db.table(pk="id", back_references={"children": "parent"})
@@ -578,31 +600,38 @@ async def _nested_relationship_load_once(
     await db.drop_all()
     await db.create_all()
     parents = [
-        await db[BenchNestedParent].insert(
-            BenchNestedParent(id=f"parent-{index}", name=f"parent-{index}")
-        )
+        BenchNestedParent(id=f"parent-{index}", name=f"parent-{index}")
         for index in range(parent_count)
     ]
-    for parent in parents:
-        for child_index in range(children_per_parent):
-            child = await db[BenchNestedChild].insert(
-                BenchNestedChild(
-                    id=f"{parent.id}-child-{child_index}",
-                    name=f"child-{child_index}",
-                    parent=parent,
-                )
-            )
-            for leaf_index in range(leaves_per_child):
-                await db[BenchNestedLeaf].insert(
-                    BenchNestedLeaf(
-                        id=f"{child.id}-leaf-{leaf_index}",
-                        label=f"leaf-{leaf_index}",
-                        rank=leaf_index,
-                        child=child,
-                    )
-                )
+    children = [
+        BenchNestedChild(
+            id=f"{parent.id}-child-{child_index}",
+            name=f"child-{child_index}",
+            parent=parent,
+        )
+        for parent in parents
+        for child_index in range(children_per_parent)
+    ]
+    leaves = [
+        BenchNestedLeaf(
+            id=f"{child.id}-leaf-{leaf_index}",
+            label=f"leaf-{leaf_index}",
+            rank=leaf_index,
+            child=child,
+        )
+        for child in children
+        for leaf_index in range(leaves_per_child)
+    ]
+    await db[BenchNestedParent].insert_many(parents)
+    await db[BenchNestedChild].insert_many(children)
+    await db[BenchNestedLeaf].insert_many(leaves)
+    return db[BenchNestedParent]
 
-    result = await db[BenchNestedParent].find_many(
+
+async def _nested_relationship_load_once(
+    table: Any, root_strategy: Any, nested_strategy: Any
+) -> int:
+    result = await table.find_many(
         load=[
             root_strategy("children"),
             nested_strategy("children.leaves").sorted_by("-rank"),
@@ -630,19 +659,26 @@ def test_nested_relationship_loader_strategy_benchmark(
     leaves_per_child = 4
     with tempfile.TemporaryDirectory() as tmp:
         database_url = f"sqlite:///{tmp}/nested-relationship-loaders.sqlite3"
-
-        result = benchmark(
-            lambda: asyncio.run(
-                _nested_relationship_load_once(
+        loop = asyncio.new_event_loop()
+        try:
+            table = loop.run_until_complete(
+                _prepare_nested_relationship_load(
                     database_url,
-                    root_strategy,
-                    nested_strategy,
                     parent_count,
                     children_per_parent,
                     leaves_per_child,
                 )
             )
-        )
+            result = benchmark(
+                lambda: loop.run_until_complete(
+                    _nested_relationship_load_once(
+                        table, root_strategy, nested_strategy
+                    )
+                )
+            )
+        finally:
+            loop.run_until_complete(loop.shutdown_default_executor())
+            loop.close()
 
     assert result == parent_count * children_per_parent * leaves_per_child
 

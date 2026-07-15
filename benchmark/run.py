@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 
 from benchmark.backends import resolve_backend
-from benchmark.charts import write_chart_bundle
+from benchmark.cases import case_names
+from benchmark.charts import ORM_ORDER, write_chart_bundle
 from benchmark.config import (
     PROFILES,
     SUPPORTED_BACKENDS,
@@ -51,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
             config,
             allow_missing=args.allow_missing,
             progress=lambda message: print(f"running {message}", flush=True),
+            cases=tuple(args.case) if args.case else None,
+            orms=tuple(args.orm) if args.orm else None,
         )
     except Exception as exc:
         print(str(exc), file=sys.stderr)
@@ -80,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
                 backend=backend,
                 measurements=measurements,
                 server_version=server_version,
+                cases=tuple(args.case) if args.case else None,
+                orms=tuple(args.orm) if args.orm else None,
             ),
             indent=2,
         )
@@ -147,6 +152,18 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmups", type=int)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--category")
+    parser.add_argument(
+        "--case",
+        action="append",
+        choices=case_names(),
+        help="run only this case; repeat to select multiple cases",
+    )
+    parser.add_argument(
+        "--orm",
+        action="append",
+        choices=ORM_ORDER,
+        help="run only this ORM; repeat to select multiple ORMs",
+    )
     parser.add_argument("--output")
     parser.add_argument("--charts-dir")
     parser.add_argument(

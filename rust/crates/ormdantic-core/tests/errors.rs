@@ -44,6 +44,7 @@ fn identifiers_and_qualified_names_expose_owned_and_borrowed_forms() {
     assert_eq!(unqualified.schema(), None);
     assert_eq!(unqualified.to_string(), "flavors");
     assert_eq!(unchecked_qualified.to_string(), "bad-schema.bad-name");
+    assert!(Identifier::new("").is_err());
 }
 
 #[test]

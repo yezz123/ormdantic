@@ -1,0 +1,170 @@
+name: ORM Benchmark Report
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  ORMDANTIC_BENCH_BUILD_MODE: release
+
+concurrency:
+  group: orm-benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: SQLite base/head comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Resolve benchmark revisions
+        id: revisions
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+            head_sha="$PR_HEAD_SHA"
+          else
+            base_sha="$BEFORE_SHA"
+            head_sha="$CURRENT_SHA"
+            if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+              base_sha="${CURRENT_SHA}^"
+            fi
+          fi
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ steps.revisions.outputs.base_sha }}
+          path: base
+          persist-credentials: false
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ steps.revisions.outputs.head_sha }}
+          path: head
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true # zizmor: ignore[cache-poisoning] -- Unprivileged job and benchmark-only artifact
+
+      - name: Build base revision in release mode
+        working-directory: base
+        run: |
+          uv sync --group dev --group benchmark
+          uv run --group dev maturin develop --release
+
+      - name: Benchmark base revision
+        working-directory: base
+        run: |
+          if uv run --group benchmark python -c "from benchmark.config import PROFILES; raise SystemExit('ci' not in PROFILES)"; then
+            uv run --group benchmark python -m benchmark.run \
+              --backend sqlite --profile ci \
+              --output "$RUNNER_TEMP/base.json" \
+              --charts-dir "$RUNNER_TEMP/base-charts" \
+              --docs-charts-dir ''
+          else
+            uv run --group benchmark python -m benchmark.run \
+              --backend sqlite --profile smoke \
+              --rows 10000 --write-rows 10000 --lookup-count 500 \
+              --iterations 7 --warmups 2 --batch-size 500 \
+              --output "$RUNNER_TEMP/base.json" \
+              --charts-dir "$RUNNER_TEMP/base-charts" \
+              --docs-charts-dir ''
+          fi
+
+      - name: Build head revision in release mode
+        working-directory: head
+        run: |
+          uv sync --group dev --group benchmark
+          uv run --group dev maturin develop --release
+
+      - name: Benchmark head revision
+        working-directory: head
+        run: |
+          uv run --group benchmark python -m benchmark.run \
+            --backend sqlite --profile ci \
+            --output "$RUNNER_TEMP/head.json" \
+            --charts-dir "$RUNNER_TEMP/head-charts" \
+            --docs-charts-dir ''
+
+      - name: Compare revisions
+        id: comparison
+        continue-on-error: true
+        working-directory: head
+        run: |
+          uv run --group benchmark python -m benchmark.compare \
+            --base "$RUNNER_TEMP/base.json" \
+            --head "$RUNNER_TEMP/head.json" \
+            --output-dir "$RUNNER_TEMP/report" \
+            --fail-regression 0.10
+
+      - name: Package publication inputs
+        if: always()
+        shell: bash
+        env:
+          PR_NUMBER: ${{ steps.revisions.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.revisions.outputs.head_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/publication"
+          if [[ -f "$RUNNER_TEMP/base.json" ]]; then
+            cp "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/publication/base.json"
+          fi
+          if [[ -f "$RUNNER_TEMP/head.json" ]]; then
+            cp "$RUNNER_TEMP/head.json" "$RUNNER_TEMP/publication/head.json"
+          fi
+          if [[ -d "$RUNNER_TEMP/report" ]]; then
+            cp -R "$RUNNER_TEMP/report/." "$RUNNER_TEMP/publication/"
+          fi
+          python -c 'import json, os, pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "publication", "identity.json").write_text(json.dumps({"pr": int(os.environ["PR_NUMBER"]), "head_sha": os.environ["HEAD_SHA"]}, sort_keys=True) + "\n")'
+
+      - name: Add report to job summary
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/publication/report.md" ]]; then
+            cat "$RUNNER_TEMP/publication/report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Benchmark report generation did not complete." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: orm-benchmark-report
+          path: ${{ runner.temp }}/publication
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce benchmark regression gate
+        if: always()
+        env:
+          COMPARISON_OUTCOME: ${{ steps.comparison.outcome }}
+        run: |
+          if [[ "$COMPARISON_OUTCOME" != "success" ]]; then
+            echo "Benchmark comparison or regression gate failed."
+            exit 1
+          fi

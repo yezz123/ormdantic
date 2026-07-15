@@ -62,11 +62,24 @@ pub(crate) fn hydrate_joined(
         .collect::<PyResult<Vec<_>>>()?;
     let path_pk_map = path_pks.into_iter().collect::<HashMap<_, _>>();
     let array_paths = array_paths.into_iter().collect::<HashSet<_>>();
+    let mut path_indexes = HashMap::new();
+    let mut path_plans: Vec<(String, Vec<(usize, String)>)> = Vec::new();
+    for (column_index, (path, column)) in parsed_columns.iter().enumerate() {
+        let plan_index = *path_indexes.entry(path.clone()).or_insert_with(|| {
+            path_plans.push((path.clone(), Vec::new()));
+            path_plans.len() - 1
+        });
+        if !column.is_empty() {
+            path_plans[plan_index]
+                .1
+                .push((column_index, column.clone()));
+        }
+    }
     let root = PyDict::new(py);
 
     for row in rows {
         let row_pks = collect_row_pks(py, &row, &parsed_columns, &path_pk_map);
-        for (idx, (path, column)) in parsed_columns.iter().enumerate() {
+        for (path, columns) in &path_plans {
             let mut node = root.clone();
             let mut current_path = String::new();
             let mut should_set = true;
@@ -85,28 +98,32 @@ pub(crate) fn hydrate_joined(
                     should_set = false;
                     break;
                 }
-                if !node.contains(branch)? {
-                    node.set_item(branch, PyDict::new(py))?;
-                }
-                let branch_node = node
-                    .get_item(branch)?
-                    .expect("branch exists")
-                    .cast_into::<PyDict>()?;
-                if array_paths.contains(&current_path) {
-                    if !branch_node.contains(pk_value.bind(py))? {
-                        branch_node.set_item(pk_value.bind(py), PyDict::new(py))?;
+                let branch_node = match node.get_item(branch)? {
+                    Some(branch_node) => branch_node.cast_into::<PyDict>()?,
+                    None => {
+                        let branch_node = PyDict::new(py);
+                        node.set_item(branch, &branch_node)?;
+                        branch_node
                     }
-                    node = branch_node
-                        .get_item(pk_value.bind(py))?
-                        .expect("array item exists")
-                        .cast_into::<PyDict>()?;
+                };
+                if array_paths.contains(&current_path) {
+                    node = match branch_node.get_item(pk_value.bind(py))? {
+                        Some(item) => item.cast_into::<PyDict>()?,
+                        None => {
+                            let item = PyDict::new(py);
+                            branch_node.set_item(pk_value.bind(py), &item)?;
+                            item
+                        }
+                    };
                 } else {
                     node = branch_node;
                 }
             }
-            if should_set && !column.is_empty() {
-                if let Some(value) = row.get(idx) {
-                    node.set_item(column, value.bind(py))?;
+            if should_set {
+                for (column_index, column) in columns {
+                    if let Some(value) = row.get(*column_index) {
+                        node.set_item(column, value.bind(py))?;
+                    }
                 }
             }
         }

@@ -1,5 +1,6 @@
 """Module providing a way to create ORM models and schemas"""
 
+import asyncio
 from time import perf_counter
 from types import TracebackType, UnionType
 from typing import Any, Callable, ForwardRef, Literal, Type, Union, get_args, get_origin
@@ -595,7 +596,7 @@ class Ormdantic:
         for table_data in self._table_map.name_to_data.values():
             for field_name in table_data.relationships:
                 install_relationship_path_descriptor(table_data.model, field_name)
-        self._runtime = self._build_runtime_database()
+        self._runtime = await asyncio.to_thread(self._build_runtime_database)
         for table_data in self._table_map.name_to_data.values():
             self._tables[table_data.model] = Table(
                 table_data=table_data,
@@ -612,21 +613,7 @@ class Ormdantic:
     async def create_all(self) -> None:
         """Create all registered tables."""
         try:
-            if self._runtime is None:
-                self._runtime = self._build_runtime_database()
-            self._create_registered_namespaces()
-            self._create_registered_sequences()
-            self._runtime.create_all()
-            self._create_registered_postgres_unique_options()
-            self._create_registered_constraint_comments()
-            self._create_registered_postgres_index_options()
-            self._create_registered_mssql_index_options()
-            self._create_registered_oracle_index_options()
-            self._create_registered_mysql_index_options()
-            self._create_registered_index_tablespaces()
-            self._create_registered_index_comments()
-            self._create_registered_enum_type_comments()
-            self._create_registered_views()
+            await asyncio.to_thread(self._create_all_sync)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -639,26 +626,7 @@ class Ormdantic:
     async def drop_all(self) -> None:
         """Drop all registered tables."""
         try:
-            if self._runtime is not None:
-                self._drop_registered_views()
-                self._runtime.drop_all()
-                self._drop_registered_sequences()
-                self._drop_registered_namespaces()
-                return
-            self._drop_registered_views()
-            for table_data in reversed(list(self._table_map.name_to_data.values())):
-                sql = _ormdantic.compile_drop_table_sql(
-                    self._connection, table_data.tablename
-                )
-                _ormdantic.execute_native(self._connection, sql, [])
-            for enum_type in reversed(self._runtime_enum_type_specs()):
-                _ormdantic.execute_native(
-                    self._connection,
-                    _drop_runtime_enum_type_sql(enum_type),
-                    [],
-                )
-            self._drop_registered_sequences()
-            self._drop_registered_namespaces()
+            await asyncio.to_thread(self._drop_all_sync)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -667,6 +635,45 @@ class Ormdantic:
                 context=self._context("drop_all"),
             )
             raise error from exc
+
+    def _create_all_sync(self) -> None:
+        if self._runtime is None:
+            self._runtime = self._build_runtime_database()
+        self._create_registered_namespaces()
+        self._create_registered_sequences()
+        self._runtime.create_all()
+        self._create_registered_postgres_unique_options()
+        self._create_registered_constraint_comments()
+        self._create_registered_postgres_index_options()
+        self._create_registered_mssql_index_options()
+        self._create_registered_oracle_index_options()
+        self._create_registered_mysql_index_options()
+        self._create_registered_index_tablespaces()
+        self._create_registered_index_comments()
+        self._create_registered_enum_type_comments()
+        self._create_registered_views()
+
+    def _drop_all_sync(self) -> None:
+        if self._runtime is not None:
+            self._drop_registered_views()
+            self._runtime.drop_all()
+            self._drop_registered_sequences()
+            self._drop_registered_namespaces()
+            return
+        self._drop_registered_views()
+        for table_data in reversed(list(self._table_map.name_to_data.values())):
+            sql = _ormdantic.compile_drop_table_sql(
+                self._connection, table_data.tablename
+            )
+            _ormdantic.execute_native(self._connection, sql, [])
+        for enum_type in reversed(self._runtime_enum_type_specs()):
+            _ormdantic.execute_native(
+                self._connection,
+                _drop_runtime_enum_type_sql(enum_type),
+                [],
+            )
+        self._drop_registered_sequences()
+        self._drop_registered_namespaces()
 
     def transaction(
         self,
@@ -1589,7 +1596,7 @@ class Ormdantic:
         await self._events.dispatch("before_begin", **payload)
         started = perf_counter()
         try:
-            self._ensure_runtime().begin(options)
+            await asyncio.to_thread(self._ensure_runtime().begin, options)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -1616,7 +1623,7 @@ class Ormdantic:
         await self._events.dispatch("before_commit", **payload)
         started = perf_counter()
         try:
-            self._ensure_runtime().commit()
+            await asyncio.to_thread(self._ensure_runtime().commit)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -1643,7 +1650,7 @@ class Ormdantic:
         await self._events.dispatch("before_rollback", **payload)
         started = perf_counter()
         try:
-            self._ensure_runtime().rollback()
+            await asyncio.to_thread(self._ensure_runtime().rollback)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -1670,7 +1677,7 @@ class Ormdantic:
         await self._events.dispatch("before_savepoint", **payload)
         started = perf_counter()
         try:
-            self._ensure_runtime().savepoint(name)
+            await asyncio.to_thread(self._ensure_runtime().savepoint, name)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -1700,7 +1707,7 @@ class Ormdantic:
         await self._events.dispatch("before_rollback_to_savepoint", **payload)
         started = perf_counter()
         try:
-            self._ensure_runtime().rollback_to_savepoint(name)
+            await asyncio.to_thread(self._ensure_runtime().rollback_to_savepoint, name)
         except Exception as exc:
             error = classify_native_error(
                 exc,
@@ -1730,7 +1737,7 @@ class Ormdantic:
         await self._events.dispatch("before_release_savepoint", **payload)
         started = perf_counter()
         try:
-            self._ensure_runtime().release_savepoint(name)
+            await asyncio.to_thread(self._ensure_runtime().release_savepoint, name)
         except Exception as exc:
             error = classify_native_error(
                 exc,

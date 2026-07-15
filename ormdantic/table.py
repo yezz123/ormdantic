@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from time import perf_counter
-from typing import Any, Generic, Literal
+from typing import Any, Generic, Literal, cast
 
 from pydantic import BaseModel
 
@@ -28,6 +30,7 @@ from ormdantic.expressions import (
     QueryExpression,
     SelectExpressionQuery,
     SerializableExpression,
+    SerializationContext,
     UpdateExpressionQuery,
     select_query,
     update_query,
@@ -281,6 +284,78 @@ class Table(Generic[ModelType]):
         )
         return model_instance
 
+    async def insert_many(
+        self,
+        models: Iterable[ModelType],
+        *,
+        batch_size: int | None = None,
+    ) -> list[ModelType]:
+        """Insert model instances with dialect-safe multi-row statements."""
+        return await self._write_many("insert", models, batch_size=batch_size)
+
+    async def _write_many(
+        self,
+        operation: Literal["insert", "upsert"],
+        models: Iterable[ModelType],
+        *,
+        batch_size: int | None,
+    ) -> list[ModelType]:
+        materialized = list(models)
+        if not materialized:
+            return []
+        if batch_size is not None and batch_size <= 0:
+            raise ValueError("batch_size must be greater than zero")
+        for model in materialized:
+            if not isinstance(model, self._table_data.model):
+                raise TypeError(
+                    f"{operation}_many expected instances of "
+                    f"{self._table_data.model.__name__}"
+                )
+
+        grouped: dict[tuple[str, ...], list[tuple[ModelType, dict[str, Any]]]] = {}
+        for model in materialized:
+            payload = self._payload(model, mode=operation)
+            grouped.setdefault(tuple(payload), []).append((model, payload))
+
+        before_events = (
+            ("before_create", "before_insert")
+            if operation == "insert"
+            else ("before_upsert",)
+        )
+        after_events = (
+            ("after_insert", "after_create")
+            if operation == "insert"
+            else ("after_upsert",)
+        )
+        rust_method = getattr(self._rust_handle, f"{operation}_many")
+        for shape, entries in grouped.items():
+            chunk_size = self._bulk_chunk_size(len(shape), batch_size)
+            for start in range(0, len(entries), chunk_size):
+                chunk = entries[start : start + chunk_size]
+                for model, _payload in chunk:
+                    for event in before_events:
+                        await self._events.dispatch(
+                            event, model=model, table=self._table_data
+                        )
+                payloads = [payload for _model, payload in chunk]
+                debug_parameters = {
+                    f"row_{row}__{column}": payload[column]
+                    for row, payload in enumerate(payloads)
+                    for column in shape
+                }
+                await self._execute_rust(
+                    f"{operation}_many",
+                    lambda payloads=payloads: rust_method(payloads),
+                    parameters=debug_parameters,
+                    context={"batch_rows": len(payloads)},
+                )
+                for model, _payload in chunk:
+                    for event in after_events:
+                        await self._events.dispatch(
+                            event, model=model, table=self._table_data
+                        )
+        return materialized
+
     async def update(self, model_instance: ModelType) -> ModelType:
         """Update a model instance."""
         await self._events.dispatch(
@@ -315,6 +390,15 @@ class Table(Generic[ModelType]):
         )
         return model_instance
 
+    async def upsert_many(
+        self,
+        models: Iterable[ModelType],
+        *,
+        batch_size: int | None = None,
+    ) -> list[ModelType]:
+        """Upsert model instances with dialect-safe multi-row statements."""
+        return await self._write_many("upsert", models, batch_size=batch_size)
+
     async def delete(self, pk: Any) -> bool:
         """Delete a model by primary key."""
         await self._events.dispatch("before_delete", pk=pk, table=self._table_data)
@@ -327,6 +411,36 @@ class Table(Generic[ModelType]):
         )
         await self._events.dispatch("after_delete", pk=pk, table=self._table_data)
         return True
+
+    async def delete_where(
+        self,
+        where: dict[str, Any] | QueryExpression | None = None,
+        *,
+        allow_all: bool = False,
+    ) -> int:
+        """Delete matching rows with one set-based statement."""
+        if not where and not allow_all:
+            raise ValueError("delete_where requires a filter or allow_all=True")
+        expression = (
+            self._dict_where_expression(cast(dict[str, Any], where))
+            if isinstance(where, dict)
+            else where
+        )
+        context = SerializationContext()
+        payload: dict[str, Any] = {
+            "table": self._qualified_table_name(),
+            "values": context.values,
+        }
+        if expression is not None:
+            payload["where"] = expression.to_expression_payload(context)
+        payload["values"] = context.values
+        result = await self._execute_rust(
+            "delete_where",
+            lambda: self._rust_handle.delete_expression(payload),
+            parameters=dict(context.values),
+            context={"allow_all": allow_all},
+        )
+        return int(result.get("rowcount") or 0)
 
     async def count(
         self, where: dict[str, Any] | QueryExpression | None = None, depth: int = 0
@@ -345,6 +459,7 @@ class Table(Generic[ModelType]):
         return NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
+            rowcount=result.get("rowcount"),
         ).scalar()
 
     async def select(
@@ -388,6 +503,7 @@ class Table(Generic[ModelType]):
         return NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
+            rowcount=result.get("rowcount"),
         )
 
     async def update_where(
@@ -415,6 +531,7 @@ class Table(Generic[ModelType]):
         return NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
+            rowcount=result.get("rowcount"),
         )
 
     async def _find_many_expression(
@@ -500,6 +617,7 @@ class Table(Generic[ModelType]):
         native_result = NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
+            rowcount=result.get("rowcount"),
         )
         primary_keys = [row[0] for row in native_result]
         if not primary_keys:
@@ -588,6 +706,7 @@ class Table(Generic[ModelType]):
         native_result = NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
+            rowcount=result.get("rowcount"),
         )
         payload = {
             "operation": "hydrate",
@@ -897,6 +1016,17 @@ class Table(Generic[ModelType]):
         value = get_max_bind_parameters()
         return int(value) if value is not None else None
 
+    def _bulk_chunk_size(self, column_count: int, requested: int | None) -> int:
+        if column_count <= 0:
+            raise ValueError("bulk writes require at least one persisted column")
+        max_bind_parameters = self._max_bind_parameters()
+        safe = (
+            max(1, max_bind_parameters // column_count)
+            if max_bind_parameters is not None
+            else requested or 1_000
+        )
+        return min(safe, requested) if requested is not None else safe
+
     @staticmethod
     def _remember_identity(
         model: Any,
@@ -1003,7 +1133,7 @@ class Table(Generic[ModelType]):
         await self._events.dispatch("before_execute", **payload)
         started = perf_counter()
         try:
-            result = call()
+            result = await asyncio.to_thread(call)
         except Exception as exc:
             duration_ms = self._duration_ms(started)
             native_error = classify_native_error(
@@ -1342,6 +1472,56 @@ class Table(Generic[ModelType]):
             raw_where = self._normalize_where(where)
         normalized = _ormdantic.normalize_filters(raw_where)
         return normalized["filters"], dict(normalized["values"])
+
+    @staticmethod
+    def _dict_where_expression(where: dict[str, Any]) -> QueryExpression | None:
+        combined: QueryExpression | None = None
+        operators = {
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "in",
+            "not_in",
+            "is_null",
+            "is_not_null",
+            "like",
+            "ilike",
+        }
+        for raw_column, value in where.items():
+            column_name, separator, suffix = raw_column.rpartition("__")
+            if not separator or suffix not in operators:
+                column_name = raw_column
+                suffix = "eq"
+            expression = expr_column(column_name)
+            if suffix == "eq":
+                predicate = expression == value
+            elif suffix == "ne":
+                predicate = expression != value
+            elif suffix == "lt":
+                predicate = expression < value
+            elif suffix == "le":
+                predicate = expression <= value
+            elif suffix == "gt":
+                predicate = expression > value
+            elif suffix == "ge":
+                predicate = expression >= value
+            elif suffix == "in":
+                predicate = expression.in_(value)
+            elif suffix == "not_in":
+                predicate = expression.not_in(value)
+            elif suffix == "is_null":
+                predicate = expression.is_null()
+            elif suffix == "is_not_null":
+                predicate = expression.is_not_null()
+            elif suffix == "like":
+                predicate = expression.like(value)
+            else:
+                predicate = expression.ilike(value)
+            combined = predicate if combined is None else combined & predicate
+        return combined
 
     def _resolve_load_plan(
         self, depth: int, load: list[LoaderOption] | None

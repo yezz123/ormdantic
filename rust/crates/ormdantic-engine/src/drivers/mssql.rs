@@ -52,12 +52,13 @@ mod runtime {
                 Ok(rows_to_result(&rows))
             } else if refs.is_empty() {
                 self.simple_execute(sql)?;
-                Ok(QueryResult::empty())
+                Ok(QueryResult::affected(0))
             } else {
-                self.runtime
+                let result = self
+                    .runtime
                     .block_on(self.client.execute(sql, &refs))
                     .map_err(sql_error)?;
-                Ok(QueryResult::empty())
+                Ok(QueryResult::affected(result.total()))
             }
         }
 

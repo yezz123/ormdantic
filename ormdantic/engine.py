@@ -48,10 +48,16 @@ class NativeCursor:
 class NativeResult:
     """Result wrapper compatible with the serializer's cursor/row contract."""
 
-    def __init__(self, columns: list[str], rows: list[tuple[Any, ...]]) -> None:
+    def __init__(
+        self,
+        columns: list[str],
+        rows: list[tuple[Any, ...]],
+        rowcount: int | None = None,
+    ) -> None:
         """Create a result from column names and native rows."""
         self.cursor = NativeCursor([(column,) for column in columns])
         self._rows = rows
+        self.rowcount = rowcount
 
     def __iter__(self) -> Iterator[tuple[Any, ...]]:
         """Iterate over result rows."""
@@ -93,6 +99,7 @@ class NativeEngine:
         return NativeResult(
             columns=list(result["columns"]),
             rows=[tuple(row) for row in result["rows"]],
+            rowcount=result.get("rowcount"),
         )
 
     def _execute_sync(self, sql: str, values: list[Any]) -> dict[str, Any]:

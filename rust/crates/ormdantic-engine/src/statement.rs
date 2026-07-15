@@ -24,7 +24,7 @@ impl StatementResult {
     }
 
     pub fn from_query_result(result: QueryResult) -> Self {
-        let row_count = result.rows().len() as u64;
+        let row_count = result.row_count().unwrap_or(result.rows().len() as u64);
         Self {
             row_count,
             last_insert_id: None,

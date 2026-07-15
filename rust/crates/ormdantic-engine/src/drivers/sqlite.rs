@@ -66,10 +66,10 @@ pub fn execute_connection(
             .map_err(sql_error)?;
         Ok(QueryResult::new(columns, rows))
     } else {
-        connection
+        let row_count = connection
             .execute(sql, params_from_iter(params.iter()))
             .map_err(sql_error)?;
-        Ok(QueryResult::empty())
+        Ok(QueryResult::affected(row_count as u64))
     }
 }
 

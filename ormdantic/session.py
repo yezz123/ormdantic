@@ -120,8 +120,8 @@ class Session:
 
             inserted = self._dependency_ordered(list(self._new))
             for batch in self._model_batches(inserted):
-                for model in batch:
-                    stored = await self._database[type(model)].insert(model)
+                stored_models = await self._database[type(batch[0])].insert_many(batch)
+                for stored in stored_models:
                     self._remember(stored)
             self._new.clear()
 

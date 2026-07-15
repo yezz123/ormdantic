@@ -21,6 +21,7 @@ class Profile:
     lookup_count: int
     iterations: int
     warmups: int
+    batch_size: int = DEFAULT_BATCH_SIZE
 
     @property
     def settings(self) -> dict[str, int]:
@@ -54,6 +55,15 @@ PROFILES: Mapping[str, Profile] = {
         lookup_count=100,
         iterations=1,
         warmups=0,
+    ),
+    "ci": Profile(
+        name="ci",
+        rows=10_000,
+        write_rows=10_000,
+        lookup_count=500,
+        iterations=7,
+        warmups=2,
+        batch_size=500,
     ),
     "default": Profile(
         name="default",
@@ -142,6 +152,7 @@ def build_config(
         lookup_count=selected.lookup_count,
         iterations=selected.iterations,
         warmups=selected.warmups,
+        batch_size=selected.batch_size,
         planner_scale=planner_scale,
         materialized=not planner_scale,
     )

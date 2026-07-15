@@ -175,19 +175,15 @@ impl PyDatabase {
             connection: Arc::clone(&self.connection),
             tables: Arc::clone(&self.tables),
             table,
+            compiled_dml: Mutex::new(HashMap::new()),
         })
     }
 
-    fn create_all(&self) -> PyResult<()> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?;
+    fn create_all(&self, py: Python<'_>) -> PyResult<()> {
+        let mut statements = Vec::new();
         for enum_type in self.enum_types.iter() {
             if let Some(sql) = create_enum_type_sql(&self.url, enum_type)? {
-                connection
-                    .execute(&sql, &[])
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                statements.push(sql);
             }
         }
         for model_key in self.table_order.iter() {
@@ -243,36 +239,50 @@ impl PyDatabase {
                 table.mysql_subpartitions,
                 table.mysql_auto_increment,
             )? {
-                connection
-                    .execute(&sql, &[])
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                statements.push(sql);
             }
         }
-        Ok(())
+        py.detach(|| -> Result<(), String> {
+            let mut connection = self
+                .connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?;
+            for sql in statements {
+                connection
+                    .execute(&sql, &[])
+                    .map_err(|error| error.to_string())?;
+            }
+            Ok(())
+        })
+        .map_err(PyValueError::new_err)
     }
 
-    fn drop_all(&self) -> PyResult<()> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?;
+    fn drop_all(&self, py: Python<'_>) -> PyResult<()> {
+        let mut statements = Vec::new();
         for model_key in self.table_order.iter().rev() {
             let Some(table) = self.tables.get(model_key) else {
                 continue;
             };
-            let sql = drop_table_sql(&self.url, &table.qualified_table_name())?;
-            connection
-                .execute(&sql, &[])
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            statements.push(drop_table_sql(&self.url, &table.qualified_table_name())?);
         }
         for enum_type in self.enum_types.iter().rev() {
             if let Some(sql) = drop_enum_type_sql(&self.url, enum_type)? {
-                connection
-                    .execute(&sql, &[])
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                statements.push(sql);
             }
         }
-        Ok(())
+        py.detach(|| -> Result<(), String> {
+            let mut connection = self
+                .connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?;
+            for sql in statements {
+                connection
+                    .execute(&sql, &[])
+                    .map_err(|error| error.to_string())?;
+            }
+            Ok(())
+        })
+        .map_err(PyValueError::new_err)
     }
 
     fn table_names(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -462,58 +472,77 @@ impl PyDatabase {
     }
 
     #[pyo3(signature = (options=None))]
-    fn begin(&self, options: Option<PyTransactionOptions>) -> PyResult<()> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?;
-        match options {
-            Some(options) => connection
-                .begin_with(options.to_rust_options()?)
-                .map_err(|error| PyValueError::new_err(error.to_string())),
-            None => connection
-                .begin()
-                .map_err(|error| PyValueError::new_err(error.to_string())),
-        }
+    fn begin(&self, py: Python<'_>, options: Option<PyTransactionOptions>) -> PyResult<()> {
+        let options = options
+            .map(|options| options.to_rust_options())
+            .transpose()?;
+        py.detach(|| {
+            let mut connection = self
+                .connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?;
+            match options {
+                Some(options) => connection
+                    .begin_with(options)
+                    .map_err(|error| error.to_string()),
+                None => connection.begin().map_err(|error| error.to_string()),
+            }
+        })
+        .map_err(PyValueError::new_err)
     }
 
-    fn commit(&self) -> PyResult<()> {
-        self.connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .commit()
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+    fn commit(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| {
+            self.connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?
+                .commit()
+                .map_err(|error| error.to_string())
+        })
+        .map_err(PyValueError::new_err)
     }
 
-    fn rollback(&self) -> PyResult<()> {
-        self.connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .rollback()
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+    fn rollback(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| {
+            self.connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?
+                .rollback()
+                .map_err(|error| error.to_string())
+        })
+        .map_err(PyValueError::new_err)
     }
 
-    fn savepoint(&self, name: &str) -> PyResult<()> {
-        self.connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .savepoint(name)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+    fn savepoint(&self, py: Python<'_>, name: &str) -> PyResult<()> {
+        py.detach(|| {
+            self.connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?
+                .savepoint(name)
+                .map_err(|error| error.to_string())
+        })
+        .map_err(PyValueError::new_err)
     }
 
-    fn rollback_to_savepoint(&self, name: &str) -> PyResult<()> {
-        self.connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .rollback_to_savepoint(name)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+    fn rollback_to_savepoint(&self, py: Python<'_>, name: &str) -> PyResult<()> {
+        py.detach(|| {
+            self.connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?
+                .rollback_to_savepoint(name)
+                .map_err(|error| error.to_string())
+        })
+        .map_err(PyValueError::new_err)
     }
 
-    fn release_savepoint(&self, name: &str) -> PyResult<()> {
-        self.connection
-            .lock()
-            .map_err(|_| PyValueError::new_err("native connection lock poisoned"))?
-            .release_savepoint(name)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+    fn release_savepoint(&self, py: Python<'_>, name: &str) -> PyResult<()> {
+        py.detach(|| {
+            self.connection
+                .lock()
+                .map_err(|_| "native connection lock poisoned".to_string())?
+                .release_savepoint(name)
+                .map_err(|error| error.to_string())
+        })
+        .map_err(PyValueError::new_err)
     }
 }

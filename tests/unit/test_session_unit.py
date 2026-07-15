@@ -119,6 +119,7 @@ class MultiFakeTable:
     def __init__(self) -> None:
         self.stored: dict[object, BaseModel] = {}
         self.inserted: list[BaseModel] = []
+        self.insert_many_calls: list[list[BaseModel]] = []
         self.updated: list[BaseModel] = []
         self.deleted: list[object] = []
 
@@ -129,6 +130,14 @@ class MultiFakeTable:
         self.inserted.append(model)
         self.stored[model.id] = model
         return model
+
+    async def insert_many(self, models: list[BaseModel]) -> list[BaseModel]:
+        materialized = list(models)
+        self.insert_many_calls.append(materialized)
+        for model in materialized:
+            self.inserted.append(model)
+            self.stored[model.id] = model
+        return materialized
 
     async def update(self, model: BaseModel) -> BaseModel:
         self.updated.append(model)
@@ -310,6 +319,20 @@ async def test_session_relationship_edges_stage_order_and_delete_new_models() ->
 
     savepoint = _SessionSavepoint(session, "manual")
     await savepoint.__aexit__(None, None, None)
+
+
+async def test_session_flush_uses_one_bulk_insert_per_dependency_group() -> None:
+    database = RelationshipDatabase()
+    session = Session(database)
+    first = Product(id="p1", name="One")
+    second = Product(id="p2", name="Two")
+    session.add(first)
+    session.add(second)
+
+    await session.flush()
+
+    assert database.tables[Product].insert_many_calls == [[first, second]]
+    assert database.tables[Product].inserted == [first, second]
 
 
 async def test_session_detects_relationship_changes_identity_conflicts_and_cycles() -> (

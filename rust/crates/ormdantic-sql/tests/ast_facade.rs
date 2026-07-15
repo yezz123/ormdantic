@@ -90,6 +90,7 @@ fn select_in_plan_compiles_batch_parameters() {
         vec!["id".to_string()],
         vec!["flavor_id".to_string()],
     )
+    .batch_size(0)
     .query_for_batch(vec!["first".to_string(), "second".to_string()])
     .compile(&PostgresDialect)
     .expect("select-in query should compile");

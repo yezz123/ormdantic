@@ -41,6 +41,18 @@ uv run --group dev maturin develop --release
 uv run --group benchmark python -m benchmark.run --backend sqlite --profile default
 ```
 
+Run the pull-request profile or a targeted case:
+
+```console
+make benchmark-ci
+make benchmark-target CASE="orm insert models"
+```
+
+The CI profile uses 10,000 read and write rows, two warmups, seven measured
+rounds, and 500-row write batches. ORM order rotates between rounds. Results
+retain raw samples, median absolute deviation, order position, and deterministic
+bootstrap confidence intervals for comparisons.
+
 Use the release native extension for report artifacts. Debug Rust builds are
 for development feedback and can make native write paths look artificially slow.
 
@@ -66,6 +78,13 @@ latency charts.
 
 The command writes JSON, CSV, and SVG outputs under `benchmark/`, plus docs-ready
 SVG copies under `docs/assets/benchmarks/`.
+
+Pull requests run base and head on the same unprivileged runner. A separate
+trusted workflow validates the artifact identity and ZIP structure, regenerates
+the Markdown, CSV, JSON, and SVG from default-branch code, and publishes the
+image at an immutable head-SHA path. Serialization cases with different
+semantics are labeled diagnostic and do not affect aggregate speedups or the
+regression gate.
 
 ## Run Python benchmarks
 

@@ -314,6 +314,14 @@ fn rewrites_sqlite_decimal_nested_expression_shapes() {
             },
             "amount_window",
         ),
+        Projection::aliased(Expr::Subquery(Box::new(subquery.clone())), "limit_id"),
+        Projection::aliased(
+            Expr::Exists {
+                select: Box::new(subquery.clone()),
+                negated: false,
+            },
+            "has_limit",
+        ),
     ])
     .from(TableSource::aliased_table("prices", "prices"))
     .join(JoinAst::new(
@@ -350,6 +358,14 @@ fn rewrites_sqlite_decimal_nested_expression_shapes() {
     );
     assert!(sql.contains("CAST(\"prices\".\"amount\" AS TEXT)"), "{sql}");
     assert!(sql.contains("ABS((-\"prices\".\"amount\")), NULL"), "{sql}");
+    assert!(
+        sql.contains("(SELECT \"id\" FROM \"limits\") AS \"limit_id\""),
+        "{sql}"
+    );
+    assert!(
+        sql.contains("(EXISTS (SELECT \"id\" FROM \"limits\")) AS \"has_limit\""),
+        "{sql}"
+    );
     assert!(
         sql.contains(
             "COUNT(*) OVER (PARTITION BY \"prices\".\"amount\" ORDER BY ormdantic_decimal_sort_key(\"prices\".\"amount\") DESC)"
@@ -393,10 +409,18 @@ fn dml_decimal_rewrite_preserves_insert_upsert_and_empty_column_sets() {
     let update = DmlAst::Update {
         table: TableSource::table("prices"),
         assignments: vec![("amount".to_string(), Expr::param("amount"))],
-        where_expr: Some(Expr::eq(Expr::column("amount"), Expr::param("old_amount"))),
+        where_expr: Some(Expr::Binary {
+            left: Box::new(Expr::eq(Expr::column("amount"), Expr::param("old_amount"))),
+            op: BinaryOp::And,
+            right: Box::new(Expr::InList {
+                expr: Box::new(Expr::column("status")),
+                values: vec![Expr::param("status")],
+                negated: false,
+            }),
+        }),
         returning: Vec::new(),
     }
-    .rewrite_sqlite_decimal_columns(&HashSet::new(), &table_names);
+    .rewrite_sqlite_decimal_columns(&decimal_columns, &table_names);
 
     assert_eq!(
         insert.compile(&SqliteDialect).unwrap().sql(),
@@ -408,7 +432,7 @@ fn dml_decimal_rewrite_preserves_insert_upsert_and_empty_column_sets() {
     );
     assert_eq!(
         update.compile(&SqliteDialect).unwrap().sql(),
-        "UPDATE \"prices\" SET \"amount\" = ? WHERE (\"amount\" = ?)"
+        "UPDATE \"prices\" SET \"amount\" = ? WHERE ((ormdantic_decimal_cmp(\"amount\", ?) = 0) AND (\"status\" IN (?)))"
     );
 }
 

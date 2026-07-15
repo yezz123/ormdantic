@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from benchmark.run import main
+from benchmark.run import _parser, main
 
 
 def test_cli_rejects_billion_profile_without_confirmation(capsys) -> None:
@@ -17,9 +17,18 @@ def test_cli_accepts_smoke_profile_with_backend_and_disabled_docs_charts(
 ) -> None:
     calls = {}
 
-    def fake_run_from_config(config, *, allow_missing=False, progress=None):
+    def fake_run_from_config(
+        config,
+        *,
+        allow_missing=False,
+        progress=None,
+        cases=None,
+        orms=None,
+    ):
         calls["config"] = config
         calls["allow_missing"] = allow_missing
+        calls["cases"] = cases
+        calls["orms"] = orms
         return [
             BenchmarkMeasurement(
                 backend=config.backend,
@@ -62,6 +71,10 @@ def test_cli_accepts_smoke_profile_with_backend_and_disabled_docs_charts(
             "--docs-charts-dir",
             "",
             "--allow-missing",
+            "--case",
+            "count all rows",
+            "--orm",
+            "ormdantic",
         ]
     )
 
@@ -69,10 +82,19 @@ def test_cli_accepts_smoke_profile_with_backend_and_disabled_docs_charts(
     assert calls["config"].backend == "sqlite"
     assert calls["config"].profile == "smoke"
     assert calls["allow_missing"] is True
+    assert calls["cases"] == ("count all rows",)
+    assert calls["orms"] == ("ormdantic",)
 
 
 def test_cli_reports_non_runtime_execution_errors(monkeypatch, capsys) -> None:
-    def fail_run_from_config(config, *, allow_missing=False, progress=None):
+    def fail_run_from_config(
+        config,
+        *,
+        allow_missing=False,
+        progress=None,
+        cases=None,
+        orms=None,
+    ):
         raise ValueError("driver exploded")
 
     monkeypatch.setattr("benchmark.run.run_from_config", fail_run_from_config)
@@ -82,3 +104,23 @@ def test_cli_reports_non_runtime_execution_errors(monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "driver exploded" in captured.err
+
+
+def test_cli_accepts_repeatable_case_and_orm_selectors() -> None:
+    args = _parser().parse_args(
+        [
+            "--profile",
+            "ci",
+            "--case",
+            "orm insert models",
+            "--case",
+            "orm delete filtered",
+            "--orm",
+            "ormdantic",
+            "--orm",
+            "sqlalchemy",
+        ]
+    )
+
+    assert args.case == ["orm insert models", "orm delete filtered"]
+    assert args.orm == ["ormdantic", "sqlalchemy"]

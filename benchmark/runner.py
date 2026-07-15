@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
+import os
 import platform
 import shutil
 import statistics
@@ -18,7 +20,13 @@ from pydantic import BaseModel
 
 from benchmark.backends import BackendDefinition, resolve_backend, sqlite_urls
 from benchmark.cases import CaseDefinition, case_matrix
-from benchmark.charts import ORMDANTIC, SQLALCHEMY, SQLMODEL, BenchmarkMeasurement
+from benchmark.charts import (
+    ORM_ORDER,
+    ORMDANTIC,
+    SQLALCHEMY,
+    SQLMODEL,
+    BenchmarkMeasurement,
+)
 from benchmark.config import BenchmarkConfig, validate_config
 from benchmark.datasets import (
     SCORE_THRESHOLD,
@@ -36,7 +44,8 @@ from benchmark.models import (
     OrmdanticModels,
     register_ormdantic_models,
 )
-from ormdantic import Order, Ormdantic, assignment, column, selectinload
+from benchmark.schema import RESULT_SCHEMA_VERSION
+from ormdantic import Order, Ormdantic, assignment, column, joinedload, selectinload
 from ormdantic import count as orm_count
 from ormdantic import sum as orm_sum
 from ormdantic.engine import NativeEngine, runtime_capabilities
@@ -65,7 +74,7 @@ from benchmark import models as bm
 
 ProgressCallback = Callable[[str], None]
 OperationFactory = Callable[[], Awaitable["Operation"]]
-RUNNER_VERSION = "cross-db-v1"
+RUNNER_VERSION = "cross-db-v2"
 
 
 @dataclass(frozen=True)
@@ -115,10 +124,18 @@ def run_from_config(
     *,
     allow_missing: bool = False,
     progress: ProgressCallback | None = None,
+    cases: tuple[str, ...] | None = None,
+    orms: tuple[str, ...] | None = None,
 ) -> list[BenchmarkMeasurement]:
     """Run benchmarks synchronously for CLI callers."""
     return asyncio.run(
-        run_from_config_async(config, allow_missing=allow_missing, progress=progress)
+        run_from_config_async(
+            config,
+            allow_missing=allow_missing,
+            progress=progress,
+            cases=cases,
+            orms=orms,
+        )
     )
 
 
@@ -127,12 +144,16 @@ async def run_from_config_async(
     *,
     allow_missing: bool = False,
     progress: ProgressCallback | None = None,
+    cases: tuple[str, ...] | None = None,
+    orms: tuple[str, ...] | None = None,
 ) -> list[BenchmarkMeasurement]:
     """Run the cross-database benchmark matrix."""
     validate_config(config)
     backend = resolve_backend(config.backend)
     measurements: list[BenchmarkMeasurement] = []
     for case in case_matrix():
+        if cases is not None and case.name not in cases:
+            continue
         expected = case.expected(
             read_rows=config.rows,
             write_rows=config.write_rows,
@@ -144,52 +165,49 @@ async def run_from_config_async(
             write_rows=config.write_rows,
             lookup_count=config.lookup_count,
         )
-        for orm_name in (ORMDANTIC, SQLALCHEMY, SQLMODEL):
+        selected_orms = orms or ORM_ORDER
+        case_results: dict[str, BenchmarkMeasurement] = {}
+        active_orms: list[str] = []
+        for orm_name in selected_orms:
             if not case.supports(orm_name, backend.name):
-                measurements.append(
-                    _skipped_measurement(
-                        config, case, row_count, orm_name, "unsupported combination"
-                    )
+                case_results[orm_name] = _skipped_measurement(
+                    config, case, row_count, orm_name, "unsupported combination"
                 )
                 continue
             if config.planner_scale:
-                measurements.append(
-                    _skipped_measurement(
-                        config,
-                        case,
-                        row_count,
-                        orm_name,
-                        "planner-scale mode records metadata only; materialized latency is not measured",
-                    )
+                case_results[orm_name] = _skipped_measurement(
+                    config,
+                    case,
+                    row_count,
+                    orm_name,
+                    "planner-scale mode records metadata only; materialized latency is not measured",
                 )
                 continue
             missing = _dependency_skip_reason(orm_name)
             if missing is not None:
                 if not allow_missing:
                     raise RuntimeError(missing)
-                measurements.append(
-                    _skipped_measurement(config, case, row_count, orm_name, missing)
+                case_results[orm_name] = _skipped_measurement(
+                    config, case, row_count, orm_name, missing
                 )
                 continue
-            if progress is not None:
-                progress(f"{backend.name} {config.profile} {case.name}: {orm_name}")
-            try:
-                measurement = await _measure_case(
-                    config=config,
-                    backend=backend,
-                    case=case,
-                    rows=row_count,
-                    orm_name=orm_name,
-                    expected=expected,
-                )
-            except Exception as exc:
-                if not allow_missing:
-                    raise
-                measurements.append(
-                    _skipped_measurement(config, case, row_count, orm_name, str(exc))
-                )
-            else:
-                measurements.append(measurement)
+            active_orms.append(orm_name)
+
+        if active_orms:
+            measured = await _measure_case_group(
+                config=config,
+                backend=backend,
+                case=case,
+                rows=row_count,
+                orm_names=tuple(active_orms),
+                expected=expected,
+                allow_missing=allow_missing,
+                progress=progress,
+            )
+            case_results.update(
+                {measurement.orm: measurement for measurement in measured}
+            )
+        measurements.extend(case_results[orm_name] for orm_name in selected_orms)
     return measurements
 
 
@@ -202,17 +220,26 @@ def build_result_payload(
     git_dirty: bool | None = None,
     server_version: str | None = None,
     docker_image: str | None = None,
+    cases: tuple[str, ...] | None = None,
+    orms: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     """Build the reproducible JSON benchmark payload."""
     return {
+        "schema_version": RESULT_SCHEMA_VERSION,
         "metadata": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "git_commit": git_commit if git_commit is not None else _git_commit(),
             "git_dirty": git_dirty if git_dirty is not None else _git_dirty(),
             "python": sys.version.split()[0],
             "platform": platform.platform(),
+            "processor": platform.processor(),
+            "cpu_count": os.cpu_count(),
             "ormdantic_version": _ormdantic_version(),
+            "dependency_versions": _dependency_versions(),
             "runtime_capabilities": runtime_capabilities(),
+            "native_build_mode": os.environ.get(
+                "ORMDANTIC_BENCH_BUILD_MODE", "unknown"
+            ),
             "runner": "benchmark.runner",
             "runner_version": RUNNER_VERSION,
             "backend": backend.name,
@@ -224,6 +251,7 @@ def build_result_payload(
             "profile": config.profile,
             "materialized": config.materialized,
             "planner_scale": config.planner_scale,
+            "timing_order": "rotating-per-round",
             "methodology": [
                 "Setup and seed work are measured separately from operation latency.",
                 "Validation runs after each timed operation and before cleanup.",
@@ -243,6 +271,8 @@ def build_result_payload(
             "category": config.category,
             "materialized": config.materialized,
             "planner_scale": config.planner_scale,
+            "cases": list(cases) if cases is not None else None,
+            "orms": list(orms) if orms is not None else list(ORM_ORDER),
         },
         "measurements": [measurement.as_dict() for measurement in measurements],
     }
@@ -272,27 +302,136 @@ async def _measure_case(
     setup_samples: list[float] = []
     total_runs = config.iterations + config.warmups
     for run_index in range(total_runs):
-        setup_start = perf_counter_ns()
-        operation = await _operation_factory(config, backend, case.name, orm_name)()
-        setup_ms = (perf_counter_ns() - setup_start) / 1_000_000
-        start = perf_counter_ns()
-        try:
-            try:
-                await operation.run()
-            finally:
-                elapsed_ms = (perf_counter_ns() - start) / 1_000_000
-            actual = await operation.validate()
-        finally:
-            await operation.cleanup()
-        if actual != expected:
-            raise AssertionError(
-                "validation mismatch for "
-                f"case={case.name!r} backend={backend.name!r} orm={orm_name!r}: "
-                f"expected {expected}, actual {actual}"
-            )
+        elapsed_ms, setup_ms = await _measure_once(
+            config=config,
+            backend=backend,
+            case=case,
+            orm_name=orm_name,
+            expected=expected,
+        )
         if run_index >= config.warmups:
             samples.append(elapsed_ms)
             setup_samples.append(setup_ms)
+    return _completed_measurement(
+        config=config,
+        backend=backend,
+        case=case,
+        rows=rows,
+        orm_name=orm_name,
+        expected=expected,
+        samples=samples,
+        setup_samples=setup_samples,
+        order_positions=[0] * len(samples),
+    )
+
+
+async def _measure_case_group(
+    *,
+    config: BenchmarkConfig,
+    backend: BackendDefinition,
+    case: CaseDefinition,
+    rows: int,
+    orm_names: tuple[str, ...],
+    expected: int,
+    allow_missing: bool,
+    progress: ProgressCallback | None,
+) -> list[BenchmarkMeasurement]:
+    samples = {orm_name: [] for orm_name in orm_names}
+    setups = {orm_name: [] for orm_name in orm_names}
+    positions = {orm_name: [] for orm_name in orm_names}
+    failures: dict[str, str] = {}
+    if progress is not None:
+        for orm_name in orm_names:
+            progress(f"{backend.name} {config.profile} {case.name}: {orm_name}")
+
+    total_runs = config.iterations + config.warmups
+    for run_index in range(total_runs):
+        order = _rotated_order(orm_names, run_index)
+        for position, orm_name in enumerate(order):
+            if orm_name in failures:
+                continue
+            try:
+                elapsed_ms, setup_ms = await _measure_once(
+                    config=config,
+                    backend=backend,
+                    case=case,
+                    orm_name=orm_name,
+                    expected=expected,
+                )
+            except Exception as exc:
+                if not allow_missing:
+                    raise
+                failures[orm_name] = str(exc)
+                continue
+            if run_index >= config.warmups:
+                samples[orm_name].append(elapsed_ms)
+                setups[orm_name].append(setup_ms)
+                positions[orm_name].append(position)
+
+    measurements = []
+    for orm_name in orm_names:
+        if orm_name in failures:
+            measurements.append(
+                _skipped_measurement(config, case, rows, orm_name, failures[orm_name])
+            )
+            continue
+        measurements.append(
+            _completed_measurement(
+                config=config,
+                backend=backend,
+                case=case,
+                rows=rows,
+                orm_name=orm_name,
+                expected=expected,
+                samples=samples[orm_name],
+                setup_samples=setups[orm_name],
+                order_positions=positions[orm_name],
+            )
+        )
+    return measurements
+
+
+async def _measure_once(
+    *,
+    config: BenchmarkConfig,
+    backend: BackendDefinition,
+    case: CaseDefinition,
+    orm_name: str,
+    expected: int,
+) -> tuple[float, float]:
+    setup_start = perf_counter_ns()
+    operation = await _operation_factory(config, backend, case.name, orm_name)()
+    setup_ms = (perf_counter_ns() - setup_start) / 1_000_000
+    start = perf_counter_ns()
+    try:
+        try:
+            await operation.run()
+        finally:
+            elapsed_ms = (perf_counter_ns() - start) / 1_000_000
+        actual = await operation.validate()
+    finally:
+        await operation.cleanup()
+    if actual != expected:
+        raise AssertionError(
+            "validation mismatch for "
+            f"case={case.name!r} backend={backend.name!r} orm={orm_name!r}: "
+            f"expected {expected}, actual {actual}"
+        )
+    return elapsed_ms, setup_ms
+
+
+def _completed_measurement(
+    *,
+    config: BenchmarkConfig,
+    backend: BackendDefinition,
+    case: CaseDefinition,
+    rows: int,
+    orm_name: str,
+    expected: int,
+    samples: list[float],
+    setup_samples: list[float],
+    order_positions: list[int],
+) -> BenchmarkMeasurement:
     return BenchmarkMeasurement(
         backend=backend.name,
         profile=config.profile,
@@ -302,8 +441,23 @@ async def _measure_case(
         median_ms=statistics.median(samples),
         samples_ms=tuple(samples),
         setup_ms=statistics.median(setup_samples) if setup_samples else None,
+        mad_ms=_median_absolute_deviation(tuple(samples)),
+        order_positions=tuple(order_positions),
         validation={"expected": expected, "actual": expected},
+        comparable=case.comparable,
     )
+
+
+def _rotated_order(orms: tuple[str, ...], round_index: int) -> tuple[str, ...]:
+    if not orms:
+        return ()
+    offset = round_index % len(orms)
+    return orms[offset:] + orms[:offset]
+
+
+def _median_absolute_deviation(samples: tuple[float, ...]) -> float:
+    median = statistics.median(samples)
+    return statistics.median(abs(sample - median) for sample in samples)
 
 
 def _operation_factory(
@@ -536,8 +690,10 @@ def _ormdantic_item_operation(
             for batch in batched_rows(
                 config.write_rows, config.batch_size, prefix="write"
             ):
-                for values in batch:
-                    await table.insert(item_model(**values))
+                await table.insert_many(
+                    [item_model(**values) for values in batch],
+                    batch_size=config.batch_size,
+                )
             actual = config.write_rows
         elif case_name == "orm update filtered":
             await table.update_where(
@@ -547,18 +703,23 @@ def _ormdantic_item_operation(
             actual = await table.count(column("score") == 9_999)
         elif case_name == "orm upsert mixed":
             ids = lookup_ids(config.rows, config.lookup_count)
-            for item_id in ids:
-                index = int(item_id.rsplit("-", 1)[1])
-                await table.upsert(item_model(**{**row_dict(index), "score": 8_888}))
-            for index in range(len(ids)):
-                await table.upsert(
-                    item_model(**row_dict(config.rows + index, prefix="upsert"))
+            models = [
+                item_model(
+                    **{
+                        **row_dict(int(item_id.rsplit("-", 1)[1])),
+                        "score": 8_888,
+                    }
                 )
+                for item_id in ids
+            ]
+            models.extend(
+                item_model(**row_dict(config.rows + index, prefix="upsert"))
+                for index in range(len(ids))
+            )
+            await table.upsert_many(models, batch_size=config.batch_size)
             actual = len(ids)
         elif case_name == "orm delete filtered":
-            rows = await table.find_many(where={"category": config.category})
-            for item in rows.data:
-                await table.delete(item.id)
+            await table.delete_where(column("category") == config.category)
             actual = await table.count()
         elif case_name == "count all rows":
             actual = await table.count()
@@ -1027,7 +1188,7 @@ async def _ormdantic_load_parent_count(
     if plan == "joined-depth":
         result = await context.db[context.models.parent].find_many(
             order_by=["name"],
-            depth=2,
+            load=[joinedload("children.leaves")],
         )
     elif plan == "children":
         result = await context.db[context.models.parent].find_many(
@@ -1064,17 +1225,21 @@ def _serialization_operation(
 ) -> Operation:
     count = min(config.lookup_count, 1_000)
     actual = 0
+    if case_name == "serialize simple payloads":
+        inputs = _simple_serialization_inputs(orm_name, count)
+    elif case_name == "serialize nested payloads":
+        inputs = _nested_serialization_inputs(orm_name, config.rows)
+    else:
+        raise ValueError(f"unknown serialization benchmark case: {case_name}")
 
     async def run() -> None:
         nonlocal actual
         if case_name == "serialize simple payloads":
-            payloads = _simple_serialized_payloads(orm_name, count)
+            payloads = _serialize_simple_inputs(orm_name, inputs)
             actual = sum(1 for payload in payloads if payload.get("id"))
-        elif case_name == "serialize nested payloads":
-            parents = _nested_serialized_payloads(orm_name, config.rows)
-            actual = sum(1 for parent in parents if parent.get("children"))
         else:
-            raise ValueError(f"unknown serialization benchmark case: {case_name}")
+            parents = _serialize_nested_inputs(orm_name, inputs)
+            actual = sum(1 for parent in parents if parent.get("children"))
 
     async def validate() -> int:
         return actual
@@ -1085,37 +1250,43 @@ def _serialization_operation(
     return Operation(run=run, validate=validate, cleanup=cleanup)
 
 
-def _simple_serialized_payloads(orm_name: str, count: int) -> list[dict[str, Any]]:
+def _simple_serialization_inputs(orm_name: str, count: int) -> list[Any]:
     if orm_name == ORMDANTIC:
         db = Ormdantic("sqlite:///:benchmark-serialization:")
         models = register_ormdantic_models(db)
-        return [models.item(**row_dict(index)).model_dump() for index in range(count)]
+        return [models.item(**row_dict(index)) for index in range(count)]
     if orm_name == SQLMODEL:
-        return [
-            bm.SQLModelBenchItem(**row_dict(index)).model_dump()
-            for index in range(count)
-        ]
+        return [bm.SQLModelBenchItem(**row_dict(index)) for index in range(count)]
     if orm_name == SQLALCHEMY:
-        return [
-            _sqlalchemy_item_dict(bm.SqlAlchemyBenchItem(**row_dict(index)))
-            for index in range(count)
-        ]
+        return [bm.SqlAlchemyBenchItem(**row_dict(index)) for index in range(count)]
     raise ValueError(f"unknown serialization ORM: {orm_name}")
 
 
-def _nested_serialized_payloads(orm_name: str, read_rows: int) -> list[dict[str, Any]]:
-    if orm_name == ORMDANTIC:
-        return [parent.model_dump() for parent in _ormdantic_nested_payloads(read_rows)]
-    if orm_name == SQLMODEL:
-        return [
-            _sqlmodel_parent_dict(parent)
-            for parent in _sqlmodel_nested_payloads(read_rows)
-        ]
+def _serialize_simple_inputs(orm_name: str, inputs: list[Any]) -> list[dict[str, Any]]:
+    if orm_name in {ORMDANTIC, SQLMODEL}:
+        return [item.model_dump() for item in inputs]
     if orm_name == SQLALCHEMY:
-        return [
-            _sqlalchemy_parent_dict(parent)
-            for parent in _sqlalchemy_nested_payloads(read_rows)
-        ]
+        return [_sqlalchemy_item_dict(item) for item in inputs]
+    raise ValueError(f"unknown serialization ORM: {orm_name}")
+
+
+def _nested_serialization_inputs(orm_name: str, read_rows: int) -> list[Any]:
+    if orm_name == ORMDANTIC:
+        return _ormdantic_nested_payloads(read_rows)
+    if orm_name == SQLMODEL:
+        return _sqlmodel_nested_payloads(read_rows)
+    if orm_name == SQLALCHEMY:
+        return _sqlalchemy_nested_payloads(read_rows)
+    raise ValueError(f"unknown serialization ORM: {orm_name}")
+
+
+def _serialize_nested_inputs(orm_name: str, inputs: list[Any]) -> list[dict[str, Any]]:
+    if orm_name == ORMDANTIC:
+        return [parent.model_dump() for parent in inputs]
+    if orm_name == SQLMODEL:
+        return [_sqlmodel_parent_dict(parent) for parent in inputs]
+    if orm_name == SQLALCHEMY:
+        return [_sqlalchemy_parent_dict(parent) for parent in inputs]
     raise ValueError(f"unknown serialization ORM: {orm_name}")
 
 
@@ -1546,11 +1717,22 @@ def _skipped_measurement(
         median_ms=None,
         samples_ms=(),
         skip_reason=reason,
+        comparable=case.comparable,
     )
 
 
 def _git_commit() -> str | None:
     return _git_output(["git", "rev-parse", "HEAD"])
+
+
+def _dependency_versions() -> dict[str, str | None]:
+    versions: dict[str, str | None] = {}
+    for distribution in ("ormdantic", "sqlalchemy", "sqlmodel", "pydantic"):
+        try:
+            versions[distribution] = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError:
+            versions[distribution] = None
+    return versions
 
 
 def _git_dirty() -> bool:
