@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
-from benchmark.compare import compare_results
+from benchmark.compare import compare_results, main
 
 
 def _payload(
@@ -107,3 +110,65 @@ def test_compare_excludes_diagnostic_cases_from_geometric_mean() -> None:
     assert report.rows[1].comparable is False
     assert report.geometric_mean_vs_sqlalchemy == 2.0
     assert report.geometric_mean_vs_sqlmodel == pytest.approx(3.0)
+
+
+def test_cli_skips_regression_gate_for_legacy_base(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = _payload(ormdantic_ms=10.0, sqlalchemy_ms=18.0, sqlmodel_ms=25.0)
+    base.pop("schema_version")
+    head = _payload(ormdantic_ms=20.0, sqlalchemy_ms=18.0, sqlmodel_ms=25.0)
+    head["metadata"]["runner_version"] = "cross-db-v2"
+    base_path = tmp_path / "base.json"
+    head_path = tmp_path / "head.json"
+    output_dir = tmp_path / "report"
+    base_path.write_text(json.dumps(base), encoding="utf-8")
+    head_path.write_text(json.dumps(head), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--base",
+            str(base_path),
+            "--head",
+            str(head_path),
+            "--output-dir",
+            str(output_dir),
+            "--fail-regression",
+            "0.10",
+        ]
+    )
+
+    assert exit_code == 0
+    assert "regression gate skipped" in capsys.readouterr().out
+    assert (output_dir / "report.md").is_file()
+
+
+def test_cli_enforces_regression_gate_for_matching_protocols(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = _payload(ormdantic_ms=10.0, sqlalchemy_ms=18.0, sqlmodel_ms=25.0)
+    head = _payload(ormdantic_ms=20.0, sqlalchemy_ms=18.0, sqlmodel_ms=25.0)
+    base["metadata"]["runner_version"] = "cross-db-v2"
+    head["metadata"]["runner_version"] = "cross-db-v2"
+    base_path = tmp_path / "base.json"
+    head_path = tmp_path / "head.json"
+    output_dir = tmp_path / "report"
+    base_path.write_text(json.dumps(base), encoding="utf-8")
+    head_path.write_text(json.dumps(head), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--base",
+            str(base_path),
+            "--head",
+            str(head_path),
+            "--output-dir",
+            str(output_dir),
+            "--fail-regression",
+            "0.10",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "regression gate skipped" not in capsys.readouterr().out
+    assert (output_dir / "report.md").is_file()

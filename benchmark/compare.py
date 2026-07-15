@@ -169,8 +169,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     from benchmark.report import write_pr_report
 
-    report = compare_results(load_result(args.base), load_result(args.head))
+    base = load_result(args.base)
+    head = load_result(args.head)
+    report = compare_results(base, head)
     write_pr_report(report, args.output_dir)
+    if not _regression_gate_compatible(base, head):
+        print("regression gate skipped: base and head benchmark protocols differ")
+        return 0
     regression_limit = 1 / (1 + args.fail_regression)
     return int(
         any(
@@ -181,6 +186,23 @@ def main(argv: list[str] | None = None) -> int:
             and row.head_vs_base_ci[1] < 1.0
             for row in report.rows
         )
+    )
+
+
+def _regression_gate_compatible(
+    base: dict[str, object], head: dict[str, object]
+) -> bool:
+    if (
+        base.get("schema_version") != RESULT_SCHEMA_VERSION
+        or head.get("schema_version") != RESULT_SCHEMA_VERSION
+    ):
+        return False
+    base_runner = _mapping(base.get("metadata"), "base metadata").get("runner_version")
+    head_runner = _mapping(head.get("metadata"), "head metadata").get("runner_version")
+    return (
+        isinstance(base_runner, str)
+        and bool(base_runner)
+        and base_runner == head_runner
     )
 
 
