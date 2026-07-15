@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import keyword
 import re
 from collections.abc import Sequence
@@ -363,7 +364,7 @@ class Inspector:
         await self._database._events.dispatch("before_reflection", **payload)
         started = perf_counter()
         try:
-            result = call()
+            result = await asyncio.to_thread(call)
         except Exception as exc:
             duration_ms = (perf_counter() - started) * 1000
             error = classify_native_error(

@@ -7,7 +7,7 @@ from typing import Any, Generic, cast, get_args
 from pydantic import BaseModel, Field
 
 from ormdantic._introspect import is_dict_annotation, is_list_annotation, model_field
-from ormdantic.hydration import hydrate_flat_payload, hydrate_joined_payload
+from ormdantic.hydration import hydrate_joined_payload
 from ormdantic.loaders import LoaderOption, path_parts
 from ormdantic.models import Map, OrmTable
 from ormdantic.types import ModelType, SerializedType
@@ -57,6 +57,16 @@ class OrmSerializer(Generic[SerializedType]):
             references={table_data.tablename: result_schema},
         )
         self._columns = [it[0] for it in self._result_set.cursor.description]
+        self._flat_columns = [column.rsplit("\\", 1)[-1] for column in self._columns]
+        self._flat_conversion_columns = (
+            {
+                column
+                for column in self._flat_columns
+                if self._requires_preparation(table_data.model, column)
+            }
+            if depth <= 0 and load_paths is None
+            else set()
+        )
         self._return_dict: dict[str, Any] = {}
 
     def deserialize(self) -> SerializedType:
@@ -91,29 +101,31 @@ class OrmSerializer(Generic[SerializedType]):
         rows = [tuple(row) for row in self._result_set]
         if not rows:
             return [] if self._is_array else None  # type: ignore
-        payload = hydrate_flat_payload(
-            tablename=self._table_data.tablename,
-            pk=self._table_data.pk,
-            columns=self._columns,
-            rows=rows,
-            is_array=self._is_array,
-        )
-        if payload is None:
-            return None  # type: ignore
         if self._is_array:
-            records = cast(list[dict[str, Any]], payload)
-            return [
-                self._table_data.model(**self._prep_flat_result(record))
-                for record in records
-            ]  # type: ignore
-        record = cast(dict[str, Any], payload)
+            primary_key_index = self._flat_columns.index(self._table_data.pk)
+            seen = set()
+            models = []
+            for row in rows:
+                primary_key = row[primary_key_index]
+                if primary_key in seen:
+                    continue
+                seen.add(primary_key)
+                record = dict(zip(self._flat_columns, row, strict=True))
+                models.append(self._table_data.model(**self._prep_flat_result(record)))
+            return models  # type: ignore
+        record = dict(zip(self._flat_columns, rows[0], strict=True))
         return self._table_data.model(**self._prep_flat_result(record))
 
     def _prep_flat_result(self, record: dict[str, Any]) -> dict[str, Any]:
-        return {
-            column: self._sql_type_to_py(self._table_data.model, column, value)
-            for column, value in record.items()
-        }
+        if not self._flat_conversion_columns:
+            return record
+        prepared = dict(record)
+        for column in self._flat_conversion_columns:
+            if column in prepared:
+                prepared[column] = self._sql_type_to_py(
+                    self._table_data.model, column, prepared[column]
+                )
+        return prepared
 
     def _path_pks(
         self, schema: ResultSchema, prefix: str | None = None
@@ -225,6 +237,8 @@ class OrmSerializer(Generic[SerializedType]):
         table_data = schema.table_data
         if table_data is None:
             raise ValueError("result schema node is missing table metadata")
+        if not cache_identity and self._is_collection_tree(schema):
+            return table_data.model(**record)
 
         identity = self._identity_for(record, table_data)
         cached = self._identity_map.get(identity) if identity is not None else None
@@ -245,6 +259,13 @@ class OrmSerializer(Generic[SerializedType]):
             if identity is not None and cache_identity:
                 self._building_identities.discard(identity)
         return model
+
+    @classmethod
+    def _is_collection_tree(cls, schema: ResultSchema) -> bool:
+        return all(
+            reference.is_array and cls._is_collection_tree(reference)
+            for reference in schema.references.values()
+        )
 
     def _merge_relationships(
         self, model: BaseModel, record: dict[str, Any], schema: ResultSchema
@@ -357,3 +378,21 @@ class OrmSerializer(Generic[SerializedType]):
         except TypeError:
             return value
         return value
+
+    @staticmethod
+    def _requires_preparation(model_type: type[ModelType], column: str) -> bool:
+        annotation = model_field(model_type, column).annotation
+        if (
+            is_dict_annotation(annotation)
+            or is_list_annotation(annotation)
+            or annotation is list
+        ):
+            return True
+        candidates = get_args(annotation) or (annotation,)
+        for candidate in candidates:
+            try:
+                if issubclass(candidate, BaseModel):
+                    return True
+            except TypeError:
+                continue
+        return False
