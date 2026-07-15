@@ -35,8 +35,11 @@ class BenchmarkMeasurement:
     backend: str = ""
     profile: str = ""
     setup_ms: float | None = None
+    mad_ms: float | None = None
+    order_positions: tuple[int, ...] = ()
     validation: dict[str, object] | None = None
     skip_reason: str | None = None
+    comparable: bool = True
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-serializable representation."""
@@ -46,6 +49,7 @@ class BenchmarkMeasurement:
             "orm": self.orm,
             "median_ms": self.median_ms,
             "samples_ms": list(self.samples_ms),
+            "comparable": self.comparable,
         }
         if self.backend:
             payload["backend"] = self.backend
@@ -53,6 +57,10 @@ class BenchmarkMeasurement:
             payload["profile"] = self.profile
         if self.setup_ms is not None:
             payload["setup_ms"] = self.setup_ms
+        if self.mad_ms is not None:
+            payload["mad_ms"] = self.mad_ms
+        if self.order_positions:
+            payload["order_positions"] = list(self.order_positions)
         if self.validation is not None:
             payload["validation"] = self.validation
         if self.skip_reason is not None:

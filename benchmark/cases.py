@@ -19,6 +19,7 @@ class CaseDefinition:
     category: str
     row_counter: Callable[[ReadRows, WriteRows, LookupCount], int]
     expected_counter: Callable[[ReadRows, WriteRows, LookupCount, str], int]
+    comparable: bool = True
     supported_orms: tuple[str, ...] = (ORMDANTIC, SQLALCHEMY, SQLMODEL)
     supported_backends: tuple[str, ...] = ("sqlite", "postgres", "mysql")
 
@@ -57,12 +58,19 @@ def case_matrix() -> tuple[CaseDefinition, ...]:
         _case("paginated find_many", "read", _page_rows, _page_expected),
         _case("ordered find_many", "read", _page_rows, _page_expected),
         _case("hydrate flat rows", "hydration", _page_rows, _page_expected),
-        _case("serialize simple payloads", "serialization", _page_rows, _page_expected),
+        _case(
+            "serialize simple payloads",
+            "serialization",
+            _page_rows,
+            _page_expected,
+            comparable=False,
+        ),
         _case(
             "serialize nested payloads",
             "serialization",
             _relationship_rows,
             _relationship_parent_expected,
+            comparable=False,
         ),
         _case(
             "hydrate relationship results",
@@ -100,12 +108,15 @@ def _case(
     category: str,
     row_counter: Callable[[int, int, int], int],
     expected_counter: Callable[[int, int, int, str], int],
+    *,
+    comparable: bool = True,
 ) -> CaseDefinition:
     return CaseDefinition(
         name=name,
         category=category,
         row_counter=row_counter,
         expected_counter=expected_counter,
+        comparable=comparable,
     )
 
 
