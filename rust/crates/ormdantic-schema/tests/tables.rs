@@ -7,7 +7,10 @@ use ormdantic_schema::{
 
 #[test]
 fn table_new_builds_unknown_columns() {
-    let table = TableDef::new("flavor", "id", vec!["id".to_string(), "name".to_string()]);
+    let relationship =
+        RelationshipDef::new("supplier", "supplier", "id", RelationshipCardinality::One);
+    let table = TableDef::new("flavor", "id", vec!["id".to_string(), "name".to_string()])
+        .with_relationships(vec![relationship]);
 
     assert_eq!(table.model_key(), "flavor");
     assert_eq!(table.name(), "flavor");
@@ -17,6 +20,7 @@ fn table_new_builds_unknown_columns() {
         .columns()
         .iter()
         .all(|column| column.kind() == &FieldKind::Unknown));
+    assert_eq!(table.relationships().len(), 1);
 }
 
 #[test]

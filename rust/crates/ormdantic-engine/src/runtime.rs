@@ -244,6 +244,10 @@ mod tests {
                 "permission denied for table flavors",
                 ExecutionErrorKind::PermissionDenied,
             ),
+            (
+                "unclassified database response",
+                ExecutionErrorKind::Unknown,
+            ),
         ];
 
         for (message, expected) in cases {

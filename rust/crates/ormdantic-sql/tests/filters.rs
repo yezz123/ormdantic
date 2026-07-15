@@ -9,6 +9,18 @@ fn compiles_comparison_and_like_filters() {
         table: TableRef::new("flavors"),
         columns: vec![SelectColumn::new("id")],
         filters: vec![
+            Filter::Ne {
+                column: "name".to_string(),
+                param: "name__ne".to_string(),
+            },
+            Filter::Lt {
+                column: "strength".to_string(),
+                param: "strength__lt".to_string(),
+            },
+            Filter::Le {
+                column: "strength".to_string(),
+                param: "strength__le".to_string(),
+            },
             Filter::Gt {
                 column: "strength".to_string(),
                 param: "strength__gt".to_string(),
@@ -27,11 +39,17 @@ fn compiles_comparison_and_like_filters() {
 
     assert_eq!(
         query.sql(),
-        "SELECT \"flavors\".\"id\" FROM \"flavors\" WHERE \"strength\" > ? AND \"name\" LIKE ?"
+        "SELECT \"flavors\".\"id\" FROM \"flavors\" WHERE \"name\" != ? AND \"strength\" < ? AND \"strength\" <= ? AND \"strength\" > ? AND \"name\" LIKE ?"
     );
     assert_eq!(
         query.params(),
-        &["strength__gt".to_string(), "name__like".to_string()]
+        &[
+            "name__ne".to_string(),
+            "strength__lt".to_string(),
+            "strength__le".to_string(),
+            "strength__gt".to_string(),
+            "name__like".to_string(),
+        ]
     );
 }
 

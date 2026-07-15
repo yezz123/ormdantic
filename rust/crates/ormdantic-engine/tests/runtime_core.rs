@@ -68,6 +68,22 @@ fn query_result_preserves_affected_row_count() {
 }
 
 #[test]
+fn query_result_empty_and_row_count_builder_preserve_shape() {
+    let empty = QueryResult::empty();
+
+    assert_eq!(empty.row_count(), None);
+    assert!(empty.columns().is_empty());
+    assert!(empty.rows().is_empty());
+
+    let result =
+        QueryResult::new(vec!["id".to_string()], vec![vec![DbValue::Integer(1)]]).with_row_count(4);
+
+    assert_eq!(result.row_count(), Some(4));
+    assert_eq!(result.columns(), &["id".to_string()]);
+    assert_eq!(result.rows(), &[vec![DbValue::Integer(1)]]);
+}
+
+#[test]
 fn sqlite_db_value_to_sql_covers_scalar_variants() {
     let cases = [
         (DbValue::Null, RusqliteValue::Null),
