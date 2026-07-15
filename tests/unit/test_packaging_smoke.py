@@ -108,6 +108,9 @@ def test_sdist_contains_declared_license_file_and_project_readme(
     with tarfile.open(sdist, "r:gz") as archive:
         names = set(archive.getnames())
         package_root = sdist.name.removesuffix(".tar.gz")
+        readme_member = archive.extractfile(f"{package_root}/README.md")
+        assert readme_member is not None
+        packaged_readme = readme_member.read().decode("utf-8")
         pkg_info_member = archive.extractfile(f"{package_root}/PKG-INFO")
         assert pkg_info_member is not None
         pkg_info = pkg_info_member.read().decode("utf-8")
@@ -115,7 +118,11 @@ def test_sdist_contains_declared_license_file_and_project_readme(
     metadata = Parser().parsestr(pkg_info)
     assert f"{package_root}/LICENSE" in names
     assert f"{package_root}/README.md" in names
-    assert metadata.get_payload().rstrip() == root_readme.rstrip()
+    assert packaged_readme.rstrip().splitlines() == root_readme.rstrip().splitlines()
+    assert (
+        metadata.get_payload().rstrip().splitlines()
+        == root_readme.rstrip().splitlines()
+    )
     assert "# ormdantic-py" not in metadata.get_payload()
 
 
