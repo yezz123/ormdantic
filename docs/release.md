@@ -2,42 +2,54 @@
 
 ## Latest Changes
 
+### Features
+
+- ♻️ Enhance ORM functionality & optimize benchmarking. PR [#275](https://github.com/yezz123/ormdantic/pull/275) by [@yezz123](https://github.com/yezz123).
+- ✨ Implement backend resolution & benchmark charts. PR [#272](https://github.com/yezz123/ormdantic/pull/272) by [@yezz123](https://github.com/yezz123).
+
+### Upgrades
+
+- ⬆ Bump pre-commit app's configurations. PR [#273](https://github.com/yezz123/ormdantic/pull/273) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+
+## 2.0.1
+
+## 2.0.0
+
 ### Breaking Changes
 
-* ♻️ Refactor SQL AST and expression handling, enhance tests and docs. PR [#256](https://github.com/yezz123/ormdantic/pull/256) by [@yezz123](https://github.com/yezz123).
+- ♻️ Refactor SQL AST and expression handling, enhance tests and docs. PR [#256](https://github.com/yezz123/ormdantic/pull/256) by [@yezz123](https://github.com/yezz123).
 
 ### Features
 
-* ♻️  Enhance ORM functionality & optimize benchmarking. PR [#275](https://github.com/yezz123/ormdantic/pull/275) by [@yezz123](https://github.com/yezz123).
-* ✨ Implement backend resolution & benchmark charts. PR [#272](https://github.com/yezz123/ormdantic/pull/272) by [@yezz123](https://github.com/yezz123).
-* ✨ Add benchmarking suite for Ormdantic vs SQLAlchemy. PR [#270](https://github.com/yezz123/ormdantic/pull/270) by [@yezz123](https://github.com/yezz123).
-* ✨ Enhance testing suite with benchmarks & error handling. PR [#269](https://github.com/yezz123/ormdantic/pull/269) by [@yezz123](https://github.com/yezz123).
-* ✨ Introduce native extension support and enhance testing documentation. PR [#268](https://github.com/yezz123/ormdantic/pull/268) by [@yezz123](https://github.com/yezz123).
-* ✨ Enhance dependency management, linting, and migration CLI features. PR [#267](https://github.com/yezz123/ormdantic/pull/267) by [@yezz123](https://github.com/yezz123).
-* ♻️ Refactor upsert functionality and enhance SQL dialect support. PR [#266](https://github.com/yezz123/ormdantic/pull/266) by [@yezz123](https://github.com/yezz123).
-* ✨ Enhance savepoint & rollback functionality. PR [#265](https://github.com/yezz123/ormdantic/pull/265) by [@yezz123](https://github.com/yezz123).
-* ✨ Enhance schema reflection and testing for multiple SQL dialects. PR [#262](https://github.com/yezz123/ormdantic/pull/262) by [@yezz123](https://github.com/yezz123).
-* ✨ Enhance error handling and diagnostics in Ormdantic. PR [#260](https://github.com/yezz123/ormdantic/pull/260) by [@yezz123](https://github.com/yezz123).
-* ✨  Enhance Ormdantic migration functionality and CLI support. PR [#254](https://github.com/yezz123/ormdantic/pull/254) by [@yezz123](https://github.com/yezz123).
-* ✨ Enhance query capabilities and relationship loading in ORM. PR [#251](https://github.com/yezz123/ormdantic/pull/251) by [@yezz123](https://github.com/yezz123).
+- ✨ Add benchmarking suite for Ormdantic vs SQLAlchemy. PR [#270](https://github.com/yezz123/ormdantic/pull/270) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance testing suite with benchmarks & error handling. PR [#269](https://github.com/yezz123/ormdantic/pull/269) by [@yezz123](https://github.com/yezz123).
+- ✨ Introduce native extension support and enhance testing documentation. PR [#268](https://github.com/yezz123/ormdantic/pull/268) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance dependency management, linting, and migration CLI features. PR [#267](https://github.com/yezz123/ormdantic/pull/267) by [@yezz123](https://github.com/yezz123).
+- ♻️ Refactor upsert functionality and enhance SQL dialect support. PR [#266](https://github.com/yezz123/ormdantic/pull/266) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance savepoint & rollback functionality. PR [#265](https://github.com/yezz123/ormdantic/pull/265) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance schema reflection and testing for multiple SQL dialects. PR [#262](https://github.com/yezz123/ormdantic/pull/262) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance error handling and diagnostics in Ormdantic. PR [#260](https://github.com/yezz123/ormdantic/pull/260) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance Ormdantic migration functionality and CLI support. PR [#254](https://github.com/yezz123/ormdantic/pull/254) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance query capabilities and relationship loading in ORM. PR [#251](https://github.com/yezz123/ormdantic/pull/251) by [@yezz123](https://github.com/yezz123).
+
 - ✨ Migrate to Rust integration with ORM, SQL support, and documentation. PR [#235](https://github.com/yezz123/ormdantic/pull/235) by [@yezz123](https://github.com/yezz123).
 - ✨ Enhance query handling with new expression methods and tests. PR [#250](https://github.com/yezz123/ormdantic/pull/250) by [@yezz123](https://github.com/yezz123).
 
 ### Refactors
 
-* ♻️ Enhance benchmarking & refactor `DbValue`. PR [#271](https://github.com/yezz123/ormdantic/pull/271) by [@yezz123](https://github.com/yezz123).
-* ✨ Refactor migrations and native runtime modules. PR [#255](https://github.com/yezz123/ormdantic/pull/255) by [@yezz123](https://github.com/yezz123).
+- ♻️ Enhance benchmarking & refactor `DbValue`. PR [#271](https://github.com/yezz123/ormdantic/pull/271) by [@yezz123](https://github.com/yezz123).
+- ✨ Refactor migrations and native runtime modules. PR [#255](https://github.com/yezz123/ormdantic/pull/255) by [@yezz123](https://github.com/yezz123).
+
 - ♻️ Refactor demo project to use Class notion. PR [#215](https://github.com/yezz123/ormdantic/pull/215) by [@yezz123](https://github.com/yezz123).
 - ♻️ Enhance schema, transaction features, and Rust integration. PR [#239](https://github.com/yezz123/ormdantic/pull/239) by [@yezz123](https://github.com/yezz123).
 
 ### Upgrades
 
-* ⬆ Bump pre-commit app's configurations. PR [#273](https://github.com/yezz123/ormdantic/pull/273) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-* ⬆ Bump the python-packages group with 6 updates. PR [#264](https://github.com/yezz123/ormdantic/pull/264) by [@dependabot[bot]](https://github.com/apps/dependabot).
-* ⬆ Bump `ruff-pre-commit` from v0.15.18 to v0.15.20. PR [#263](https://github.com/yezz123/ormdantic/pull/263) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-* ⬆ Bump `ruff-pre-commit` from v0.15.17 to v0.15.18. PR [#261](https://github.com/yezz123/ormdantic/pull/261) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-* ⬆ Bump `ruff-pre-commit` from v0.15.16 to v0.15.17. PR [#259](https://github.com/yezz123/ormdantic/pull/259) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
-* ⬆ Bump `ruff-pre-commit` from v0.15.15 to v0.15.16. PR [#253](https://github.com/yezz123/ormdantic/pull/253) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump the python-packages group with 6 updates. PR [#264](https://github.com/yezz123/ormdantic/pull/264) by [@dependabot[bot]](https://github.com/apps/dependabot).
+- ⬆ Bump `ruff-pre-commit` from v0.15.18 to v0.15.20. PR [#263](https://github.com/yezz123/ormdantic/pull/263) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump `ruff-pre-commit` from v0.15.17 to v0.15.18. PR [#261](https://github.com/yezz123/ormdantic/pull/261) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump `ruff-pre-commit` from v0.15.16 to v0.15.17. PR [#259](https://github.com/yezz123/ormdantic/pull/259) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
+- ⬆ Bump `ruff-pre-commit` from v0.15.15 to v0.15.16. PR [#253](https://github.com/yezz123/ormdantic/pull/253) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ Bump the python-packages group with 4 updates. PR [#208](https://github.com/yezz123/ormdantic/pull/208) by [@dependabot[bot]](https://github.com/apps/dependabot).
 - ⬆ pre-commit autoupdate. PR [#209](https://github.com/yezz123/ormdantic/pull/209) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ pre-commit autoupdate. PR [#210](https://github.com/yezz123/ormdantic/pull/210) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
@@ -59,11 +71,11 @@
 
 ### Docs
 
-* ✨  Enhance Oracle error handling and revise documentation. PR [#257](https://github.com/yezz123/ormdantic/pull/257) by [@yezz123](https://github.com/yezz123).
+- ✨ Enhance Oracle error handling and revise documentation. PR [#257](https://github.com/yezz123/ormdantic/pull/257) by [@yezz123](https://github.com/yezz123).
 
 ### Internal
 
-* 🔨 add version bumping script & revamp release workflow. PR [#258](https://github.com/yezz123/ormdantic/pull/258) by [@yezz123](https://github.com/yezz123).
+- 🔨 add version bumping script & revamp release workflow. PR [#258](https://github.com/yezz123/ormdantic/pull/258) by [@yezz123](https://github.com/yezz123).
 
 ## 1.7.0
 
