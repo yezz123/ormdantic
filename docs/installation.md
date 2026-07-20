@@ -18,6 +18,26 @@ pip install ormdantic
 
 Ormdantic ships a Python package plus a Rust extension named `ormdantic._ormdantic`. The extension contains the SQL compiler, hydration planner, migration bridge, and native database drivers.
 
+## Install the optional playground
+
+Install the terminal playground when you want interactive schema watching, migration review, and TOML or SQL editing:
+
+```console
+uv add 'ormdantic[playground]'
+```
+
+```console
+pip install 'ormdantic[playground]'
+```
+
+Launch it from a configured project:
+
+```console
+ormdantic playground
+```
+
+The extra installs Textual with syntax highlighting. Ordinary imports and `ormdantic migrations` commands do not require Textual. See [Explore schemas and migrations in the playground](playground/index.md) for setup and workflows.
+
 ## Requirements
 
 - Python 3.10 or newer

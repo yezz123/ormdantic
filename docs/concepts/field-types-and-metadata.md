@@ -44,7 +44,7 @@ from ormdantic import TableColumn
 
 @db.table(
     pk="id",
-    columns={
+    column_options={
         "id": TableColumn(identity=True),
         "name": TableColumn(comment="Public display name"),
         "price": TableColumn(numeric_precision=8, numeric_scale=2),
