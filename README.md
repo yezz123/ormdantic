@@ -4,21 +4,10 @@
   <em>A Rust-backed async ORM for Python applications that use Pydantic models.</em>
 </p>
 
-<p align="center">
-<a href="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml" target="_blank">
-    <img src="https://github.com/yezz123/ormdantic/actions/workflows/ci.yml/badge.svg" alt="Test">
-</a>
-<a href="https://codecov.io/gh/yezz123/ormdantic">
-    <img src="https://codecov.io/gh/yezz123/ormdantic/branch/main/graph/badge.svg" alt="Coverage">
-</a>
-<a href="https://pypi.org/project/ormdantic" target="_blank">
-    <img src="https://img.shields.io/pypi/v/ormdantic?color=%2334D058&label=pypi%20package" alt="Package version">
-</a>
-<a href="https://pypi.org/project/ormdantic" target="_blank">
-    <img src="https://img.shields.io/pypi/pyversions/ormdantic.svg?color=%2334D058" alt="Supported Python versions">
-</a>
-<a href="https://app.codspeed.io//yezz123/ormdantic?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://app.codspeed.io//badge.json" alt="CodSpeed Badge"/></a>
-</p>
+| Project | Status |
+|---------|--------|
+| CI      | [![CI](https://github.com/yezz123/ormdantic/actions/workflows/ci.yml/badge.svg)](https://github.com/yezz123/ormdantic/actions/workflows/ci.yml) [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/yezz123/ormdantic/main.svg)](https://results.pre-commit.ci/latest/github/yezz123/ormdantic/main) [![Codecov](https://codecov.io/gh/yezz123/ormdantic/graph/badge.svg)](https://codecov.io/gh/yezz123/ormdantic) |
+| Meta    | [![Package version](https://img.shields.io/pypi/v/ormdantic?color=%2334D058&label=pypi%20package)](https://pypi.org/project/ormdantic) [![Downloads](https://static.pepy.tech/badge/ormdantic)](https://pepy.tech/project/ormdantic) [![Pydantic Version 2](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/pydantic/pydantic/main/docs/badge/v2.json)](https://pydantic.dev) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![CodeSpeed](https://img.shields.io/endpoint?url=https://app.codspeed.io//badge.json)](https://app.codspeed.io//yezz123/ormdantic?utm_source=badge) |
 
 Ormdantic lets you declare database tables with Pydantic v2 models and run async CRUD, relationship loading, migrations, reflection, and native SQL execution through a Rust-backed runtime.
 
@@ -36,20 +25,6 @@ The project is designed for applications that want Python model ergonomics witho
 | Migrations | Snapshots, diffs, plans, migration artifacts, history, rollback, repair, and squash helpers. |
 | Reflection | Live database inspection for tables, columns, indexes, constraints, schemas, views, sequences, and dialect metadata. |
 | Drivers | SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle through the native runtime. |
-
-## Benchmarks
-
-The reproducible benchmark suite in `benchmark/` compares Ormdantic,
-SQLAlchemy, and SQLModel across SQLite, PostgreSQL, and MySQL. It covers schema
-setup, writes, reads, query expressions, hydration, serialization, and
-relationship loading. Results are scoped by backend and profile; they are not a
-global winner score.
-
-SQLite smoke profile example:
-
-![SQLite smoke profile Ormdantic speedup](benchmark/charts/smoke/sqlite/ormdantic-orm-benchmark-speedup.svg)
-
-![SQLite smoke profile median latency](benchmark/charts/smoke/sqlite/ormdantic-orm-benchmark-latency.svg)
 
 ## Install
 
@@ -92,12 +67,12 @@ async def main() -> None:
 
 Start with the documentation when you are new:
 
-- `docs/learning-path.md` tells new and advanced readers where to start.
-- `docs/quickstart.md` walks through the first model, first table, first query, first session, and first migration preview.
-- `docs/concepts/` explains tables, fields, relationships, querying, loading, sessions, migrations, events, and the native engine.
-- `docs/drivers/` explains SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle behavior.
-- `docs/examples/` contains task-focused how-to guides.
-- `docs/api/` documents the Python API with generated references and usage notes.
+- `[Quick Start](https://ormdantic.yezz.me/quickstart/)` walks through the first model, first table, first query, first session, and first migration preview.
+- `[learning Path](https://ormdantic.yezz.me/learning-path)` tells new and advanced readers where to start.
+- `[Concepts](https://ormdantic.yezz.me/concepts/)` explains tables, fields, relationships, querying, loading, sessions, migrations, events, and the native engine.
+- `[Supported Drivers](https://ormdantic.yezz.me/drivers/)` explains SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle behavior.
+- `[Examples](https://ormdantic.yezz.me/examples/existing-databases/)` contains task-focused how-to guides.
+- `[API Documentation](https://ormdantic.yezz.me/api/reference/)` documents the Python API with generated references and usage notes.
 
 ## Migration CLI
 
