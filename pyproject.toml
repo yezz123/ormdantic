@@ -59,6 +59,7 @@ ormdantic = "ormdantic.cli:main"
 [project.optional-dependencies]
 sqlite = []
 postgresql = []
+playground = ["textual[syntax]>=8.2,<9"]
 
 [dependency-groups]
 testing = [
@@ -69,6 +70,7 @@ testing = [
   "pytest-pretty",
   "pytest-benchmark>=5.2.0",
   "pytest-codspeed>=5.0.3",
+  "textual[syntax]>=8.2,<9",
 ]
 linting = ["pre-commit>=4.6.0", "ty>=0.0.56"]
 docs = [
