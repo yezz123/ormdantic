@@ -1,0 +1,13 @@
+[project]
+target = "app.database:db"
+migrations_dir = "migrations/sqlite"
+watch = ["app/**/*.py", "migrations/**/*.toml"]
+
+[environments.development]
+url_env = "DATABASE_URL"
+env_file = ".env"
+safety = "typed"
+
+[environments.production]
+url_env = "DATABASE_URL"
+safety = "typed"

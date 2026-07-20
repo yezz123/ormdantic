@@ -1,0 +1,58 @@
+name: ormdantic-todo
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-todo}
+      POSTGRES_USER: ${POSTGRES_USER:-todo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-todo}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - todo-postgres-data:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: examples/todo_app/Dockerfile
+    environment: &application-environment
+      APP_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-todo}:${POSTGRES_PASSWORD:-todo}@postgres:5432/${POSTGRES_DB:-todo}
+    command:
+      - ormdantic
+      - migrations
+      - apply-dir
+      - /app/migrations/postgresql
+      - --allow-destructive
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: ../..
+      dockerfile: examples/todo_app/Dockerfile
+    environment: *application-environment
+    ports:
+      - '${TODO_API_PORT:-8000}:8000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - 'import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8000/health'', timeout=2)'
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  todo-postgres-data:

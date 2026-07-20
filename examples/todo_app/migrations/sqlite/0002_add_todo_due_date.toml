@@ -1,0 +1,214 @@
+version = 2
+artifact_version = 2
+revision = "0002_add_todo_due_date"
+description = "Add an optional due date to todos"
+created_at = "2026-07-20T00:01:00+00:00"
+dialect = "sqlite"
+checksum = "ec79c1c1f7e4cb4dd642096460ae0c6db48d72a618a08af692856b9455503b2f"
+depends_on = ["0001_create_projects_and_todos"]
+branch_labels = []
+from_snapshot = { version = 1, tables = [
+  { model_key = "Project", name = "project", primary_key = "id", columns = [
+    { name = "id", kind = "str", nullable = false, primary_key = true, unique = false, checks = [
+    ] },
+    { name = "name", kind = "str", nullable = false, primary_key = false, max_length = 120, unique = false, checks = [
+      [
+        "length",
+        ">=",
+        "1",
+      ],
+      [
+        "length",
+        "<=",
+        "120",
+      ],
+    ] },
+    { name = "created_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+  ], indexes = [
+    { name = "project_name_idx", columns = [
+      "name",
+    ], unique = false },
+  ], unique_constraints = [
+  ], named_unique_constraints = [
+  ], check_constraints = [
+  ], foreign_key_constraints = [
+  ], exclusion_constraints = [
+  ], relationships = [
+  ] },
+  { model_key = "Todo", name = "todo", primary_key = "id", columns = [
+    { name = "id", kind = "str", nullable = false, primary_key = true, unique = false, checks = [
+    ] },
+    { name = "project", kind = "str", nullable = false, primary_key = false, foreign_table = "project", foreign_column = "id", unique = false, checks = [
+    ], foreign_key_name = "todo_project_fk", on_delete = "cascade" },
+    { name = "title", kind = "str", nullable = false, primary_key = false, max_length = 200, unique = false, checks = [
+      [
+        "length",
+        ">=",
+        "1",
+      ],
+      [
+        "length",
+        "<=",
+        "200",
+      ],
+    ] },
+    { name = "description", kind = "str", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+    { name = "status", kind = "enum", nullable = true, primary_key = false, unique = false, checks = [
+      [
+        "enum",
+        "in",
+        "'pending', 'in_progress', 'completed'",
+      ],
+    ] },
+    { name = "priority", kind = "int", nullable = true, primary_key = false, unique = false, checks = [
+      [
+        "comparison",
+        ">=",
+        "1",
+      ],
+      [
+        "comparison",
+        "<=",
+        "5",
+      ],
+    ] },
+    { name = "created_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+    { name = "updated_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+  ], indexes = [
+    { name = "todo_title_idx", columns = [
+      "title",
+    ], unique = false },
+  ], unique_constraints = [
+  ], named_unique_constraints = [
+  ], check_constraints = [
+  ], foreign_key_constraints = [
+  ], exclusion_constraints = [
+  ], relationships = [
+    { field = "project", foreign_table = "project", foreign_column = "id" },
+  ] },
+] }
+to_snapshot = { version = 1, tables = [
+  { model_key = "Project", name = "project", primary_key = "id", columns = [
+    { name = "id", kind = "str", nullable = false, primary_key = true, unique = false, checks = [
+    ] },
+    { name = "name", kind = "str", nullable = false, primary_key = false, max_length = 120, unique = false, checks = [
+      [
+        "length",
+        ">=",
+        "1",
+      ],
+      [
+        "length",
+        "<=",
+        "120",
+      ],
+    ] },
+    { name = "created_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+  ], indexes = [
+    { name = "project_name_idx", columns = [
+      "name",
+    ], unique = false },
+  ], unique_constraints = [
+  ], named_unique_constraints = [
+  ], check_constraints = [
+  ], foreign_key_constraints = [
+  ], exclusion_constraints = [
+  ], relationships = [
+  ] },
+  { model_key = "Todo", name = "todo", primary_key = "id", columns = [
+    { name = "id", kind = "str", nullable = false, primary_key = true, unique = false, checks = [
+    ] },
+    { name = "project", kind = "str", nullable = false, primary_key = false, foreign_table = "project", foreign_column = "id", unique = false, checks = [
+    ], foreign_key_name = "todo_project_fk", on_delete = "cascade" },
+    { name = "title", kind = "str", nullable = false, primary_key = false, max_length = 200, unique = false, checks = [
+      [
+        "length",
+        ">=",
+        "1",
+      ],
+      [
+        "length",
+        "<=",
+        "200",
+      ],
+    ] },
+    { name = "description", kind = "str", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+    { name = "status", kind = "enum", nullable = true, primary_key = false, unique = false, checks = [
+      [
+        "enum",
+        "in",
+        "'pending', 'in_progress', 'completed'",
+      ],
+    ] },
+    { name = "priority", kind = "int", nullable = true, primary_key = false, unique = false, checks = [
+      [
+        "comparison",
+        ">=",
+        "1",
+      ],
+      [
+        "comparison",
+        "<=",
+        "5",
+      ],
+    ] },
+    { name = "due_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+    { name = "created_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+    { name = "updated_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+    ] },
+  ], indexes = [
+    { name = "todo_title_idx", columns = [
+      "title",
+    ], unique = false },
+  ], unique_constraints = [
+  ], named_unique_constraints = [
+  ], check_constraints = [
+  ], foreign_key_constraints = [
+  ], exclusion_constraints = [
+  ], relationships = [
+    { field = "project", foreign_table = "project", foreign_column = "id" },
+  ] },
+] }
+up = [
+  { sql = "ALTER TABLE \"todo\" ADD COLUMN \"due_at\" TIMESTAMP", values = [
+  ], unsafe = true, destructive = false, kind = "alter_table", table = "todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { dialect = "sqlite", classification = { kind = "alter_table", table = "todo", requires_rebuild = false, reversible = true, destructive = false, unsafe = true } } },
+]
+down = [
+  { sql = "DROP TABLE IF EXISTS \"__ormdantic_rebuild_todo\"", values = [
+  ], description = "drop stale rebuild table for todo", unsafe = true, destructive = false, kind = "sqlite_rebuild_table", table = "todo", object_name = "__ormdantic_rebuild_todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { sqlite_rebuild = true, phase = "drop_temp" } },
+  { sql = "CREATE TABLE IF NOT EXISTS \"__ormdantic_rebuild_todo\" (\"id\" TEXT PRIMARY KEY NOT NULL, \"project\" TEXT NOT NULL, \"title\" TEXT NOT NULL, \"description\" TEXT, \"status\" TEXT, \"priority\" INTEGER, \"created_at\" TIMESTAMP, \"updated_at\" TIMESTAMP, CONSTRAINT \"__ormdantic_rebuild_todo_title_min_length_check\" CHECK (LENGTH(title) >= 1), CONSTRAINT \"__ormdantic_rebuild_todo_title_max_length_check\" CHECK (LENGTH(title) <= 200), CONSTRAINT \"__ormdantic_rebuild_todo_status_enum_values_check\" CHECK (status IN ('pending', 'in_progress', 'completed')), CONSTRAINT \"__ormdantic_rebuild_todo_priority_ge_check\" CHECK (priority >= 1), CONSTRAINT \"__ormdantic_rebuild_todo_priority_le_check\" CHECK (priority <= 5), CONSTRAINT \"todo_project_fk\" FOREIGN KEY (\"project\") REFERENCES \"project\" (\"id\") ON DELETE CASCADE)", values = [
+  ], description = "create rebuild table for todo", unsafe = false, destructive = false, kind = "sqlite_rebuild_table", table = "todo", object_name = "__ormdantic_rebuild_todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { sqlite_rebuild = true, phase = "create_temp" } },
+  { sql = "INSERT INTO \"__ormdantic_rebuild_todo\" (\"id\", \"project\", \"title\", \"description\", \"status\", \"priority\", \"created_at\", \"updated_at\") SELECT \"id\", \"project\", \"title\", \"description\", \"status\", \"priority\", \"created_at\", \"updated_at\" FROM \"todo\"", values = [
+  ], description = "copy rows for sqlite rebuild of todo", unsafe = true, destructive = false, kind = "sqlite_rebuild_table", table = "todo", object_name = "__ormdantic_rebuild_todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { sqlite_rebuild = true, phase = "copy_rows", columns = [
+    "id",
+    "project",
+    "title",
+    "description",
+    "status",
+    "priority",
+    "created_at",
+    "updated_at",
+  ] } },
+  { sql = "DROP TABLE \"todo\"", values = [
+  ], description = "drop old table for sqlite rebuild of todo", unsafe = true, destructive = false, kind = "sqlite_rebuild_table", table = "todo", object_name = "todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { sqlite_rebuild = true, phase = "drop_old" } },
+  { sql = "ALTER TABLE \"__ormdantic_rebuild_todo\" RENAME TO \"todo\"", values = [
+  ], description = "rename rebuilt table todo", unsafe = false, destructive = false, kind = "sqlite_rebuild_table", table = "todo", object_name = "__ormdantic_rebuild_todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { sqlite_rebuild = true, phase = "rename" } },
+  { sql = "CREATE INDEX IF NOT EXISTS \"todo_title_idx\" ON \"todo\" (\"title\")", values = [
+  ], description = "recreate index for sqlite rebuild of todo", unsafe = false, destructive = false, kind = "sqlite_rebuild_table", table = "todo", reversible = true, requires_lock = true, requires_rebuild = false, generated_rollback = false, metadata = { sqlite_rebuild = true, phase = "create_index" } },
+]
+diff = { changes = [
+  { action = "add", object_type = "column", table = "todo", name = "due_at", message = "Added column todo.due_at", unsafe = false, destructive = false, details = { name = "due_at", kind = "datetime", nullable = true, primary_key = false, unique = false, checks = [
+  ] } },
+], warnings = [
+] }
+warnings = []
+safety = { dialect = "sqlite", unsafe = true, destructive = false, requires_rebuild = false, rollback_requires_rebuild = true, rollback_available = true }
+metadata = {}
