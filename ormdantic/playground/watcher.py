@@ -161,7 +161,11 @@ class SchemaWatcher:
             if candidate_pattern.is_absolute():
                 continue
             for candidate in self.root.glob(pattern):
-                if not candidate.is_file():
+                try:
+                    is_file = candidate.is_file()
+                except FileNotFoundError:
+                    continue
+                if not is_file:
                     continue
                 try:
                     relative = candidate.resolve().relative_to(self.root)

@@ -73,7 +73,7 @@ async def inspect_models(
     except asyncio.CancelledError:
         await asyncio.shield(_terminate_process(process))
         raise
-    except TimeoutError:
+    except asyncio.TimeoutError:
         await _terminate_process(process)
         message = f"Model inspection exceeded {timeout:g} seconds"
         return InspectionResult(
@@ -156,7 +156,7 @@ async def _terminate_process(process: ProcessLike) -> None:
     process.terminate()
     try:
         await asyncio.wait_for(process.wait(), 0.5)
-    except TimeoutError:
+    except asyncio.TimeoutError:
         process.kill()
         await process.wait()
 
