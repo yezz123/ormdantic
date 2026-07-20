@@ -184,6 +184,29 @@ def test_selectin_batches_keep_requested_size_without_backend_limit() -> None:
     assert table._selectin_batches(list(range(3)), option) == [[0, 1, 2]]
 
 
+def test_dictionary_filter_operator_matrix_and_empty_bulk_shape() -> None:
+    table = table_for_bind_limit(100)
+    expression = table._dict_where_expression(
+        {
+            "id__ne": 1,
+            "id__lt": 10,
+            "id__le": 10,
+            "id__gt": 0,
+            "id__ge": 0,
+            "id__in": [1, 2],
+            "id__not_in": [3],
+            "kind__is_null": False,
+            "kind__is_not_null": True,
+            "kind__like": "keep%",
+            "kind__ilike": "KEEP%",
+        }
+    )
+
+    assert expression is not None
+    with pytest.raises(ValueError, match="persisted column"):
+        table._bulk_chunk_size(0, None)
+
+
 def test_selectin_and_relationship_helpers_normalize_values() -> None:
     table = table_for_bind_limit(10)
     option = selectinload("children").filter(kind="keep").sorted_by("-id")

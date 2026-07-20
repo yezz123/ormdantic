@@ -170,3 +170,10 @@ async def test_quit_with_dirty_editor_requires_confirmation(tmp_path: Path) -> N
         await pilot.click("#quit-cancel")
         await pilot.pause()
         assert not isinstance(playground.screen, ConfirmQuitScreen)
+
+        await pilot.press("q")
+        await pilot.pause()
+        screen = playground.screen
+        assert isinstance(screen, ConfirmQuitScreen)
+        screen.confirm()
+        await pilot.pause()

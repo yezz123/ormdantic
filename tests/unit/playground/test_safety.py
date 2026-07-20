@@ -98,6 +98,17 @@ def test_safe_development_apply_uses_normal_confirmation() -> None:
     assert confirmed.allowed is True
 
 
+def test_review_is_bound_to_the_selected_environment() -> None:
+    decision = evaluate_action(
+        request(environment_name="staging"),
+        environment("development"),
+        preflight(),
+        confirmed=True,
+    )
+
+    assert "selected environment changed" in decision.reasons[0]
+
+
 def test_typed_environment_requires_database_and_revision_exactly() -> None:
     action = request(environment_name="staging")
     profile = environment("staging", safety="typed")

@@ -16,8 +16,12 @@ from ormdantic.playground.config import (
     EnvironmentConfig,
     ProjectConfig,
 )
-from ormdantic.playground.controller import PlaygroundController
-from ormdantic.playground.safety import PreflightContext
+from ormdantic.playground.controller import (
+    ControllerActionOutcome,
+    PlaygroundController,
+)
+from ormdantic.playground.diagnostics import Diagnostic, Severity
+from ormdantic.playground.safety import PreflightContext, SafetyDecision
 from ormdantic.playground.widgets.action_dialog import ActionDialog
 
 
@@ -165,3 +169,58 @@ async def test_preflight_failures_remain_visible_and_block_execution(
         preflight = app.screen.query_one("#action-preflight", Static).render().plain
         assert "history is dirty" in preflight
         assert app.screen.query_one("#action-execute", Button).disabled is True
+        await app.screen.execute()
+        assert isinstance(app.screen, ActionDialog)
+
+
+async def test_action_dialog_reports_execution_error_then_dismisses_success(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    value = controller(tmp_path)
+    app = PlaygroundApp(config=value.config, controller=value)
+    request = value.build_action_request("apply", database_name="app_db")
+    preflight = context(request.artifact_checksum or "", value.state.generation)
+    dialog = ActionDialog(controller=value, request=request, context=preflight)
+
+    async def fail(*_args, **_kwargs):
+        return ControllerActionOutcome(
+            SafetyDecision(True, None),
+            executed=False,
+            error=Diagnostic.create(Severity.ERROR, "test", "database refused"),
+        )
+
+    async def succeed(*_args, **_kwargs):
+        return ControllerActionOutcome(SafetyDecision(True, None), executed=True)
+
+    async with app.run_test() as pilot:
+        await app.push_screen(dialog)
+        await pilot.pause()
+        monkeypatch.setattr(value, "execute_action", fail)
+        await dialog.execute()
+        assert (
+            "database refused"
+            in dialog.query_one("#action-preflight", Static).render().plain
+        )
+
+        monkeypatch.setattr(value, "execute_action", succeed)
+        await dialog.execute()
+        await pilot.pause()
+        assert not isinstance(app.screen, ActionDialog)
+
+
+async def test_action_dialog_cancel_dismisses(tmp_path: Path) -> None:
+    value = controller(tmp_path)
+    app = PlaygroundApp(config=value.config, controller=value)
+    request = value.build_action_request("apply", database_name="app_db")
+    dialog = ActionDialog(
+        controller=value,
+        request=request,
+        context=context(request.artifact_checksum or "", value.state.generation),
+    )
+
+    async with app.run_test() as pilot:
+        await app.push_screen(dialog)
+        dialog.cancel()
+        await pilot.pause()
+        assert not isinstance(app.screen, ActionDialog)
