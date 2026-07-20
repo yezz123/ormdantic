@@ -1,6 +1,6 @@
 # Async ORM Completeness Audit
 
-**Date:** 2026-07-19
+**Date:** 2026-07-20
 
 ## Conclusion
 
@@ -12,18 +12,44 @@ It is not yet production-complete for concurrent async applications. The highest
 
 ## Verification baseline
 
-The following checks passed locally on Python 3.12.4:
+The following checks passed locally on Python 3.10.19:
 
-- `bash scripts/test.sh`: 995 passed, 76 skipped.
-- Python coverage: 97.43% line coverage and 94.22% branch coverage.
+- `bash scripts/test.sh`: 1,168 passed, 79 skipped.
+- Python coverage: 99.68% statement coverage, 97.33% branch coverage, and
+  99.02% combined coverage. The configured gate is 99.00%.
 - `bash scripts/lint.sh`: all Ty checks passed.
-- Full pre-commit suite: Ruff, Ruff format, Ty, TOML, YAML, and repository hygiene checks passed.
-- Documentation example checks and the Zensical documentation build passed.
-- `cargo fmt --check`: passed.
-- `cargo test --workspace --exclude ormdantic-py`: passed.
-- `uv build`: source distribution and CPython 3.12 macOS ARM64 wheel built successfully; the wheel contains the complete optional playground package and its stylesheet.
+- Documentation example, navigation, image, diagram, and completeness-matrix
+  checks passed. The Zensical documentation build also passed.
+- `cargo test --workspace`: passed, including Rust documentation tests.
+- `uv build`: the source distribution and CPython 3.10 macOS ARM64 wheel built
+  successfully. The wheel contains the optional Playground package and stylesheet;
+  FastAPI and the other example-only dependencies remain in the `examples` extra.
+- The Todo Compose stack built a Linux ARM64 wheel, started PostgreSQL 17, applied
+  both PostgreSQL migrations, and reported a healthy API response. The containers
+  and network were removed afterward while the named demonstration volume was kept.
 
-The 76 Python skips are primarily live external-database tests without configured service URLs, including the new playground contracts for PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle. Rust external driver tests also return successfully when their environment URL is absent, so a local green run is not evidence that those servers were exercised. The CI coverage job does start the Docker database matrix and provides the corresponding URLs.
+The 79 Python skips are primarily external-database tests without configured service
+URLs, including Playground contracts for PostgreSQL, MySQL, MariaDB, SQL Server, and
+Oracle. The Todo PostgreSQL deployment was exercised through Compose, but the
+environment-gated pytest contract was not run against a host-exposed PostgreSQL URL.
+Rust external driver tests also return successfully when their environment URL is
+absent, so a local green run is not evidence that every external server was
+exercised. The CI coverage job starts the Docker database matrix and provides those
+URLs.
+
+## Reference application and documentation status
+
+The repository now has one production-shaped Todo reference application under
+`examples/todo_app/`. It uses FastAPI, SQLite for local development, PostgreSQL for
+the Compose deployment, separate checked migration chains for both dialects, stable
+domain errors, transactions, filtering, pagination, and health reporting.
+
+The progressive tutorial covers configuration, models, services, API routes,
+migrations, the Playground, deployment, testing, and troubleshooting. It uses
+tested source includes, five Mermaid diagrams, and real OpenAPI and Playground
+screenshots. The documentation matrix maps every exported top-level API group,
+migration CLI command, supported driver, and Playground workflow to a canonical
+page. Automated tests enforce that inventory and navigation.
 
 ## What is already strong
 

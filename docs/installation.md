@@ -38,6 +38,17 @@ ormdantic playground
 
 The extra installs Textual with syntax highlighting. Ordinary imports and `ormdantic migrations` commands do not require Textual. See [Explore schemas and migrations in the playground](playground/index.md) for setup and workflows.
 
+## Install the Todo tutorial dependencies
+
+The repository's FastAPI reference application uses a separate extra:
+
+```console
+uv sync --extra examples
+```
+
+This installs FastAPI, HTTPX, and Uvicorn without adding them to the core ORM
+dependency set. Continue with the [Todo tutorial setup](tutorial/setup.md).
+
 ## Requirements
 
 - Python 3.10 or newer

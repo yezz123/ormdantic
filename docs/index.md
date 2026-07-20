@@ -62,5 +62,5 @@ Ormdantic keeps the public API Pythonic and puts repeated runtime work in Rust.
 Ormdantic has two main reader paths:
 
 - **New to Ormdantic**: follow [Start here](learning-path.md), then [Installation](installation.md), then [First steps](quickstart.md)
-- **Already building an app**: read [Concepts](concepts/index.md) for the mental model, then use [How-to guides](examples/basic-crud.md) for task examples
+- **Already building an app**: read [Concepts](concepts/index.md) for the mental model, then build the [Todo reference application](tutorial/index.md)
 - **Designing production schemas**: read [Drivers](drivers/index.md), [Migrations and reflection](concepts/migrations-and-reflection.md), and the [API reference](api/reference.md)

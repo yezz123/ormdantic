@@ -145,4 +145,4 @@ You now saw the core Ormdantic loop:
 6. Use `db.session()` when several writes belong in one unit of work
 7. Use migrations before changing an existing production database
 
-Next, read [Database and tables](concepts/database-and-tables.md) if you want the mental model, or [Basic CRUD](examples/basic-crud.md) if you want a runnable script.
+Next, read [Database and tables](concepts/database-and-tables.md) for the mental model, or build the [Todo reference application](tutorial/index.md) for a complete runnable project.
