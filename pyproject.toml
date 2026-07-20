@@ -60,6 +60,7 @@ ormdantic = "ormdantic.cli:main"
 sqlite = []
 postgresql = []
 playground = ["textual[syntax]>=8.2,<9"]
+examples = ["fastapi>=0.116,<1", "httpx>=0.28,<1", "uvicorn[standard]>=0.35,<1"]
 
 [dependency-groups]
 testing = [
@@ -166,6 +167,7 @@ output-format = "concise"
 
 [tool.coverage.report]
 precision = 2
+fail_under = 99.00
 exclude_lines = [
   "pragma: no cover",
   "raise NotImplementedError",
@@ -176,7 +178,7 @@ exclude_lines = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "examples/todo_app/tests"]
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
