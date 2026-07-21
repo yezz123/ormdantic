@@ -1069,8 +1069,10 @@ benchmark = [
 ]
 dev = [
     { name = "cairosvg" },
+    { name = "fastapi" },
     { name = "griffe-typingdoc" },
     { name = "griffe-warnings-deprecated" },
+    { name = "httpx" },
     { name = "markdown-include-variants" },
     { name = "maturin" },
     { name = "mdx-include" },
@@ -1105,6 +1107,8 @@ linting = [
     { name = "ty" },
 ]
 testing = [
+    { name = "fastapi" },
+    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-benchmark" },
@@ -1138,8 +1142,10 @@ benchmark = [
 ]
 dev = [
     { name = "cairosvg", specifier = ">=2.8.2" },
+    { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "griffe-typingdoc", specifier = ">=0.3.0" },
     { name = "griffe-warnings-deprecated", specifier = ">=1.1.0" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "markdown-include-variants", specifier = ">=0.0.8" },
     { name = "maturin", specifier = ">=1,<2" },
     { name = "mdx-include", specifier = ">=1.4.1" },
@@ -1174,6 +1180,8 @@ linting = [
     { name = "ty", specifier = ">=0.0.56" },
 ]
 testing = [
+    { name = "fastapi", specifier = ">=0.116,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "pytest", specifier = "==8.2.2" },
     { name = "pytest-asyncio", specifier = "==0.23.7" },
     { name = "pytest-benchmark", specifier = ">=5.2.0" },

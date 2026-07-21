@@ -64,6 +64,8 @@ examples = ["fastapi>=0.116,<1", "httpx>=0.28,<1", "uvicorn[standard]>=0.35,<1"]
 
 [dependency-groups]
 testing = [
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
   "pytest==8.2.2",
   "pytest-asyncio==0.23.7",
   "pytest-cov>=6.2.0",
