@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1458" viewBox="0 0 1280 1458" role="img">
+<style>text{font-family:Inter,ui-sans-serif,system-ui,sans-serif}</style>
+<rect width="100%" height="100%" rx="20" fill="#0b1220"/>
+<text x="42" y="52" font-size="28" fill="#f8fafc" font-weight="700">Ormdantic pull request benchmark</text>
+<text x="42" y="86" font-size="15" fill="#94a3b8" font-weight="500">sqlite · ci · lower latency is better</text>
+<text x="42" y="119" font-size="17" fill="#5eead4" font-weight="700">Ormdantic vs SQLAlchemy 2.15x  ·  vs SQLModel 2.28x</text>
+<text x="42" y="170" font-size="14" fill="#e2e8f0" font-weight="600">schema create/drop (0)</text>
+<rect x="400" y="153" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="167" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 4.97 ms</text>
+<rect x="675" y="153" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="167" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 13.03 ms</text>
+<rect x="950" y="153" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="167" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 13.17 ms</text>
+<text x="42" y="193" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.09x</text>
+<text x="42" y="228" font-size="14" fill="#e2e8f0" font-weight="600">raw batch insert (10,000)</text>
+<rect x="400" y="211" width="11.05" height="18" rx="4" fill="#14b8a6"/>
+<text x="419.0454925580843" y="225" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 75.16 ms</text>
+<rect x="675" y="211" width="18.06" height="18" rx="4" fill="#64748b"/>
+<text x="701.0583601938423" y="225" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 122.88 ms</text>
+<rect x="950" y="211" width="17.62" height="18" rx="4" fill="#8b5cf6"/>
+<text x="975.6239462744003" y="225" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 119.93 ms</text>
+<text x="42" y="251" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.00x</text>
+<text x="42" y="286" font-size="14" fill="#e2e8f0" font-weight="600">orm insert models (10,000)</text>
+<rect x="400" y="269" width="35.96" height="18" rx="4" fill="#14b8a6"/>
+<text x="443.9605074701409" y="283" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 244.70 ms</text>
+<rect x="675" y="269" width="55.51" height="18" rx="4" fill="#64748b"/>
+<text x="738.5127867099886" y="283" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 377.75 ms</text>
+<rect x="950" y="269" width="88.34" height="18" rx="4" fill="#8b5cf6"/>
+<text x="1046.3364644012609" y="283" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 601.11 ms</text>
+<text x="42" y="309" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.06x</text>
+<text x="42" y="344" font-size="14" fill="#e2e8f0" font-weight="600">orm update filtered (10,000)</text>
+<rect x="400" y="327" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="341" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 4.33 ms</text>
+<rect x="675" y="327" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="341" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 4.99 ms</text>
+<rect x="950" y="327" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="341" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 4.92 ms</text>
+<text x="42" y="367" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.96x</text>
+<text x="42" y="402" font-size="14" fill="#e2e8f0" font-weight="600">orm upsert mixed (500)</text>
+<rect x="400" y="385" width="4.04" height="18" rx="4" fill="#14b8a6"/>
+<text x="412.0371201343868" y="399" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 27.47 ms</text>
+<rect x="675" y="385" width="141.90" height="18" rx="4" fill="#64748b"/>
+<text x="824.8972620353882" y="399" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 965.58 ms</text>
+<rect x="950" y="385" width="150.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="1108.0" y="399" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 1020.72 ms</text>
+<text x="42" y="425" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.01x</text>
+<text x="42" y="460" font-size="14" fill="#e2e8f0" font-weight="600">orm delete filtered (10,000)</text>
+<rect x="400" y="443" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="457" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 4.65 ms</text>
+<rect x="675" y="443" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="457" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 5.91 ms</text>
+<rect x="950" y="443" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="457" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 5.92 ms</text>
+<text x="42" y="483" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.98x</text>
+<text x="42" y="518" font-size="14" fill="#e2e8f0" font-weight="600">count all rows (10,000)</text>
+<rect x="400" y="501" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="515" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 0.39 ms</text>
+<rect x="675" y="501" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="515" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 1.29 ms</text>
+<rect x="950" y="501" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="515" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 1.29 ms</text>
+<text x="42" y="541" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.93x</text>
+<text x="42" y="576" font-size="14" fill="#e2e8f0" font-weight="600">count equality filter (10,000)</text>
+<rect x="400" y="559" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="573" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 0.42 ms</text>
+<rect x="675" y="559" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="573" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 1.56 ms</text>
+<rect x="950" y="559" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="573" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 1.55 ms</text>
+<text x="42" y="599" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.97x</text>
+<text x="42" y="634" font-size="14" fill="#e2e8f0" font-weight="600">count range filter (10,000)</text>
+<rect x="400" y="617" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="631" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 0.48 ms</text>
+<rect x="675" y="617" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="631" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 1.60 ms</text>
+<rect x="950" y="617" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="631" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 1.53 ms</text>
+<text x="42" y="657" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.91x</text>
+<text x="42" y="692" font-size="14" fill="#e2e8f0" font-weight="600">aggregate filtered rows (10,000)</text>
+<rect x="400" y="675" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="689" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 0.84 ms</text>
+<rect x="675" y="675" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="689" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 1.87 ms</text>
+<rect x="950" y="675" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="689" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 1.86 ms</text>
+<text x="42" y="715" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.97x</text>
+<text x="42" y="750" font-size="14" fill="#e2e8f0" font-weight="600">scalar projection read (10,000)</text>
+<rect x="400" y="733" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="747" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 1.50 ms</text>
+<rect x="675" y="733" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="747" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 3.13 ms</text>
+<rect x="950" y="733" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="747" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 3.15 ms</text>
+<text x="42" y="773" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.08x</text>
+<text x="42" y="808" font-size="14" fill="#e2e8f0" font-weight="600">batched primary-key lookup (500)</text>
+<rect x="400" y="791" width="16.48" height="18" rx="4" fill="#14b8a6"/>
+<text x="424.47720120407433" y="805" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 112.12 ms</text>
+<rect x="675" y="791" width="35.07" height="18" rx="4" fill="#64748b"/>
+<text x="718.0713948196722" y="805" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 238.65 ms</text>
+<rect x="950" y="791" width="38.20" height="18" rx="4" fill="#8b5cf6"/>
+<text x="996.2009240120569" y="805" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 259.95 ms</text>
+<text x="42" y="831" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.98x</text>
+<text x="42" y="866" font-size="14" fill="#e2e8f0" font-weight="600">paginated find_many (500)</text>
+<rect x="400" y="849" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="863" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 2.89 ms</text>
+<rect x="675" y="849" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="863" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 4.37 ms</text>
+<rect x="950" y="849" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="863" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 4.95 ms</text>
+<text x="42" y="889" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.91x</text>
+<text x="42" y="924" font-size="14" fill="#e2e8f0" font-weight="600">ordered find_many (500)</text>
+<rect x="400" y="907" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="921" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 3.61 ms</text>
+<rect x="675" y="907" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="921" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 5.41 ms</text>
+<rect x="950" y="907" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="921" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 5.95 ms</text>
+<text x="42" y="947" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.95x</text>
+<text x="42" y="982" font-size="14" fill="#e2e8f0" font-weight="600">hydrate flat rows (500)</text>
+<rect x="400" y="965" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="979" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 2.82 ms</text>
+<rect x="675" y="965" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="979" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 4.22 ms</text>
+<rect x="950" y="965" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="979" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 4.94 ms</text>
+<text x="42" y="1005" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.92x</text>
+<text x="42" y="1040" font-size="14" fill="#e2e8f0" font-weight="600">serialize simple payloads (500) · diagnostic</text>
+<rect x="400" y="1023" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="1037" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 0.73 ms</text>
+<rect x="675" y="1023" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="1037" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 0.62 ms</text>
+<rect x="950" y="1023" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="1037" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 1.40 ms</text>
+<text x="42" y="1063" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.99x</text>
+<text x="42" y="1098" font-size="14" fill="#e2e8f0" font-weight="600">serialize nested payloads (400) · diagnostic</text>
+<rect x="400" y="1081" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="1095" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 0.35 ms</text>
+<rect x="675" y="1081" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="1095" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 0.40 ms</text>
+<rect x="950" y="1081" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="1095" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 0.43 ms</text>
+<text x="42" y="1121" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.03x</text>
+<text x="42" y="1156" font-size="14" fill="#e2e8f0" font-weight="600">hydrate relationship results (400)</text>
+<rect x="400" y="1139" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="1153" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 7.05 ms</text>
+<rect x="675" y="1139" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="1153" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 7.22 ms</text>
+<rect x="950" y="1139" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="1153" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 7.79 ms</text>
+<text x="42" y="1179" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.99x</text>
+<text x="42" y="1214" font-size="14" fill="#e2e8f0" font-weight="600">one-to-many relationship loading (400)</text>
+<rect x="400" y="1197" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="1211" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 2.61 ms</text>
+<rect x="675" y="1197" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="1211" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 4.63 ms</text>
+<rect x="950" y="1197" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="1211" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 4.90 ms</text>
+<text x="42" y="1237" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.98x</text>
+<text x="42" y="1272" font-size="14" fill="#e2e8f0" font-weight="600">many-to-one relationship loading (400)</text>
+<rect x="400" y="1255" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="1269" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 2.67 ms</text>
+<rect x="675" y="1255" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="1269" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 4.14 ms</text>
+<rect x="950" y="1255" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="1269" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 4.42 ms</text>
+<text x="42" y="1295" font-size="12" fill="#94a3b8" font-weight="500">base/head 1.02x</text>
+<text x="42" y="1330" font-size="14" fill="#e2e8f0" font-weight="600">nested relationship loading (400)</text>
+<rect x="400" y="1313" width="2.00" height="18" rx="4" fill="#14b8a6"/>
+<text x="410.0" y="1327" font-size="12" fill="#14b8a6" font-weight="600">Ormdantic 5.95 ms</text>
+<rect x="675" y="1313" width="2.00" height="18" rx="4" fill="#64748b"/>
+<text x="685.0" y="1327" font-size="12" fill="#64748b" font-weight="600">SQLAlchemy 8.96 ms</text>
+<rect x="950" y="1313" width="2.00" height="18" rx="4" fill="#8b5cf6"/>
+<text x="960.0" y="1327" font-size="12" fill="#8b5cf6" font-weight="600">SQLModel 9.61 ms</text>
+<text x="42" y="1353" font-size="12" fill="#94a3b8" font-weight="500">base/head 0.99x</text>
+</svg>
