@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from click.utils import strip_ansi
 from typer.testing import CliRunner
 
 from ormdantic.cli import app
@@ -18,14 +19,18 @@ def test_root_help_lists_playground() -> None:
     assert "playground" in result.stdout
 
 
-def test_playground_help_describes_configuration_options() -> None:
+def test_playground_help_describes_configuration_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FORCE_COLOR", "1")
     result = runner.invoke(app, ["playground", "--help"])
+    output = strip_ansi(result.stdout)
 
     assert result.exit_code == 0
-    assert "--config" in result.stdout
-    assert "--environment" in result.stdout
-    assert "--target" in result.stdout
-    assert "--migrations-dir" in result.stdout
+    assert "--config" in output
+    assert "--environment" in output
+    assert "--target" in output
+    assert "--migrations-dir" in output
 
 
 def test_playground_command_forwards_cli_overrides(

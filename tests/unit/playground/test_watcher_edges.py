@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from ormdantic.playground.watcher import SchemaWatcher, WatchReason
 
 
@@ -79,6 +81,38 @@ def test_scan_skips_directories_ignored_paths_and_external_symlinks(
 
     debounced = watcher(tmp_path, clock, debounce=500)
     assert debounced._sleep_interval() == 0.1
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    (
+        "/absolute/*.py",
+        "C:/absolute/*.py",
+        "C:drive-relative/*.py",
+        "//server/share/*.py",
+    ),
+)
+def test_scan_skips_non_relative_patterns_on_every_platform(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pattern: str,
+) -> None:
+    def unexpected_glob(_root: Path, _pattern: str):
+        raise AssertionError("non-relative pattern reached Path.glob")
+
+    monkeypatch.setattr(Path, "glob", unexpected_glob)
+    instance = SchemaWatcher(
+        root=tmp_path,
+        patterns=(pattern,),
+        database_poll_seconds=1.0,
+        debounce_milliseconds=0,
+        clock=Clock(),
+    )
+
+    event = instance.poll()
+
+    assert event is not None
+    assert event.paths == ()
 
 
 async def test_run_sleeps_after_empty_poll_then_stops(

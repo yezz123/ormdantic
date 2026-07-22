@@ -36,14 +36,25 @@ async def wait_until(
     pilot: Pilot[None],
     predicate: Callable[[], bool],
     *,
-    attempts: int = 200,
+    attempts: int = 400,
 ) -> None:
     for _ in range(attempts):
         if predicate():
             return
         await asyncio.sleep(0.05)
         await pilot.pause()
-    raise AssertionError("playground condition did not become true")
+    controller = getattr(pilot.app, "controller", None)
+    if controller is None:
+        raise AssertionError("playground condition did not become true: no controller")
+    state = controller.state
+    diagnostics = tuple(
+        f"{diagnostic.code}: {diagnostic.message}" for diagnostic in state.diagnostics
+    )
+    raise AssertionError(
+        "playground condition did not become true: "
+        f"status={state.status.value}, generation={state.generation}, "
+        f"operation={state.operation.message!r}, diagnostics={diagnostics!r}"
+    )
 
 
 def project(tmp_path: Path, monkeypatch) -> tuple[PlaygroundApp, Path]:

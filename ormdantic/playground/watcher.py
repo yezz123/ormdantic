@@ -7,7 +7,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 class WatchReason(str, Enum):
@@ -157,8 +157,7 @@ class SchemaWatcher:
     def _scan(self) -> dict[Path, Fingerprint]:
         fingerprints: dict[Path, Fingerprint] = {}
         for pattern in self.patterns:
-            candidate_pattern = Path(pattern)
-            if candidate_pattern.is_absolute():
+            if _is_non_relative_pattern(pattern):
                 continue
             for candidate in self.root.glob(pattern):
                 try:
@@ -200,3 +199,7 @@ def _is_ignored(path: Path) -> bool:
     if any(part in {".git", ".venv", "__pycache__"} for part in parts):
         return True
     return len(parts) >= 2 and parts[0] == ".ormdantic" and parts[1] == "drafts"
+
+
+def _is_non_relative_pattern(pattern: str) -> bool:
+    return bool(PurePosixPath(pattern).anchor or PureWindowsPath(pattern).anchor)

@@ -304,6 +304,11 @@ async def test_environment_switch_and_database_name(tmp_path: Path) -> None:
         assert app.controller is not controller
         assert app._database_name() == "todo.db"
 
+        effective.environment.env_file.write_text(
+            "TEST_DATABASE_URL=sqlite:///C:\\Users\\runneradmin\\playground.sqlite3\n"
+        )
+        assert app._database_name() == "playground.sqlite3"
+
 
 async def test_action_dialog_opening_preflight_and_error_paths(
     tmp_path: Path,

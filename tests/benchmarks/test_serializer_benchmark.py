@@ -460,6 +460,8 @@ def test_runtime_crud_expression_benchmark(benchmark: Any) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         database_url = f"sqlite:///{tmp}/runtime.sqlite3"
         loop = asyncio.new_event_loop()
+        table: Any = None
+        model: Any = None
         try:
             table, model = loop.run_until_complete(_prepare_runtime_crud(database_url))
             result = benchmark(
@@ -468,6 +470,9 @@ def test_runtime_crud_expression_benchmark(benchmark: Any) -> None:
         finally:
             loop.run_until_complete(loop.shutdown_default_executor())
             loop.close()
+            # Release the Rust SQLite handle before Windows removes the directory.
+            table = None
+            model = None
 
     assert result == 15
 
@@ -539,6 +544,7 @@ def test_relationship_loader_strategy_benchmark(
     with tempfile.TemporaryDirectory() as tmp:
         database_url = f"sqlite:///{tmp}/relationship-loaders.sqlite3"
         loop = asyncio.new_event_loop()
+        table: Any = None
         try:
             table = loop.run_until_complete(
                 _prepare_relationship_load(
@@ -555,6 +561,8 @@ def test_relationship_loader_strategy_benchmark(
         finally:
             loop.run_until_complete(loop.shutdown_default_executor())
             loop.close()
+            # Release the Rust SQLite handle before Windows removes the directory.
+            table = None
 
     assert result == parent_count * children_per_parent
 
@@ -660,6 +668,7 @@ def test_nested_relationship_loader_strategy_benchmark(
     with tempfile.TemporaryDirectory() as tmp:
         database_url = f"sqlite:///{tmp}/nested-relationship-loaders.sqlite3"
         loop = asyncio.new_event_loop()
+        table: Any = None
         try:
             table = loop.run_until_complete(
                 _prepare_nested_relationship_load(
@@ -679,6 +688,8 @@ def test_nested_relationship_loader_strategy_benchmark(
         finally:
             loop.run_until_complete(loop.shutdown_default_executor())
             loop.close()
+            # Release the Rust SQLite handle before Windows removes the directory.
+            table = None
 
     assert result == parent_count * children_per_parent * leaves_per_child
 

@@ -390,10 +390,9 @@ class PlaygroundApp(App[None]):
             return "database"
         resolved = resolve_database_url(self.config.environment)
         parsed = urlsplit(resolved.value)
-        name = parsed.path.rstrip("/").rsplit("/", 1)[-1]
-        if name:
-            return name
-        return parsed.hostname or self.config.environment.name
+        path = parsed.path.rstrip("/\\").replace("\\", "/")
+        name = path.rsplit("/", 1)[-1]
+        return name or (parsed.hostname or self.config.environment.name)
 
     def _preflight_context(self, action: str) -> PreflightContext:
         controller = self.controller

@@ -80,11 +80,9 @@ def test_empty_environment_name_is_rejected() -> None:
 def test_optional_string_and_path_helpers_cover_empty_and_absolute_values(
     tmp_path: Path,
 ) -> None:
+    absolute_path = (tmp_path.parent / "schema").resolve()
     assert config._optional_nonempty_string(None, "value") is None
-    assert (
-        config._resolve_path(tmp_path, Path("/tmp/schema"))
-        == Path("/tmp/schema").resolve()
-    )
+    assert config._resolve_path(tmp_path, absolute_path) == absolute_path
     assert config._clean_value(None) is None
     assert config._clean_value("  ") is None
 
