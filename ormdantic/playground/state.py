@@ -39,6 +39,16 @@ class SchemaState:
     stale: bool = False
     diagnostics: tuple[Diagnostic, ...] = ()
 
+    @property
+    def ready_for_generation(self) -> bool:
+        """Whether a fresh, complete, non-empty migration plan is available."""
+        return (
+            not self.stale
+            and self.model_snapshot is not None
+            and self.live_snapshot is not None
+            and bool(self.forward_sql)
+        )
+
 
 @dataclass(frozen=True)
 class ArtifactSummary:

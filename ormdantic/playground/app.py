@@ -252,12 +252,7 @@ class PlaygroundApp(App[None]):
         if self.controller is None:
             return
         state = self.controller.state
-        if (
-            state.schema.stale
-            or state.schema.model_snapshot is None
-            or state.schema.live_snapshot is None
-            or not state.schema.forward_sql
-        ):
+        if not state.schema.ready_for_generation:
             self.notify(
                 "Refresh a non-empty schema drift before generating.",
                 severity="warning",

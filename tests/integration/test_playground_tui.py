@@ -10,7 +10,7 @@ from textual.widgets import Button, Checkbox, Input, Static, TextArea
 from ormdantic.playground.app import PlaygroundApp
 from ormdantic.playground.config import load_config
 from ormdantic.playground.screens.workflows import GenerateDialog
-from ormdantic.playground.state import PlaygroundState, RefreshStatus
+from ormdantic.playground.state import PlaygroundState
 from ormdantic.playground.widgets.action_dialog import ActionDialog
 
 MODEL_WITH_USERS = """\
@@ -147,8 +147,7 @@ async def test_sqlite_tui_generate_edit_apply_watch_drop_and_rollback(
             pilot,
             lambda: (
                 app.controller is not None
-                and app.controller.state.status is RefreshStatus.HEALTHY
-                and bool(app.controller.state.schema.forward_sql)
+                and app.controller.state.schema.ready_for_generation
             ),
         )
 
@@ -185,7 +184,7 @@ async def test_sqlite_tui_generate_edit_apply_watch_drop_and_rollback(
             lambda: (
                 app.controller is not None
                 and app.controller.state.generation > previous_generation
-                and bool(app.controller.state.schema.forward_sql)
+                and app.controller.state.schema.ready_for_generation
             ),
         )
 

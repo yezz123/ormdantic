@@ -98,6 +98,21 @@ def test_older_refresh_generation_is_ignored() -> None:
     assert accept_refresh(initial, result) is initial
 
 
+def test_generation_readiness_survives_a_background_refresh() -> None:
+    snapshot = SchemaSnapshot.empty()
+    state = PlaygroundState(
+        environment="development",
+        status=RefreshStatus.RUNNING,
+        schema=SchemaState(
+            model_snapshot=snapshot,
+            live_snapshot=snapshot,
+            forward_sql=("CREATE TABLE users (id INTEGER)",),
+        ),
+    )
+
+    assert state.schema.ready_for_generation is True
+
+
 def test_playground_state_repr_never_contains_a_database_url() -> None:
     state = PlaygroundState(
         environment="development",
