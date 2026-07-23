@@ -19,11 +19,8 @@ Start here if you are new to Ormdantic or new to object-relational mappers (ORMs
 6. Read [Querying](concepts/querying.md) for `find_one`, `find_many`, filters, expressions, counts, and result objects.
 7. Read [Relationships](concepts/relationships.md) and [Loading Strategies](concepts/loading-strategies.md) before modeling related data.
 
-Then use these task guides:
-
-- [Basic CRUD](examples/basic-crud.md)
-- [Relationships](examples/relationships.md)
-- [Transactions and sessions](examples/transactions-sessions.md)
+Then build the [Todo reference application](tutorial/index.md). It combines CRUD,
+relationships, transactions, migrations, testing, and deployment in one project.
 
 ## If your app has more than one table
 
@@ -35,11 +32,8 @@ Read these when your application has relationships, transactions, database chang
 4. [Native Engine](concepts/native-engine.md) explains the Rust runtime boundary.
 5. [Performance](performance.md) explains where the runtime helps and where query design still matters.
 
-Use these guides:
-
-- [Query expressions](examples/query-expressions.md)
-- [Migrations and reflection](examples/migrations-reflection.md)
-- [Enterprise dialects](examples/enterprise-dialects.md)
+Use the tutorial chapters on [typed queries](tutorial/crud-and-queries.md),
+[migrations](tutorial/migrations.md), and [PostgreSQL](tutorial/postgresql.md).
 
 ## If you are designing production schema
 

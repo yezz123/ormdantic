@@ -22,6 +22,8 @@ plan = db.migrations.generate_plan(before=live, after=target)
 
 A diff describes changes. A plan contains SQL operations and rollback operations where available.
 
+The optional [playground](../playground/index.md) runs this comparison continuously. It renders model and live snapshots, structured drift, generated SQL, and diagnostic state without importing project models into the TUI process.
+
 ## Preview SQL with a dry run
 
 ```python
@@ -106,6 +108,14 @@ await db.migrations.history()
 await db.migrations.repair(clear_dirty=True)
 ```
 
+Check whether history exists without creating its table:
+
+```python
+exists = await db.migrations.history_table_exists()
+```
+
+The playground uses this non-mutating check during reflection. Opening the playground against a new database does not initialize migration history.
+
 ## Inspect a live database
 
 `db.inspect()` returns an async inspector:
@@ -119,3 +129,5 @@ foreign_keys = await inspector.foreign_keys("flavor")
 ```
 
 Reflection is also used by migrations to compare live database state against registered model metadata.
+
+See [Run migration workflows in the playground](../playground/migration-workflows.md) for guarded generation, apply, rollback, repair, and squash flows.

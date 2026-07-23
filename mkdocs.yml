@@ -139,6 +139,16 @@ nav:
       - Philosophy: philosophy.md
       - Installation: installation.md
       - First Steps: quickstart.md
+  - Tutorial:
+      - Todo Application: tutorial/index.md
+      - Setup: tutorial/setup.md
+      - Configuration: tutorial/configuration.md
+      - Models: tutorial/models.md
+      - CRUD and Queries: tutorial/crud-and-queries.md
+      - Migrations: tutorial/migrations.md
+      - PostgreSQL: tutorial/postgresql.md
+      - Testing: tutorial/testing.md
+      - Production Checklist: tutorial/production-checklist.md
   - Concepts:
       - Overview: concepts/index.md
       - Database and Tables: concepts/database-and-tables.md
@@ -150,6 +160,14 @@ nav:
       - Migrations and Reflection: concepts/migrations-and-reflection.md
       - Events: concepts/events.md
       - Native Engine: concepts/native-engine.md
+  - Playground:
+      - Start the Playground: playground/index.md
+      - Configure the Playground: playground/configuration.md
+      - Watch Schemas: playground/schema-watching.md
+      - Run Migration Workflows: playground/migration-workflows.md
+      - Edit TOML and SQL: playground/editor.md
+      - Migration Safeguards: playground/safety.md
+      - Troubleshoot the Playground: playground/troubleshooting.md
   - Drivers:
       - Overview: drivers/index.md
       - SQLite: drivers/sqlite.md
@@ -159,13 +177,7 @@ nav:
       - SQL Server: drivers/mssql.md
       - Oracle: drivers/oracle.md
   - How-to Guides:
-      - Existing Databases: examples/existing-databases.md
-      - Basic CRUD: examples/basic-crud.md
-      - Relationships: examples/relationships.md
-      - Transactions and Sessions: examples/transactions-sessions.md
-      - Query Expressions: examples/query-expressions.md
-      - Migrations and Reflection: examples/migrations-reflection.md
-      - Enterprise Dialects: examples/enterprise-dialects.md
+      - Existing Databases: how-to/existing-databases.md
       - Troubleshooting: troubleshooting.md
       - Performance: performance.md
       - SQLAlchemy Comparison: comparisons/sqlalchemy.md
@@ -179,6 +191,7 @@ nav:
       - Relationship Loaders: api/loaders.md
       - Sessions: api/session.md
       - Migrations: api/migrations.md
+      - Playground: api/playground.md
       - Reflection: api/reflection.md
       - Events: api/events.md
       - Native Engine: api/engine.md
@@ -189,6 +202,7 @@ nav:
   - Development:
       - Contributing: development/contributing.md
       - Local Development: development/local-development.md
+      - Documentation Matrix: development/documentation-matrix.md
       - Releasing: development/releasing.md
       - Rust Core: architecture/rust-core.md
       - Dialect Support: architecture/dialect-support.md

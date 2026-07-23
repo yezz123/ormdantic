@@ -7,6 +7,6 @@ scaffolding.
 
 ::: ormdantic.reflection.Inspector
 
-For an onboarding walkthrough, see [Existing Databases](../examples/existing-databases.md).
+For an onboarding walkthrough, see [Work with an existing database](../how-to/existing-databases.md).
 For direct migration workflows, use `db.migrations.live_snapshot()` and
 `db.migrations.autogenerate()`.

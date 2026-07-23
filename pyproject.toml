@@ -59,9 +59,13 @@ ormdantic = "ormdantic.cli:main"
 [project.optional-dependencies]
 sqlite = []
 postgresql = []
+playground = ["textual[syntax]>=8.2,<9"]
+examples = ["fastapi>=0.116,<1", "httpx>=0.28,<1", "uvicorn[standard]>=0.35,<1"]
 
 [dependency-groups]
 testing = [
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
   "pytest==8.2.2",
   "pytest-asyncio==0.23.7",
   "pytest-cov>=6.2.0",
@@ -69,6 +73,7 @@ testing = [
   "pytest-pretty",
   "pytest-benchmark>=5.2.0",
   "pytest-codspeed>=5.0.3",
+  "textual[syntax]>=8.2,<9",
 ]
 linting = ["pre-commit>=4.6.0", "ty>=0.0.56"]
 docs = [
@@ -164,6 +169,7 @@ output-format = "concise"
 
 [tool.coverage.report]
 precision = 2
+fail_under = 99.00
 exclude_lines = [
   "pragma: no cover",
   "raise NotImplementedError",
@@ -174,7 +180,7 @@ exclude_lines = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "examples/todo_app/tests"]
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"

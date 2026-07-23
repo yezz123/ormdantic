@@ -55,7 +55,7 @@ from ormdantic import TableColumn
 
 @db.table(
     pk="id",
-    columns={
+    column_options={
         "supplier": TableColumn(
             foreign_key_name="flavor_supplier_fk",
             on_delete="cascade",

@@ -30,7 +30,7 @@ from ormdantic import TableColumn, TableIndex, TableUnique
 
 @db.table(
     pk="id",
-    columns={"id": TableColumn(identity=True)},
+    column_options={"id": TableColumn(identity=True)},
     indexes=[TableIndex(name="flavor_name_idx", columns=["name"])],
     unique_constraints=[TableUnique(name="flavor_name_unique", columns=["name"])],
 )

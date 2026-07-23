@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -79,6 +81,40 @@ from ormdantic.errors import OrmdanticError
 
 app = typer.Typer(help="Ormdantic command line tools.", no_args_is_help=True)
 app.add_typer(migrations_app, name="migrations")
+
+
+@app.command("playground")
+def playground_command(
+    config_path: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to ormdantic.toml."),
+    ] = None,
+    environment: Annotated[
+        str | None,
+        typer.Option(
+            "--environment",
+            "-e",
+            help="Named environment from ormdantic.toml.",
+        ),
+    ] = None,
+    target: Annotated[
+        str | None,
+        typer.Option("--target", help="Import path such as package.module:db."),
+    ] = None,
+    migrations_dir: Annotated[
+        Path | None,
+        typer.Option("--migrations-dir", help="Migration artifact directory."),
+    ] = None,
+) -> None:
+    """Open the interactive schema and migration playground."""
+    from ormdantic.playground.launcher import run_playground
+
+    run_playground(
+        config_path=config_path,
+        environment=environment,
+        target=target,
+        migrations_dir=migrations_dir,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

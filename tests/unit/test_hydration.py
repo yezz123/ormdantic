@@ -181,6 +181,31 @@ def test_serializer_uses_flat_hydration_path_for_array_results() -> None:
     ]
 
 
+def test_serializer_flat_path_deduplicates_and_literal_annotation_is_safe() -> None:
+    table = flavor_table()
+    flavor_id = str(uuid4())
+    result = FakeResult(
+        [
+            "hydrated_flavors\\id",
+            "hydrated_flavors\\name",
+            "hydrated_flavors\\strength",
+        ],
+        [(flavor_id, "first", 1), (flavor_id, "duplicate", 2)],
+    )
+
+    hydrated = OrmSerializer[list[HydratedFlavor]](
+        table_data=table,
+        table_map=Map(name_to_data={table.tablename: table}, model_to_data={}),
+        result_set=result,
+        is_array=True,
+        depth=0,
+    ).deserialize()
+
+    assert [item.name for item in hydrated] == ["first"]
+    assert OrmSerializer._requires_preparation(LiteralHydratedNote, "kind") is False
+    assert serializer_for_notes()._prep_flat_result({"id": 1}) == {"id": 1}
+
+
 def test_serializer_schema_path_and_identity_edge_branches() -> None:
     table = note_table(
         relationships={

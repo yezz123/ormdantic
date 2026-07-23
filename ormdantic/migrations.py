@@ -797,6 +797,11 @@ class MigrationManager:
         connection = self._native_connection()
         _ensure_migration_history_table(connection, self._dialect())
 
+    async def history_table_exists(self) -> bool:
+        """Return whether migration history exists without creating it."""
+        connection = self._native_connection()
+        return _migration_history_table_exists(connection, self._dialect())
+
     async def applied_revisions(self) -> list[str]:
         """Return applied migration revisions ordered by apply time."""
         return [
