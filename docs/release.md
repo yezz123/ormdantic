@@ -4,6 +4,7 @@
 
 ### Features
 
+* ✨ Enhance Playground features with UI widgets, tests, and documentation. PR [#276](https://github.com/yezz123/ormdantic/pull/276) by [@yezz123](https://github.com/yezz123).
 - ♻️ Enhance ORM functionality & optimize benchmarking. PR [#275](https://github.com/yezz123/ormdantic/pull/275) by [@yezz123](https://github.com/yezz123).
 - ✨ Implement backend resolution & benchmark charts. PR [#272](https://github.com/yezz123/ormdantic/pull/272) by [@yezz123](https://github.com/yezz123).
 
