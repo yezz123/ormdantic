@@ -10,6 +10,7 @@
 
 ### Upgrades
 
+* ⬆ Bump the python-packages group with 5 updates. PR [#279](https://github.com/yezz123/ormdantic/pull/279) by [@dependabot[bot]](https://github.com/apps/dependabot).
 * ⬆ Bump pre-commit app's configurations . PR [#277](https://github.com/yezz123/ormdantic/pull/277) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 - ⬆ Bump pre-commit app's configurations. PR [#273](https://github.com/yezz123/ormdantic/pull/273) by [@pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci).
 
