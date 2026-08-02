@@ -67,12 +67,12 @@ async def main() -> None:
 
 Start with the documentation when you are new:
 
-- `[Quick Start](https://ormdantic.yezz.me/quickstart/)` walks through the first model, first table, first query, first session, and first migration preview.
-- `[learning Path](https://ormdantic.yezz.me/learning-path)` tells new and advanced readers where to start.
-- `[Concepts](https://ormdantic.yezz.me/concepts/)` explains tables, fields, relationships, querying, loading, sessions, migrations, events, and the native engine.
-- `[Supported Drivers](https://ormdantic.yezz.me/drivers/)` explains SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle behavior.
-- `[Examples](https://ormdantic.yezz.me/examples/existing-databases/)` contains task-focused how-to guides.
-- `[API Documentation](https://ormdantic.yezz.me/api/reference/)` documents the Python API with generated references and usage notes.
+- [Quick Start](https://ormdantic.yezz.me/quickstart/) walks through the first model, first table, first query, first session, and first migration preview.
+- [learning Path](https://ormdantic.yezz.me/learning-path) tells new and advanced readers where to start.
+- [Concepts](https://ormdantic.yezz.me/concepts/) explains tables, fields, relationships, querying, loading, sessions, migrations, events, and the native engine.
+- [Supported Drivers](https://ormdantic.yezz.me/drivers/) explains SQLite, PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle behavior.
+- [Examples](https://ormdantic.yezz.me/examples/existing-databases/) contains task-focused how-to guides.
+- [API Documentation](https://ormdantic.yezz.me/api/reference/) documents the Python API with generated references and usage notes.
 
 ## Migration CLI
 
