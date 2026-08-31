@@ -40,7 +40,9 @@ db = Ormdantic("sqlite:///app.sqlite3", debug=True)
 
 
 def record_query(**event) -> None:
-    metrics.timing("db.query", event["duration_ms"], tags={"table": event["table_name"]})
+    metrics.timing(
+        "db.query", event["duration_ms"], tags={"table": event["table_name"]}
+    )
 
 
 db.on_query(record_query)
