@@ -1,0 +1,2144 @@
+{
+  "schema_version": 2,
+  "metadata": {
+    "generated_at": "2026-09-01T07:56:48.767753+00:00",
+    "git_commit": "178d6fa2c811fd2218288ce2d680545a4a2bfd3f",
+    "git_dirty": false,
+    "python": "3.12.14",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "cpu_count": 4,
+    "ormdantic_version": "2.0.1",
+    "dependency_versions": {
+      "ormdantic": "2.0.1",
+      "sqlalchemy": "2.0.51",
+      "sqlmodel": "0.0.39",
+      "pydantic": "2.13.4"
+    },
+    "runtime_capabilities": {
+      "sqlite": true,
+      "postgresql": true,
+      "mysql": true,
+      "mariadb": true,
+      "mssql": true,
+      "oracle": true
+    },
+    "native_build_mode": "release",
+    "runner": "benchmark.runner",
+    "runner_version": "cross-db-v2",
+    "backend": "sqlite",
+    "server_version": "SQLite file database",
+    "database_url": "sqlite:///:benchmark:",
+    "docker_image": null,
+    "profile": "ci",
+    "materialized": true,
+    "planner_scale": false,
+    "timing_order": "rotating-per-round",
+    "methodology": [
+      "Setup and seed work are measured separately from operation latency.",
+      "Validation runs after each timed operation and before cleanup.",
+      "Server database cleanup drops only benchmark-owned tables.",
+      "Billion planner-scale artifacts must not be merged into materialized latency charts."
+    ]
+  },
+  "config": {
+    "backend": "sqlite",
+    "profile": "ci",
+    "rows": 10000,
+    "write_rows": 10000,
+    "lookup_count": 500,
+    "iterations": 7,
+    "warmups": 2,
+    "batch_size": 500,
+    "category": "cat-3",
+    "materialized": true,
+    "planner_scale": false,
+    "cases": null,
+    "orms": [
+      "ormdantic",
+      "sqlalchemy",
+      "sqlmodel"
+    ]
+  },
+  "measurements": [
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "ormdantic",
+      "median_ms": 6.041844,
+      "samples_ms": [
+        6.860881,
+        6.801023,
+        6.037818,
+        6.041844,
+        5.469361,
+        6.896133,
+        5.640874
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 14.969182,
+      "mad_ms": 0.5724830000000001,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "sqlalchemy",
+      "median_ms": 15.661993,
+      "samples_ms": [
+        18.04186,
+        17.128103,
+        16.33176,
+        14.866961,
+        15.661993,
+        15.656595,
+        15.133043
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 3.737138,
+      "mad_ms": 0.6697669999999984,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "schema create/drop",
+      "rows": 0,
+      "orm": "sqlmodel",
+      "median_ms": 15.910924,
+      "samples_ms": [
+        17.705955,
+        16.466378,
+        15.681341,
+        20.095316,
+        15.696674,
+        14.917305,
+        15.910924
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 3.732655,
+      "mad_ms": 0.5554539999999992,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 0,
+        "actual": 0
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 78.003482,
+      "samples_ms": [
+        77.871577,
+        77.575982,
+        78.648922,
+        78.149623,
+        77.635555,
+        78.003482,
+        78.426485
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 19.713969,
+      "mad_ms": 0.3679270000000088,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 126.620713,
+      "samples_ms": [
+        124.400101,
+        126.466707,
+        126.620713,
+        151.430275,
+        128.993502,
+        126.349445,
+        126.871348
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 18.745218,
+      "mad_ms": 0.27126799999999207,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "raw batch insert",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 125.993331,
+      "samples_ms": [
+        123.415329,
+        126.952673,
+        125.646788,
+        125.993331,
+        124.796754,
+        127.379566,
+        126.913465
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 18.851924,
+      "mad_ms": 0.9593420000000066,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 255.585729,
+      "samples_ms": [
+        248.1063,
+        256.293791,
+        258.043938,
+        256.930269,
+        255.585729,
+        244.190125,
+        248.120636
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 19.873151,
+      "mad_ms": 2.458209000000039,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 403.230803,
+      "samples_ms": [
+        401.983906,
+        397.403964,
+        406.1786,
+        420.53767,
+        403.230803,
+        392.31416,
+        424.474687
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 18.987864,
+      "mad_ms": 5.826839000000007,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "orm insert models",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 597.082692,
+      "samples_ms": [
+        619.605041,
+        622.792731,
+        589.483773,
+        633.651921,
+        597.082692,
+        568.213174,
+        583.997955
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 19.100861,
+      "mad_ms": 22.522349000000077,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 5.762676,
+      "samples_ms": [
+        6.034938,
+        5.229981,
+        5.346963,
+        5.771228,
+        5.557233,
+        5.824957,
+        5.762676
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 98.063294,
+      "mad_ms": 0.20544299999999982,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 6.28061,
+      "samples_ms": [
+        6.061848,
+        6.247416,
+        6.283194,
+        6.243225,
+        6.28061,
+        6.41616,
+        6.799761
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.066766,
+      "mad_ms": 0.037385000000000446,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm update filtered",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 6.388419,
+      "samples_ms": [
+        6.476789,
+        7.332772,
+        6.193772,
+        6.388419,
+        6.298216,
+        6.225138,
+        6.437741
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.105499,
+      "mad_ms": 0.09020299999999981,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 500,
+      "orm": "ormdantic",
+      "median_ms": 29.844913,
+      "samples_ms": [
+        30.297738,
+        29.330434,
+        29.844913,
+        29.075428,
+        29.395191,
+        29.920706,
+        30.285073
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 97.487536,
+      "mad_ms": 0.44972199999999773,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 500,
+      "orm": "sqlalchemy",
+      "median_ms": 930.973317,
+      "samples_ms": [
+        1031.263278,
+        956.812146,
+        915.418405,
+        986.667392,
+        918.206363,
+        930.973317,
+        924.376971
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.155815,
+      "mad_ms": 15.554911999999945,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "orm upsert mixed",
+      "rows": 500,
+      "orm": "sqlmodel",
+      "median_ms": 993.716079,
+      "samples_ms": [
+        993.716079,
+        998.664536,
+        1019.505082,
+        967.738004,
+        1070.717552,
+        970.700433,
+        989.735544
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 147.4044,
+      "mad_ms": 23.01564600000006,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 6.165961,
+      "samples_ms": [
+        6.121816,
+        6.376651,
+        6.844662,
+        6.036219,
+        6.047687,
+        6.214482,
+        6.165961
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 97.211458,
+      "mad_ms": 0.11827400000000043,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 9000,
+        "actual": 9000
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 7.669727,
+      "samples_ms": [
+        7.837735,
+        7.622418,
+        7.46766,
+        7.700323,
+        7.768143,
+        7.515631,
+        7.669727
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 142.766994,
+      "mad_ms": 0.09841600000000028,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 9000,
+        "actual": 9000
+      }
+    },
+    {
+      "case": "orm delete filtered",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 7.765059,
+      "samples_ms": [
+        7.750717,
+        7.696488,
+        7.573195,
+        7.981898,
+        7.765059,
+        7.815973,
+        7.815543
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 142.796432,
+      "mad_ms": 0.05091399999999968,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 9000,
+        "actual": 9000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 0.460398,
+      "samples_ms": [
+        0.460398,
+        0.483292,
+        0.443925,
+        0.437245,
+        0.428201,
+        0.511584,
+        0.477173
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 98.557388,
+      "mad_ms": 0.022894000000000025,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.466422,
+      "samples_ms": [
+        1.439132,
+        1.426003,
+        1.428216,
+        1.466422,
+        1.472721,
+        1.49263,
+        1.558057
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 144.708841,
+      "mad_ms": 0.027289999999999814,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "count all rows",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 1.477268,
+      "samples_ms": [
+        1.477268,
+        1.487002,
+        1.557246,
+        1.390581,
+        1.453794,
+        1.468705,
+        1.481684
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 143.897175,
+      "mad_ms": 0.00973399999999991,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 10000,
+        "actual": 10000
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 0.492006,
+      "samples_ms": [
+        0.483163,
+        0.495831,
+        0.498505,
+        0.446309,
+        0.492006,
+        0.496021,
+        0.471665
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 97.178293,
+      "mad_ms": 0.006498999999999977,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.693827,
+      "samples_ms": [
+        1.800655,
+        1.727487,
+        1.657194,
+        1.723551,
+        1.68879,
+        1.687659,
+        1.693827
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 144.099762,
+      "mad_ms": 0.029724000000000084,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count equality filter",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 1.79694,
+      "samples_ms": [
+        1.859832,
+        1.712495,
+        1.843237,
+        2.222877,
+        1.79694,
+        1.711914,
+        1.684174
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 143.706947,
+      "mad_ms": 0.08444499999999988,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 0.56312,
+      "samples_ms": [
+        0.56312,
+        0.526076,
+        0.594466,
+        0.562629,
+        0.579204,
+        0.537212,
+        0.565574
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 98.131875,
+      "mad_ms": 0.016084000000000098,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 5000,
+        "actual": 5000
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 1.801686,
+      "samples_ms": [
+        1.801686,
+        1.69512,
+        1.85136,
+        1.836899,
+        1.734958,
+        1.710752,
+        1.886181
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 146.582152,
+      "mad_ms": 0.0667279999999999,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 5000,
+        "actual": 5000
+      }
+    },
+    {
+      "case": "count range filter",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 1.763851,
+      "samples_ms": [
+        1.942725,
+        1.711254,
+        1.763851,
+        1.971768,
+        1.732444,
+        1.746685,
+        1.793344
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 144.210766,
+      "mad_ms": 0.03140699999999996,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 5000,
+        "actual": 5000
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 1.012422,
+      "samples_ms": [
+        1.008017,
+        1.012422,
+        1.045201,
+        0.993004,
+        0.970701,
+        1.012513,
+        1.028777
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 98.650931,
+      "mad_ms": 0.01635500000000012,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 2.351948,
+      "samples_ms": [
+        2.409894,
+        2.38725,
+        2.411676,
+        2.351948,
+        2.276056,
+        2.277368,
+        2.248074
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 146.217594,
+      "mad_ms": 0.05972799999999978,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "aggregate filtered rows",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 2.310636,
+      "samples_ms": [
+        2.442361,
+        2.393689,
+        2.310636,
+        2.472616,
+        2.206403,
+        2.276357,
+        2.276106
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 147.403382,
+      "mad_ms": 0.08305300000000004,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 10000,
+      "orm": "ormdantic",
+      "median_ms": 1.73641,
+      "samples_ms": [
+        1.696601,
+        1.968222,
+        1.73641,
+        1.78371,
+        1.991967,
+        1.72957,
+        1.688609
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 98.041262,
+      "mad_ms": 0.0472999999999999,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 10000,
+      "orm": "sqlalchemy",
+      "median_ms": 3.588,
+      "samples_ms": [
+        3.537556,
+        3.769949,
+        3.588,
+        3.612236,
+        3.534681,
+        3.755457,
+        3.485779
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.658549,
+      "mad_ms": 0.053319000000000116,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "scalar projection read",
+      "rows": 10000,
+      "orm": "sqlmodel",
+      "median_ms": 3.557315,
+      "samples_ms": [
+        3.62191,
+        3.68937,
+        3.466701,
+        3.534201,
+        3.564545,
+        3.557315,
+        3.537506
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 144.643362,
+      "mad_ms": 0.02311400000000008,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 1000,
+        "actual": 1000
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 500,
+      "orm": "ormdantic",
+      "median_ms": 114.969968,
+      "samples_ms": [
+        120.452296,
+        118.719692,
+        110.723522,
+        110.282472,
+        114.271687,
+        114.969968,
+        116.758009
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 97.909358,
+      "mad_ms": 3.7497240000000005,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 500,
+      "orm": "sqlalchemy",
+      "median_ms": 246.874748,
+      "samples_ms": [
+        274.608294,
+        262.447219,
+        241.53463,
+        246.874748,
+        243.995894,
+        272.307572,
+        243.66431
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.446671,
+      "mad_ms": 5.340118000000018,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "batched primary-key lookup",
+      "rows": 500,
+      "orm": "sqlmodel",
+      "median_ms": 250.371719,
+      "samples_ms": [
+        244.178178,
+        250.371719,
+        245.938353,
+        257.386056,
+        286.061621,
+        266.606481,
+        249.938756
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.887873,
+      "mad_ms": 6.19354100000001,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 500,
+      "orm": "ormdantic",
+      "median_ms": 2.907276,
+      "samples_ms": [
+        3.060152,
+        2.833698,
+        2.907276,
+        2.869951,
+        2.873968,
+        2.973885,
+        2.912916
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 99.156744,
+      "mad_ms": 0.03732500000000005,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 500,
+      "orm": "sqlalchemy",
+      "median_ms": 4.674112,
+      "samples_ms": [
+        4.750175,
+        4.674112,
+        4.510932,
+        4.733369,
+        4.656116,
+        4.682124,
+        4.637067
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 142.303709,
+      "mad_ms": 0.037044999999999995,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "paginated find_many",
+      "rows": 500,
+      "orm": "sqlmodel",
+      "median_ms": 5.386592,
+      "samples_ms": [
+        5.386592,
+        31.405908,
+        5.446591,
+        5.200188,
+        5.295709,
+        5.270742,
+        5.39175
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 143.027317,
+      "mad_ms": 0.09088299999999983,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 500,
+      "orm": "ormdantic",
+      "median_ms": 3.857428,
+      "samples_ms": [
+        3.823938,
+        4.019517,
+        3.788416,
+        3.857428,
+        3.849056,
+        3.915894,
+        3.874393
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 98.380764,
+      "mad_ms": 0.03349000000000002,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 500,
+      "orm": "sqlalchemy",
+      "median_ms": 5.925888,
+      "samples_ms": [
+        5.620287,
+        30.706457,
+        5.925888,
+        6.020578,
+        5.694496,
+        5.550334,
+        30.174433
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 144.486027,
+      "mad_ms": 0.30560099999999935,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "ordered find_many",
+      "rows": 500,
+      "orm": "sqlmodel",
+      "median_ms": 6.358706,
+      "samples_ms": [
+        6.383072,
+        6.6466,
+        6.690365,
+        6.292669,
+        6.243817,
+        6.353258,
+        6.358706
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 144.904074,
+      "mad_ms": 0.06603699999999968,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 500,
+      "orm": "ormdantic",
+      "median_ms": 2.934046,
+      "samples_ms": [
+        2.853217,
+        2.984771,
+        2.934046,
+        2.908008,
+        3.184595,
+        2.911262,
+        3.198095
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 97.594005,
+      "mad_ms": 0.05072499999999991,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 500,
+      "orm": "sqlalchemy",
+      "median_ms": 4.611509,
+      "samples_ms": [
+        4.582387,
+        4.552772,
+        4.611509,
+        4.551791,
+        4.819826,
+        4.835149,
+        4.8834
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 146.236424,
+      "mad_ms": 0.05971800000000016,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "hydrate flat rows",
+      "rows": 500,
+      "orm": "sqlmodel",
+      "median_ms": 5.626196,
+      "samples_ms": [
+        5.628318,
+        5.182882,
+        5.710259,
+        5.338711,
+        5.631563,
+        5.626196,
+        5.33764
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 145.201768,
+      "mad_ms": 0.08406299999999955,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 500,
+      "orm": "ormdantic",
+      "median_ms": 0.764438,
+      "samples_ms": [
+        0.767963,
+        1.029238,
+        0.757807,
+        0.764438,
+        0.748734,
+        0.774642,
+        0.754783
+      ],
+      "comparable": false,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 6.978188,
+      "mad_ms": 0.00965499999999997,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 500,
+      "orm": "sqlalchemy",
+      "median_ms": 0.656388,
+      "samples_ms": [
+        0.687063,
+        0.652252,
+        0.635657,
+        0.656388,
+        0.668306,
+        0.644891,
+        0.662197
+      ],
+      "comparable": false,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 4.990758,
+      "mad_ms": 0.01149699999999998,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "serialize simple payloads",
+      "rows": 500,
+      "orm": "sqlmodel",
+      "median_ms": 1.558968,
+      "samples_ms": [
+        1.597976,
+        1.558968,
+        1.537868,
+        1.567231,
+        1.549254,
+        1.528194,
+        31.147805
+      ],
+      "comparable": false,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 13.219391,
+      "mad_ms": 0.021099999999999897,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 500,
+        "actual": 500
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 400,
+      "orm": "ormdantic",
+      "median_ms": 0.403455,
+      "samples_ms": [
+        0.39976,
+        0.347673,
+        0.354203,
+        0.403455,
+        0.416975,
+        0.433779,
+        0.412137
+      ],
+      "comparable": false,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 7.126938,
+      "mad_ms": 0.013519999999999976,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 400,
+      "orm": "sqlalchemy",
+      "median_ms": 0.411917,
+      "samples_ms": [
+        0.43454,
+        0.37345,
+        0.411917,
+        0.349946,
+        0.491174,
+        1.331072,
+        0.351529
+      ],
+      "comparable": false,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 6.688912,
+      "mad_ms": 0.060388,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "serialize nested payloads",
+      "rows": 400,
+      "orm": "sqlmodel",
+      "median_ms": 0.435502,
+      "samples_ms": [
+        1.334998,
+        0.407121,
+        0.424696,
+        0.410315,
+        0.435502,
+        0.489252,
+        0.482672
+      ],
+      "comparable": false,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 13.370443,
+      "mad_ms": 0.02838099999999999,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 400,
+      "orm": "ormdantic",
+      "median_ms": 7.727905,
+      "samples_ms": [
+        7.653184,
+        7.632853,
+        7.793401,
+        7.727905,
+        7.773752,
+        7.663601,
+        8.169337
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 409.246502,
+      "mad_ms": 0.06549600000000044,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 400,
+      "orm": "sqlalchemy",
+      "median_ms": 7.762606,
+      "samples_ms": [
+        7.644851,
+        7.762606,
+        7.849944,
+        7.783927,
+        7.849696,
+        7.448764,
+        7.425801
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 45.749784,
+      "mad_ms": 0.08733799999999992,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "hydrate relationship results",
+      "rows": 400,
+      "orm": "sqlmodel",
+      "median_ms": 8.250554,
+      "samples_ms": [
+        8.250554,
+        8.314799,
+        7.830034,
+        8.351554,
+        8.405966,
+        7.86629,
+        7.971035
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 57.856858,
+      "mad_ms": 0.1554120000000001,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 400,
+      "orm": "ormdantic",
+      "median_ms": 2.973795,
+      "samples_ms": [
+        2.973795,
+        2.837945,
+        3.296231,
+        2.899946,
+        2.900777,
+        2.991371,
+        2.976099
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 406.743666,
+      "mad_ms": 0.0730179999999998,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 400,
+      "orm": "sqlalchemy",
+      "median_ms": 5.336429,
+      "samples_ms": [
+        5.336429,
+        5.52635,
+        4.877082,
+        4.636507,
+        5.477612,
+        4.906134,
+        5.534101
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 46.403088,
+      "mad_ms": 0.19767199999999985,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "rows": 400,
+      "orm": "sqlmodel",
+      "median_ms": 5.610654,
+      "samples_ms": [
+        5.01138,
+        5.705604,
+        5.019021,
+        5.198005,
+        6.228966,
+        5.610654,
+        5.652556
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 56.247795,
+      "mad_ms": 0.41264900000000004,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 400,
+      "orm": "ormdantic",
+      "median_ms": 3.025091,
+      "samples_ms": [
+        3.186338,
+        2.957911,
+        2.980645,
+        3.004671,
+        3.122304,
+        3.221981,
+        3.025091
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 408.261934,
+      "mad_ms": 0.06718000000000002,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 120,
+        "actual": 120
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 400,
+      "orm": "sqlalchemy",
+      "median_ms": 4.467277,
+      "samples_ms": [
+        5.251373,
+        4.255635,
+        4.298798,
+        5.265694,
+        4.467277,
+        4.445605,
+        4.92411
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 46.172829,
+      "mad_ms": 0.21164200000000033,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 120,
+        "actual": 120
+      }
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "rows": 400,
+      "orm": "sqlmodel",
+      "median_ms": 4.857823,
+      "samples_ms": [
+        4.857823,
+        4.880526,
+        5.129103,
+        4.932993,
+        4.693531,
+        4.528396,
+        4.673231
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 54.828537,
+      "mad_ms": 0.16429199999999966,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 120,
+        "actual": 120
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 400,
+      "orm": "ormdantic",
+      "median_ms": 6.658528,
+      "samples_ms": [
+        6.673831,
+        6.679308,
+        6.658528,
+        6.410451,
+        6.218579,
+        6.679669,
+        6.641723
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 403.817496,
+      "mad_ms": 0.020780000000000243,
+      "order_positions": [
+        1,
+        0,
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 400,
+      "orm": "sqlalchemy",
+      "median_ms": 9.806459,
+      "samples_ms": [
+        9.377256,
+        10.241371,
+        9.61719,
+        11.379108,
+        9.806459,
+        9.092055,
+        10.797752
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 46.533917,
+      "mad_ms": 0.43491199999999886,
+      "order_positions": [
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        2
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    },
+    {
+      "case": "nested relationship loading",
+      "rows": 400,
+      "orm": "sqlmodel",
+      "median_ms": 11.132564,
+      "samples_ms": [
+        10.439693,
+        12.195371,
+        11.132564,
+        11.225762,
+        10.767356,
+        10.835016,
+        11.968759
+      ],
+      "comparable": true,
+      "backend": "sqlite",
+      "profile": "ci",
+      "setup_ms": 57.951331,
+      "mad_ms": 0.36520800000000087,
+      "order_positions": [
+        0,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "validation": {
+        "expected": 40,
+        "actual": 40
+      }
+    }
+  ]
+}
