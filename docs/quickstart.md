@@ -75,12 +75,8 @@ Use `db[Model]` to get the table handle for one model. The table handle owns CRU
 
 ```python
 async def seed() -> None:
-    supplier = await db[Supplier].insert(
-        Supplier(id="s1", name="North Roasters")
-    )
-    await db[Flavor].insert(
-        Flavor(id="f1", name="Vanilla", supplier=supplier)
-    )
+    supplier = await db[Supplier].insert(Supplier(id="s1", name="North Roasters"))
+    await db[Flavor].insert(Flavor(id="f1", name="Vanilla", supplier=supplier))
 ```
 
 Passing `supplier=supplier` stores the relationship using the supplier primary key. When you load the row later, choose whether to load the related supplier.
