@@ -11,7 +11,7 @@ defaults to a local SQLite file. Test and production require an explicit
 creating a local file.
 
 ```python
---8<-- "examples/todo_app/app/config.py"
+--8 < --"examples/todo_app/app/config.py"
 ```
 
 `Settings.safe_database_url` redacts authority credentials and common sensitive
@@ -20,7 +20,7 @@ query parameters. Use it for diagnostics; never print `database_url` directly.
 ## Register one database target
 
 ```python
---8<-- "examples/todo_app/app/database.py"
+--8 < --"examples/todo_app/app/database.py"
 ```
 
 Importing `models` here is intentional. Both the migration CLI and Playground load
