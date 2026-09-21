@@ -24,7 +24,7 @@ sequenceDiagram
 ## Keep persistence behavior in a service
 
 ```python
---8<-- "examples/todo_app/app/service.py"
+--8 < --"examples/todo_app/app/service.py"
 ```
 
 The list method composes only the filters supplied by the caller. `column()`
@@ -41,7 +41,7 @@ be cleared explicitly.
 ## Keep HTTP behavior in routes
 
 ```python
---8<-- "examples/todo_app/app/routes.py"
+--8 < --"examples/todo_app/app/routes.py"
 ```
 
 FastAPI enforces UUID formats, enum values, priority bounds, and pagination bounds
@@ -49,7 +49,7 @@ before the service runs. Domain errors remain framework-independent and the app
 maps them to stable `404`, `409`, and `503` payloads.
 
 ```python
---8<-- "examples/todo_app/app/main.py"
+--8 < --"examples/todo_app/app/main.py"
 ```
 
 Initialization belongs in the lifespan so a failed database connection prevents
