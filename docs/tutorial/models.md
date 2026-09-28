@@ -23,7 +23,7 @@ erDiagram
 ```
 
 ```python
---8<-- "examples/todo_app/app/models.py"
+--8 < --"examples/todo_app/app/models.py"
 ```
 
 Both identifiers are canonical UUID strings. This keeps response shapes identical
@@ -43,7 +43,7 @@ writes that bypass the API.
 The HTTP schemas remain separate:
 
 ```python
---8<-- "examples/todo_app/app/schemas.py"
+--8 < --"examples/todo_app/app/schemas.py"
 ```
 
 This separation prevents persistence-only fields from becoming writable by
