@@ -1,0 +1,494 @@
+{
+  "backend": "sqlite",
+  "base_commit": "e2b7f17870cb5917edc0bd5762ee4b9b5c9f10d5",
+  "geometric_mean_vs_sqlalchemy": 2.19017813658518,
+  "geometric_mean_vs_sqlmodel": 2.3183120587259345,
+  "head_commit": "b6df9f671ec454eb8aa3e5da9e3d9dcc2613575c",
+  "profile": "ci",
+  "rows": [
+    {
+      "case": "schema create/drop",
+      "comparable": true,
+      "head_vs_base": 1.058674076390159,
+      "head_vs_base_ci": [
+        1.0027314506185585,
+        1.1144238076984267
+      ],
+      "ormdantic_ms": 5.08521,
+      "ormdantic_vs_sqlalchemy": 2.3269463797955248,
+      "ormdantic_vs_sqlalchemy_ci": [
+        2.1972121236632827,
+        2.4764161193923235
+      ],
+      "ormdantic_vs_sqlmodel": 2.4143529962381103,
+      "ormdantic_vs_sqlmodel_ci": [
+        2.2884859950837866,
+        2.547782874234219
+      ],
+      "rows": 0,
+      "sqlalchemy_ms": 11.833011,
+      "sqlmodel_ms": 12.277492
+    },
+    {
+      "case": "raw batch insert",
+      "comparable": true,
+      "head_vs_base": 1.0278675373322312,
+      "head_vs_base_ci": [
+        1.005537778071065,
+        1.0972242939617112
+      ],
+      "ormdantic_ms": 43.370499,
+      "ormdantic_vs_sqlalchemy": 1.753213030820789,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.6632135982453735,
+        2.0586069453883327
+      ],
+      "ormdantic_vs_sqlmodel": 1.7385989955983676,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.7167631068521534,
+        1.8615473577953048
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 76.037724,
+      "sqlmodel_ms": 75.403906
+    },
+    {
+      "case": "orm insert models",
+      "comparable": true,
+      "head_vs_base": 1.0024273453779442,
+      "head_vs_base_ci": [
+        0.9517869029958123,
+        1.0440572007348703
+      ],
+      "ormdantic_ms": 145.725863,
+      "ormdantic_vs_sqlalchemy": 1.5434860454386192,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.4770631014061224,
+        1.6885300274534054
+      ],
+      "ormdantic_vs_sqlmodel": 2.2255188634566534,
+      "ormdantic_vs_sqlmodel_ci": [
+        2.0961344771355623,
+        2.3295468906989587
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 224.925836,
+      "sqlmodel_ms": 324.315657
+    },
+    {
+      "case": "orm update filtered",
+      "comparable": true,
+      "head_vs_base": 1.0883354433557362,
+      "head_vs_base_ci": [
+        0.9883464480674786,
+        1.1513864193562844
+      ],
+      "ormdantic_ms": 3.684795,
+      "ormdantic_vs_sqlalchemy": 1.1549155380421434,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.0733586593505875,
+        1.1879746050634254
+      ],
+      "ormdantic_vs_sqlmodel": 1.150300627307625,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.0687351171458306,
+        1.1840697493279948
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 4.255627,
+      "sqlmodel_ms": 4.238622
+    },
+    {
+      "case": "orm upsert mixed",
+      "comparable": true,
+      "head_vs_base": 1.0096985056649843,
+      "head_vs_base_ci": [
+        0.9607207425237754,
+        1.0676043158501791
+      ],
+      "ormdantic_ms": 18.433149,
+      "ormdantic_vs_sqlalchemy": 29.593665412241826,
+      "ormdantic_vs_sqlalchemy_ci": [
+        27.277826011591884,
+        30.297881129269626
+      ],
+      "ormdantic_vs_sqlmodel": 29.60701522024262,
+      "ormdantic_vs_sqlmodel_ci": [
+        28.15432899939751,
+        30.388056347528615
+      ],
+      "rows": 500,
+      "sqlalchemy_ms": 545.504444,
+      "sqlmodel_ms": 545.750523
+    },
+    {
+      "case": "orm delete filtered",
+      "comparable": true,
+      "head_vs_base": 1.6967341698726424,
+      "head_vs_base_ci": [
+        0.9476761193027067,
+        2.0345330539463413
+      ],
+      "ormdantic_ms": 4.68916,
+      "ormdantic_vs_sqlalchemy": 1.1248144657038788,
+      "ormdantic_vs_sqlalchemy_ci": [
+        0.6331183799969006,
+        1.2595229430390977
+      ],
+      "ormdantic_vs_sqlmodel": 1.1301924011976558,
+      "ormdantic_vs_sqlmodel_ci": [
+        0.6346084135317569,
+        1.8241482320647817
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 5.274435,
+      "sqlmodel_ms": 5.299653
+    },
+    {
+      "case": "count all rows",
+      "comparable": true,
+      "head_vs_base": 1.1252963808961343,
+      "head_vs_base_ci": [
+        1.054474233910116,
+        1.4789363121191634
+      ],
+      "ormdantic_ms": 0.230278,
+      "ormdantic_vs_sqlalchemy": 4.183004889741964,
+      "ormdantic_vs_sqlalchemy_ci": [
+        3.97845438972343,
+        4.524920259706084
+      ],
+      "ormdantic_vs_sqlmodel": 4.002384074900772,
+      "ormdantic_vs_sqlmodel_ci": [
+        3.757339374351172,
+        4.680190378533868
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 0.963254,
+      "sqlmodel_ms": 0.921661
+    },
+    {
+      "case": "count equality filter",
+      "comparable": true,
+      "head_vs_base": 1.2402227407015742,
+      "head_vs_base_ci": [
+        1.1832046647653993,
+        1.3930399969203526
+      ],
+      "ormdantic_ms": 0.270449,
+      "ormdantic_vs_sqlalchemy": 4.202740627622953,
+      "ormdantic_vs_sqlalchemy_ci": [
+        3.961915314889829,
+        4.717707206521695
+      ],
+      "ormdantic_vs_sqlmodel": 4.4585559569456725,
+      "ormdantic_vs_sqlmodel_ci": [
+        3.8830357305044405,
+        5.1576052319787165
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 1.136627,
+      "sqlmodel_ms": 1.205812
+    },
+    {
+      "case": "count range filter",
+      "comparable": true,
+      "head_vs_base": 1.2301440496517333,
+      "head_vs_base_ci": [
+        1.1013214209954956,
+        1.3569147955609628
+      ],
+      "ormdantic_ms": 0.295176,
+      "ormdantic_vs_sqlalchemy": 3.7633073149578555,
+      "ormdantic_vs_sqlalchemy_ci": [
+        3.4273343232552627,
+        4.228376087277016
+      ],
+      "ormdantic_vs_sqlmodel": 3.7709773152288806,
+      "ormdantic_vs_sqlmodel_ci": [
+        3.4073786098679415,
+        4.225202712664013
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 1.110838,
+      "sqlmodel_ms": 1.113102
+    },
+    {
+      "case": "aggregate filtered rows",
+      "comparable": true,
+      "head_vs_base": 1.1282850316817286,
+      "head_vs_base_ci": [
+        1.0478824148468313,
+        1.1667208507246682
+      ],
+      "ormdantic_ms": 0.587247,
+      "ormdantic_vs_sqlalchemy": 2.4380405519312998,
+      "ormdantic_vs_sqlalchemy_ci": [
+        2.371099647605398,
+        2.546004013116038
+      ],
+      "ormdantic_vs_sqlmodel": 2.540111741737293,
+      "ormdantic_vs_sqlmodel_ci": [
+        2.2863092993406537,
+        2.63300438366508
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 1.431732,
+      "sqlmodel_ms": 1.491673
+    },
+    {
+      "case": "scalar projection read",
+      "comparable": true,
+      "head_vs_base": 1.0851229688887754,
+      "head_vs_base_ci": [
+        1.0388964588407978,
+        1.143011612607607
+      ],
+      "ormdantic_ms": 0.939018,
+      "ormdantic_vs_sqlalchemy": 2.222793386282265,
+      "ormdantic_vs_sqlalchemy_ci": [
+        2.149437865308635,
+        2.2988063637124
+      ],
+      "ormdantic_vs_sqlmodel": 2.200533962075274,
+      "ormdantic_vs_sqlmodel_ci": [
+        2.1380451807196668,
+        2.2777558726740574
+      ],
+      "rows": 10000,
+      "sqlalchemy_ms": 2.087243,
+      "sqlmodel_ms": 2.066341
+    },
+    {
+      "case": "batched primary-key lookup",
+      "comparable": true,
+      "head_vs_base": 0.9514986676980498,
+      "head_vs_base_ci": [
+        0.923339437697954,
+        1.0591131129639053
+      ],
+      "ormdantic_ms": 53.416945,
+      "ormdantic_vs_sqlalchemy": 2.512980590709559,
+      "ormdantic_vs_sqlalchemy_ci": [
+        2.452592591507806,
+        2.8739166422457636
+      ],
+      "ormdantic_vs_sqlmodel": 2.5506974051024445,
+      "ormdantic_vs_sqlmodel_ci": [
+        2.4755781603358598,
+        2.9882029489056925
+      ],
+      "rows": 500,
+      "sqlalchemy_ms": 134.235746,
+      "sqlmodel_ms": 136.250463
+    },
+    {
+      "case": "paginated find_many",
+      "comparable": true,
+      "head_vs_base": 0.9609230212649789,
+      "head_vs_base_ci": [
+        0.8800936693289145,
+        1.0514123373889022
+      ],
+      "ormdantic_ms": 1.802212,
+      "ormdantic_vs_sqlalchemy": 1.6746298437697675,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.5355665555950255,
+        1.7671729109702485
+      ],
+      "ormdantic_vs_sqlmodel": 1.8527298675183608,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.6997410276094576,
+        2.018015934062849
+      ],
+      "rows": 500,
+      "sqlalchemy_ms": 3.018038,
+      "sqlmodel_ms": 3.339012
+    },
+    {
+      "case": "ordered find_many",
+      "comparable": true,
+      "head_vs_base": 0.9299102443989498,
+      "head_vs_base_ci": [
+        0.8548771939144593,
+        0.9736483320460405
+      ],
+      "ormdantic_ms": 2.420796,
+      "ormdantic_vs_sqlalchemy": 1.5616805381370424,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.4417161558902782,
+        10.405332090448896
+      ],
+      "ormdantic_vs_sqlmodel": 1.6877423789530384,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.56394199128286,
+        1.7609534015468888
+      ],
+      "rows": 500,
+      "sqlalchemy_ms": 3.78051,
+      "sqlmodel_ms": 4.08568
+    },
+    {
+      "case": "hydrate flat rows",
+      "comparable": true,
+      "head_vs_base": 0.9547763448077476,
+      "head_vs_base_ci": [
+        0.8668098169948202,
+        1.0177293196583626
+      ],
+      "ormdantic_ms": 1.66864,
+      "ormdantic_vs_sqlalchemy": 1.7222049093872858,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.5675306733060317,
+        1.8880186610469916
+      ],
+      "ormdantic_vs_sqlmodel": 1.9664433310959826,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.7915197701690744,
+        2.0791510500452612
+      ],
+      "rows": 500,
+      "sqlalchemy_ms": 2.87374,
+      "sqlmodel_ms": 3.281286
+    },
+    {
+      "case": "serialize simple payloads",
+      "comparable": false,
+      "head_vs_base": 0.949063461742545,
+      "head_vs_base_ci": [
+        0.9221096687461928,
+        0.9761832850359851
+      ],
+      "ormdantic_ms": 0.37692,
+      "ormdantic_vs_sqlalchemy": 0.9280430860660087,
+      "ormdantic_vs_sqlalchemy_ci": [
+        0.9037536496733675,
+        0.9527747166782309
+      ],
+      "ormdantic_vs_sqlmodel": 2.2215987477448795,
+      "ormdantic_vs_sqlmodel_ci": [
+        2.186153560437228,
+        2.299759193502306
+      ],
+      "rows": 500,
+      "sqlalchemy_ms": 0.349798,
+      "sqlmodel_ms": 0.837365
+    },
+    {
+      "case": "serialize nested payloads",
+      "comparable": false,
+      "head_vs_base": 0.9278898862956314,
+      "head_vs_base_ci": [
+        0.7285299818123205,
+        1.1404236018211777
+      ],
+      "ormdantic_ms": 0.208875,
+      "ormdantic_vs_sqlalchemy": 0.9283207660083782,
+      "ormdantic_vs_sqlalchemy_ci": [
+        0.7685866541435672,
+        1.04187646392334
+      ],
+      "ormdantic_vs_sqlmodel": 1.2507193297426689,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.0277431756404491,
+        1.3598622070247997
+      ],
+      "rows": 400,
+      "sqlalchemy_ms": 0.193903,
+      "sqlmodel_ms": 0.261244
+    },
+    {
+      "case": "hydrate relationship results",
+      "comparable": true,
+      "head_vs_base": 0.9568191582007735,
+      "head_vs_base_ci": [
+        0.8977020530311143,
+        1.0439363633088163
+      ],
+      "ormdantic_ms": 4.804376,
+      "ormdantic_vs_sqlalchemy": 0.9746932796267402,
+      "ormdantic_vs_sqlalchemy_ci": [
+        0.8848455214022357,
+        1.0540604966646399
+      ],
+      "ormdantic_vs_sqlmodel": 1.047989166543168,
+      "ormdantic_vs_sqlmodel_ci": [
+        0.9659415603619945,
+        1.0991900969126422
+      ],
+      "rows": 400,
+      "sqlalchemy_ms": 4.682793,
+      "sqlmodel_ms": 5.034934
+    },
+    {
+      "case": "one-to-many relationship loading",
+      "comparable": true,
+      "head_vs_base": 0.9981670609335542,
+      "head_vs_base_ci": [
+        0.9252338506311202,
+        1.0413884043066652
+      ],
+      "ormdantic_ms": 1.928051,
+      "ormdantic_vs_sqlalchemy": 1.5514771134166057,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.432573516532229,
+        1.6767429975678
+      ],
+      "ormdantic_vs_sqlmodel": 1.6883194479814072,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.5242075401722064,
+        1.721589758804393
+      ],
+      "rows": 400,
+      "sqlalchemy_ms": 2.991327,
+      "sqlmodel_ms": 3.255166
+    },
+    {
+      "case": "many-to-one relationship loading",
+      "comparable": true,
+      "head_vs_base": 0.9425538014881162,
+      "head_vs_base_ci": [
+        0.8850666217887273,
+        1.0136560127426149
+      ],
+      "ormdantic_ms": 1.984657,
+      "ormdantic_vs_sqlalchemy": 1.44634815990874,
+      "ormdantic_vs_sqlalchemy_ci": [
+        1.3075735435352929,
+        1.6096583136060516
+      ],
+      "ormdantic_vs_sqlmodel": 1.5715561933371864,
+      "ormdantic_vs_sqlmodel_ci": [
+        1.3754298160248388,
+        1.6214930737068995
+      ],
+      "rows": 400,
+      "sqlalchemy_ms": 2.870505,
+      "sqlmodel_ms": 3.119
+    },
+    {
+      "case": "nested relationship loading",
+      "comparable": true,
+      "head_vs_base": 0.9245977068839372,
+      "head_vs_base_ci": [
+        0.600056128476337,
+        0.9946431032238073
+      ],
+      "ormdantic_ms": 4.249327,
+      "ormdantic_vs_sqlalchemy": 1.370736118919537,
+      "ormdantic_vs_sqlalchemy_ci": [
+        0.8715172326364584,
+        1.485243756313819
+      ],
+      "ormdantic_vs_sqlmodel": 1.47071453903171,
+      "ormdantic_vs_sqlmodel_ci": [
+        0.9401830590601405,
+        1.5618514268547024
+      ],
+      "rows": 400,
+      "sqlalchemy_ms": 5.824706,
+      "sqlmodel_ms": 6.249547
+    }
+  ],
+  "schema_version": 2
+}
